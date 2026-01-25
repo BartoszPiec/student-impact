@@ -86,7 +86,7 @@ export default async function ExperienceSection() {
       const order = myOrders?.find(o => o.id === c.service_order_id);
       if (order) {
         title = order.title || "Zlecenie Bezpośrednie";
-        summary = order.description || "";
+        summary = order.requirements || "";
       }
     }
 

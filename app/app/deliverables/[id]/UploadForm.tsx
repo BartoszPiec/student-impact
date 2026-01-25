@@ -31,7 +31,7 @@ export function UploadForm({
 
         setIsUploading(true);
         const supabase = createClient();
-        const newFiles: { name: string, url: string, size: number }[] = [];
+        const newFiles: { name: string, bucket: string, path: string, size: number, url?: string }[] = [];
 
         try {
             for (let i = 0; i < e.target.files.length; i++) {
