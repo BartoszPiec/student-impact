@@ -56,7 +56,7 @@ async function ensureConversationForApplication(supabase: any, args: {
   return created.id as string;
 }
 
-async function insertChatMessage(supabase: any, conversationId: string, senderId: string, body: string, event: string | null = null) {
+async function insertChatMessage(supabase: any, conversationId: string, senderId: string, body: string, event: string | null = null, payload: any = null) {
   const b = (body ?? "").trim();
   if (!b) return;
 
@@ -64,11 +64,16 @@ async function insertChatMessage(supabase: any, conversationId: string, senderId
     conversation_id: conversationId,
     sender_id: senderId,
     content: b,
-    event: event
+    event: event,
+    payload: payload
   });
 
   if (error) throw new Error(error.message);
 }
+
+// ... 
+
+
 
 export async function applyToOffer(
   offerId: string,
@@ -273,7 +278,14 @@ export async function applyToOffer(
       // ✅ 2) jeśli negocjuje, dopisz to też na czacie
       if (proposed != null && (offer.stawka == null || Number(proposed) !== Number(offer.stawka))) {
         // PASS 'negotiation_proposed' EVENT HERE to trigger In-Chat UI
-        await insertChatMessage(supabase as any, conversationId, user.id, `Proponuję stawkę ${proposed} zł.`, 'negotiation_proposed');
+        await insertChatMessage(
+          supabase as any,
+          conversationId,
+          user.id,
+          `Proponuję stawkę ${proposed} zł.`,
+          'negotiation_proposed',
+          { proposed_stawka: proposed }
+        );
       }
 
       // ✅ powiadom firmę

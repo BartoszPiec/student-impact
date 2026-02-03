@@ -53,7 +53,14 @@ export function normalizeMessage(msg: any, currentUserId: string): NormalizedMes
                 if (payload?.proposed_stawka) {
                     event = "rate.proposed";
                 } else {
-                    event = "system.notice";
+                    // Fallback for legacy messages where payload might be missing
+                    const match = msg.content?.match(/Proponuję stawkę (\d+)/);
+                    if (match && match[1]) {
+                        event = "rate.proposed";
+                        payload = { ...payload, proposed_stawka: parseInt(match[1]) };
+                    } else {
+                        event = "system.notice";
+                    }
                 }
                 break;
 

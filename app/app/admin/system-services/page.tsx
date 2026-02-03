@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Zap, Plus, ArrowRight, DollarSign, Clock, LayoutTemplate } from "lucide-react";
 import { redirect } from "next/navigation";
+import { DeleteServiceButton } from "./delete-service-button";
 
 export const dynamic = "force-dynamic";
 
@@ -115,7 +116,7 @@ function ServiceCard({ service }: { service: any }) {
                         <Button asChild variant="ghost" size="sm" className="flex-1 rounded-lg text-slate-400 hover:text-indigo-600">
                             <Link href={`/app/admin/system-services/${service.id}/edit`}>Edytuj</Link>
                         </Button>
-                        {/* TODO: Add Delete Action */}
+                        <DeleteServiceButton serviceId={service.id} serviceTitle={service.title} />
                     </div>
                 </div>
             </CardContent>

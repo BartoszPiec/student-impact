@@ -72,5 +72,23 @@ export async function updateSystemService(offerId: string, formData: FormData) {
     revalidatePath("/app/admin/system-services");
     revalidatePath("/app/company/packages");
 
+
     redirect("/app/admin/system-services");
+}
+
+export async function deleteSystemService(serviceId: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) throw new Error("Brak autoryzacji");
+
+    const { error } = await supabase
+        .from("service_packages")
+        .delete()
+        .eq("id", serviceId);
+
+    if (error) throw new Error(error.message);
+
+    revalidatePath("/app/admin/system-services");
+    revalidatePath("/app/company/packages");
 }

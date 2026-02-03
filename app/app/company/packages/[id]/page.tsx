@@ -28,6 +28,8 @@ import {
     Users
 } from "lucide-react";
 
+
+import { MarkdownLite } from "@/components/markdown-lite";
 export const dynamic = "force-dynamic";
 
 // Configuration for category-specific styles
@@ -163,6 +165,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                         Wróć do katalogu
                     </Link>
 
+
                     <div className="max-w-4xl">
                         <div className="flex flex-wrap items-center gap-4 mb-6">
                             <Badge className="bg-white/20 backdrop-blur-md border-0 text-white text-sm font-semibold px-4 py-1.5">
@@ -176,12 +179,12 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                 </Badge>
                             )}
                         </div>
-
                         <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-6 leading-tight">
                             {pkg.title}
                         </h1>
+                        {/* Description moved to body */}
                         <p className="text-xl md:text-2xl text-white/80 max-w-3xl leading-relaxed font-light">
-                            {pkg.description}
+                            Sprawdź szczegóły pakietu poniżej.
                         </p>
                     </div>
                 </div>
@@ -189,6 +192,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-20">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
 
                     {/* LEFT COLUMN: Main Content */}
                     <div className="lg:col-span-2 space-y-8">
@@ -218,6 +222,21 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                 </li>
                             </ul>
                         </div>
+
+                        {/* Description Section (Moved from Hero) */}
+                        {pkg.description && (
+                            <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-slate-100 shadow-xl shadow-slate-200/50">
+                                <h3 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-3">
+                                    <span className="p-2 rounded-xl bg-orange-50 text-orange-600">
+                                        <Megaphone className="w-6 h-6" />
+                                    </span>
+                                    Szczegóły pakietu
+                                </h3>
+                                <div className="prose prose-slate max-w-none">
+                                    <MarkdownLite content={pkg.description.split("--- [MATERIAŁY DLA WYKONAWCY] ---")[0]} />
+                                </div>
+                            </div>
+                        )}
 
                         {/* Process Steps */}
                         <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-slate-100 shadow-xl shadow-slate-200/50">
