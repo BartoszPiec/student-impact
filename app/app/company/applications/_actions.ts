@@ -100,7 +100,7 @@ export async function acceptApplication(applicationId: string) {
   const { data: appRow, error: appErr } = await supabase
     .from("applications")
     .select(
-      "id, status, student_id, offer_id, proposed_stawka, offers!inner(id, tytul, stawka, company_id)"
+      "id, status, student_id, offer_id, proposed_stawka, agreed_stawka, offers!inner(id, tytul, stawka, company_id)"
     )
     .eq("id", applicationId)
     .single();
@@ -119,7 +119,8 @@ export async function acceptApplication(applicationId: string) {
   }
 
   const now = new Date().toISOString();
-  const agreed = (appRow as any).proposed_stawka ?? offer.stawka ?? null;
+  // Safe Fallback: Prefer already agreed > proposed > offer default
+  const agreed = (appRow as any).agreed_stawka ?? (appRow as any).proposed_stawka ?? offer.stawka ?? null;
 
   // ✅ zaakceptuj
   const { error: updErr } = await supabase

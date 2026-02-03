@@ -235,9 +235,19 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
   if (conv.application_id) {
     const { error } = await supabase
       .from("applications")
-      .update({ agreed_stawka: rate, proposed_stawka: null }) // Clear proposed, set agreed
+      .update({
+        agreed_stawka: rate,
+        proposed_stawka: null,
+        status: 'accepted',        // ✅ Fix: Sync status
+        decided_at: new Date().toISOString()
+      })
       .eq("id", conv.application_id);
     if (error) throw new Error("Błąd aktualizacji stawki aplikacji");
+
+    // ✅ Create Contract (Mirror dashboard logic)
+    await supabase.rpc("ensure_contract_for_application", {
+      p_application_id: conv.application_id,
+    });
   } else {
     // Try finding related service order
     const effectivePackageId = conv.package_id;
