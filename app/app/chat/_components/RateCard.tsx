@@ -1,11 +1,19 @@
 
-"use client";
-
 import { Button } from "@/components/ui/button";
 import { Check, X, Banknote } from "lucide-react";
 import { useState } from "react";
-import { acceptRate, rejectRate } from "@/app/app/chat/_actions";
+import { acceptRate, rejectRate, sendEventMessage } from "@/app/app/chat/_actions";
 import { useTransition } from "react";
+import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function RateCard({
     rate,
@@ -23,6 +31,8 @@ export function RateCard({
     status?: "pending" | "accepted" | "rejected";
 }) {
     const [pending, startTransition] = useTransition();
+    const [counterOpen, setCounterOpen] = useState(false);
+    const [counterValue, setCounterValue] = useState("");
 
     const handleAccept = () => {
         startTransition(async () => {
@@ -43,6 +53,17 @@ export function RateCard({
             }
         });
     };
+
+    const handleCounter = async () => {
+        if (!counterValue) return;
+        try {
+            await sendEventMessage(conversationId, "rate.proposed", { proposed_stawka: parseFloat(counterValue) }, `Proponuję inną stawkę: ${counterValue} zł`);
+            setCounterOpen(false);
+            setCounterValue("");
+        } catch (e) {
+            alert("Błąd: " + e);
+        }
+    }
 
     const isInteractive = isLatest && !isMine && status === "pending";
 
@@ -78,24 +99,56 @@ export function RateCard({
             )}
 
             {isInteractive && (
-                <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleReject}
-                        disabled={pending}
-                        className="text-red-600 border-red-100 hover:bg-red-50 hover:text-red-700 h-8"
-                    >
-                        Odrzuć
-                    </Button>
-                    <Button
-                        size="sm"
-                        onClick={handleAccept}
-                        disabled={pending}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 h-8"
-                    >
-                        {pending ? "..." : "Akceptuj"}
-                    </Button>
+                <div className="space-y-2 mt-2 pt-2 border-t border-slate-100">
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleReject}
+                            disabled={pending}
+                            className="text-red-600 border-red-100 hover:bg-red-50 hover:text-red-700 h-9"
+                        >
+                            Odrzuć
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={handleAccept}
+                            disabled={pending}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 h-9"
+                        >
+                            {pending ? "..." : "Akceptuj"}
+                        </Button>
+                    </div>
+
+                    <Dialog open={counterOpen} onOpenChange={setCounterOpen}>
+                        <DialogTrigger asChild>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                className="w-full bg-slate-100/80 hover:bg-slate-200 text-slate-600 h-9"
+                            >
+                                Zaproponuj inną
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Zaproponuj inną stawkę</DialogTitle>
+                            </DialogHeader>
+                            <div className="py-4 space-y-2">
+                                <Label>Twoja propozycja (PLN)</Label>
+                                <Input
+                                    type="number"
+                                    value={counterValue}
+                                    onChange={e => setCounterValue(e.target.value)}
+                                    placeholder="np. 1400"
+                                />
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setCounterOpen(false)}>Anuluj</Button>
+                                <Button onClick={handleCounter}>Wyślij propozycję</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </div>
             )}
 
