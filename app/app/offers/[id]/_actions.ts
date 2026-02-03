@@ -148,7 +148,10 @@ export async function applyToOffer(
     const isPlatform = isSystemPlatform;
     logs.push(`IsSystemPlatform: ${isSystemPlatform}, IsMicroType: ${isMicroType}`);
 
-    if (offer.status === "closed" || (offer.status === "in_progress" && !isSystemPlatform)) {
+    // FIX: Allow Micro-type offers to be applied to even if "closed" or "in_progress"
+    const isMultiInstance = isSystemPlatform || isMicroType;
+
+    if ((offer.status === "closed" && !isMultiInstance) || (offer.status === "in_progress" && !isMultiInstance)) {
       logs.push("Offer is closed/in_progress -> redirect app");
       // Enhanced Error Message for Debugging
       return { error: `Oferta już nieaktualna (zajęta). [DEBUG: ${logs.join(' -> ')}]`, debug: logs };
