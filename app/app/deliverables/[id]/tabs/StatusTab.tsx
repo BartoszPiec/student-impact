@@ -164,6 +164,9 @@ export function StatusTab({
                     onConfirm={handlePaymentConfirm}
                     amount={fundingMode === "full" ? (contractBudget > 0 ? contractBudget : totalAmount) : Number(nextToFund?.amount ?? 0)}
                     title={fundingMode === "full" ? `Zasilenie Depozytu (Cały Projekt)` : `Zasilenie Depozytu (Następny etap)`}
+                    contractId={contract.id}
+                    applicationId={applicationId}
+                    useStripe={true}
                 />
             )}
 
