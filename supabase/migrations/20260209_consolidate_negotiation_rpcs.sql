@@ -514,12 +514,15 @@ BEGIN
     WHERE s.version_id = v_review_ver_id
     ORDER BY s.position;
 
-    -- 4. Update Contract Status
+    -- 4. Update Contract Status + sync total_amount to sum of milestones
     UPDATE contracts
     SET terms_status = 'agreed',
         terms_version = terms_version + 1,
         company_approved_version = terms_version + 1,
         student_approved_version = terms_version + 1,
+        total_amount = (
+            SELECT COALESCE(SUM(amount), 0) FROM milestones WHERE contract_id = p_contract_id
+        ),
         updated_at = now()
     WHERE id = p_contract_id;
 

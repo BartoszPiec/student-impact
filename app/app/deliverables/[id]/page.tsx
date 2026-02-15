@@ -358,7 +358,7 @@ export default async function RealizationWorkspace({
                                 myReview={myReview}
                                 theirReview={theirReview}
                                 contract={contract}
-                                totalAmount={isServiceOrder ? Number(offer?.stawka || 0) : (Number(offer?.stawka || 0))}
+                                totalAmount={Number(appRow?.agreed_stawka || offer?.stawka || 0)}
                                 enableNegotiation={!offer?.is_platform_service && offer?.typ !== 'job_offer'}
                             />
                         </TabsContent>
