@@ -294,6 +294,13 @@ export async function fundContractAction(contractId: string, applicationId: stri
 
   if (error) throw new Error(error.message);
 
+  // Sync application status: accepted → in_progress (escrow funded = work starts)
+  await supabase
+    .from("applications")
+    .update({ status: "in_progress" })
+    .eq("id", applicationId)
+    .in("status", ["accepted"]);
+
   revalidatePath(`/app/deliverables/${applicationId}`);
 }
 
@@ -347,6 +354,24 @@ export async function reviewMilestoneAction(
 
   if (error) throw new Error(error.message);
 
+  // Sync application status after milestone review
+  if (decision === "accepted") {
+    // Check if contract became completed (all milestones released)
+    const { data: contractRow } = await supabase
+      .from("contracts")
+      .select("id, status")
+      .eq("application_id", applicationId)
+      .maybeSingle();
+
+    if (contractRow?.status === "completed") {
+      await supabase
+        .from("applications")
+        .update({ status: "completed", realization_status: "completed" })
+        .eq("id", applicationId)
+        .in("status", ["in_progress", "accepted"]);
+    }
+  }
+
   revalidatePath(`/app/deliverables/${applicationId}`);
 }
 
@@ -362,6 +387,13 @@ export async function fundMilestoneAction(milestoneId: string, applicationId: st
   });
 
   if (error) throw new Error(error.message);
+
+  // Sync application status: accepted → in_progress (milestone funded = work starts)
+  await supabase
+    .from("applications")
+    .update({ status: "in_progress" })
+    .eq("id", applicationId)
+    .in("status", ["accepted"]);
 
   revalidatePath(`/app/deliverables/${applicationId}`);
 }

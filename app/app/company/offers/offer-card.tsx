@@ -17,6 +17,12 @@ function StatusBadge({ status, hasDelivered }: { status: string; hasDelivered?: 
                 Weryfikacja
             </Badge>
         );
+    if (status === "negotiation")
+        return (
+            <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-100 border-orange-200 px-3 py-1 rounded-full font-bold transition-colors">
+                Negocjacje
+            </Badge>
+        );
     if (status === "published")
         return (
             <Badge
@@ -59,12 +65,22 @@ export default function OfferCard({
     stats
 }: {
     o: any,
-    stats: { total: number, sent: number, accepted: number, hasApproved: boolean, hasDelivered?: boolean, acceptedAppId: string | null, acceptedProfile?: { first_name: string, last_name: string, id: string } | null, acceptedStudentId?: string | null }
+    stats: { total: number, sent: number, accepted: number, hasApproved: boolean, hasDelivered?: boolean, acceptedAppId: string | null, acceptedProfile?: { first_name: string, last_name: string, id: string } | null, acceptedStudentId?: string | null, agreedStawka?: number | null, contractStatus?: string | null }
 }) {
-    const { total, sent, accepted, hasApproved, hasDelivered, acceptedAppId, acceptedProfile, acceptedStudentId } = stats;
+    const { total, sent, accepted, hasApproved, hasDelivered, acceptedAppId, acceptedProfile, acceptedStudentId, agreedStawka } = stats;
 
     const isJobOffer = o.typ === "job" || o.typ === "Praca" || o.typ === "praca";
-    const isInProgress = o.status === "in_progress" || accepted > 0;
+    const isClosed = o.status === "closed";
+    const isInProgress = (o.status === "in_progress" || accepted > 0) && !isClosed;
+
+    // Oblicz efektywny status na podstawie stanu aplikacji (nie tylko offers.status z bazy)
+    const effectiveStatus = isClosed
+        ? "closed"
+        : (accepted > 0 && stats.contractStatus === 'draft')
+            ? "negotiation"
+            : accepted > 0
+                ? "in_progress"
+                : (o.status ?? "published");
 
     const chatAction = acceptedAppId ? openChatForApplication.bind(null, acceptedAppId) : null;
 
@@ -88,7 +104,7 @@ export default function OfferCard({
                                 >
                                     {o.tytul}
                                 </Link>
-                                <StatusBadge status={o.status ?? "published"} hasDelivered={hasDelivered} />
+                                <StatusBadge status={effectiveStatus} hasDelivered={hasDelivered} />
                             </div>
 
                             <div className="flex flex-wrap items-center gap-y-2 gap-x-6 text-sm">
@@ -122,9 +138,14 @@ export default function OfferCard({
                         {/* Price & Actions */}
                         <div className="flex flex-col md:items-end items-start gap-4">
                             <div className="flex flex-col md:items-end">
-                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Budżet / Wynagrodzenie</span>
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">
+                                    {isInProgress && agreedStawka ? "Uzgodniona stawka" : "Budżet / Wynagrodzenie"}
+                                </span>
                                 <div className="font-black text-2xl text-slate-900">
-                                    {isJobOffer ? (
+                                    {/* Show agreed rate when in progress, otherwise show original offer rate */}
+                                    {isInProgress && agreedStawka ? (
+                                        <span>{agreedStawka} <span className="text-sm font-bold text-slate-400">PLN</span></span>
+                                    ) : isJobOffer ? (
                                         (o.salary_range_min && o.salary_range_min > 0) ? (
                                             <span className="flex items-baseline gap-1">
                                                 {o.salary_range_min}

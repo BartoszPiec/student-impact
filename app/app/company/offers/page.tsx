@@ -57,6 +57,9 @@ export default async function CompanyOffersPage() {
   const acceptedProfileByOffer = new Map<string, { first_name: string, last_name: string, id: string }>();
   const acceptedAppIdByOffer = new Map<string, string>();
   const acceptedStudentIdByOffer = new Map<string, string>();
+
+  const agreedStawkaByOffer = new Map<string, number | null>();
+  const contractStatusByOffer = new Map<string, string | null>();
   const appIdToOfferId = new Map<string, string>();
   const appIds: string[] = [];
   const studentIds: string[] = [];
@@ -66,11 +69,11 @@ export default async function CompanyOffersPage() {
   if (offerIds.length > 0) {
     const { data: apps } = await supabase
       .from("applications")
-      .select("id, offer_id, status, student_id")
+      .select("id, offer_id, status, student_id, agreed_stawka, contracts:contracts!application_id(terms_status)")
       .in("offer_id", offerIds);
 
     (apps ?? []).forEach((a: any) => {
-      if (a.status === "accepted" && a.student_id) {
+      if ((a.status === "accepted" || a.status === "in_progress") && a.student_id) {
         studentIds.push(a.student_id);
       }
     });
@@ -98,10 +101,18 @@ export default async function CompanyOffersPage() {
       totalByOffer.set(a.offer_id, (totalByOffer.get(a.offer_id) ?? 0) + 1);
       if (a.status === "sent") sentByOffer.set(a.offer_id, (sentByOffer.get(a.offer_id) ?? 0) + 1);
 
-      if (a.status === "accepted") {
+      if (a.status === "accepted" || a.status === "in_progress") {
         acceptedByOffer.set(a.offer_id, (acceptedByOffer.get(a.offer_id) ?? 0) + 1);
         if (!acceptedAppIdByOffer.has(a.offer_id)) {
           acceptedAppIdByOffer.set(a.offer_id, a.id);
+          agreedStawkaByOffer.set(a.offer_id, a.agreed_stawka ?? null);
+
+          // Extract contract status if available
+          const contract = Array.isArray(a.contracts) ? a.contracts[0] : a.contracts;
+          if (contract) {
+            contractStatusByOffer.set(a.offer_id, contract.terms_status);
+          }
+
           if (a.student_id) {
             acceptedStudentIdByOffer.set(a.offer_id, a.student_id);
           }
@@ -139,7 +150,9 @@ export default async function CompanyOffersPage() {
       hasDelivered: deliveredOfferIds.has(o.id),
       acceptedAppId: acceptedAppIdByOffer.get(o.id) ?? null,
       acceptedProfile: acceptedProfileByOffer.get(o.id) ?? null,
-      acceptedStudentId: acceptedStudentIdByOffer.get(o.id) ?? null
+      acceptedStudentId: acceptedStudentIdByOffer.get(o.id) ?? null,
+      agreedStawka: agreedStawkaByOffer.get(o.id) ?? null,
+      contractStatus: contractStatusByOffer.get(o.id) ?? null
     };
   });
 

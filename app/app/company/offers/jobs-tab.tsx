@@ -12,10 +12,21 @@ interface JobsTabProps {
 export default function JobsTab({ offers, statsMap }: JobsTabProps) {
     const [statusTab, setStatusTab] = useState("in_progress");
 
-    // Group by Status
-    const published = offers.filter(o => (o.status ?? "published") === "published");
-    const inProgress = offers.filter(o => o.status === "in_progress");
+    // Group by Status - uwzględniamy też czy oferta ma zaakceptowaną aplikację (accepted > 0)
+    // Priorytet: closed > in_progress/accepted > published
     const closed = offers.filter(o => o.status === "closed");
+    const inProgress = offers.filter(o => {
+        if (o.status === "closed") return false; // closed ma priorytet
+        const stats = statsMap[o.id];
+        const hasAcceptedApp = stats?.accepted > 0;
+        return o.status === "in_progress" || hasAcceptedApp;
+    });
+    const published = offers.filter(o => {
+        if (o.status === "closed") return false;
+        const stats = statsMap[o.id];
+        const hasAcceptedApp = stats?.accepted > 0;
+        return (o.status ?? "published") === "published" && !hasAcceptedApp;
+    });
 
     return (
         <div className="space-y-8">

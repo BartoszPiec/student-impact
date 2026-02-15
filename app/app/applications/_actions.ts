@@ -90,7 +90,7 @@ export async function acceptCounterAsStudent(applicationId: string) {
   const { data: appRow, error } = await supabase
     .from("applications")
     .select(
-      "id, status, student_id, offer_id, counter_stawka, offers!inner(id, tytul, company_id, stawka)"
+      "id, status, student_id, offer_id, counter_stawka, offers!inner(id, tytul, company_id, stawka, is_platform_service, typ)"
     )
     .eq("id", applicationId)
     .single();
@@ -120,6 +120,30 @@ export async function acceptCounterAsStudent(applicationId: string) {
 
   if (updErr) throw new Error(updErr.message);
 
+  // ✅ Utwórz kontrakt
+  await supabase.rpc("ensure_contract_for_application", {
+    p_application_id: applicationId,
+  });
+
+  // ✅ Odrzuć inne aplikacje + zmień status oferty
+  const isMultiInstance = offer.is_platform_service === true ||
+    (offer.typ && (offer.typ.toLowerCase().includes("micro") || offer.typ.toLowerCase().includes("mikro")));
+
+  if (!isMultiInstance) {
+    const now = new Date().toISOString();
+    await supabase
+      .from("applications")
+      .update({ status: "rejected", decided_at: now })
+      .eq("offer_id", appRow.offer_id)
+      .neq("id", applicationId)
+      .in("status", ["sent", "countered"]);
+
+    await supabase
+      .from("offers")
+      .update({ status: "in_progress" })
+      .eq("id", appRow.offer_id);
+  }
+
   // ✅ wiadomość systemowa na czacie
   try {
     const conversationId = await ensureConversationForApplication(supabase as any, {
@@ -134,8 +158,8 @@ export async function acceptCounterAsStudent(applicationId: string) {
       conversationId,
       user.id,
       `Stawka ${agreed} zł zaakceptowana.`,
-      "counter_accepted",
-      { agreed_stawka: agreed }
+      "rate.accepted",
+      { agreed_stawka: agreed, agreed_rate: agreed }
     );
   } catch {
     // nie blokujemy
@@ -316,7 +340,7 @@ export async function rejectCounterAsStudent(applicationId: string) {
       conversationId,
       user.id,
       "Kontra odrzucona.",
-      "counter_rejected",
+      "rate.rejected",
       {}
     );
   } catch { }
@@ -387,7 +411,7 @@ export async function proposeNewPriceAsStudent(applicationId: string, formData: 
       conversationId,
       user.id,
       `Proponuję stawkę ${proposed} zł.`,
-      "negotiation_proposed",
+      "rate.proposed",
       { proposed_stawka: proposed }
     );
 
