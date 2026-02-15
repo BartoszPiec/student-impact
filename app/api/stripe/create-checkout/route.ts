@@ -102,13 +102,19 @@ export async function POST(req: NextRequest) {
     });
 
     // Create pending payment record
-    await supabase.from("payments").insert({
+    const { error: paymentError } = await supabase.from("payments").insert({
       contract_id: contractId,
       stripe_session_id: session.id,
       amount_total: amountInGrosze,
       platform_fee: platformFee,
       status: "pending",
     });
+
+    if (paymentError) {
+      console.error("Failed to create payment record:", paymentError);
+      // Continue anyway - Stripe session was already created
+      // The webhook will still process the payment
+    }
 
     return NextResponse.json({
       url: session.url,

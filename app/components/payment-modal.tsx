@@ -39,17 +39,29 @@ export function PaymentModal({
         }
     }, [isOpen]);
 
-    // Check for payment success/cancel from URL params
+    // Check for payment success/cancel from URL params and auto-refresh
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
             const paymentStatus = params.get('payment');
 
             if (paymentStatus === 'success') {
-                toast.success("Płatność przyjęta! Środki zostały zabezpieczone.");
-                // Clean up URL
+                toast.success("Płatność przyjęta! Aktualizacja statusu...", {
+                    duration: 5000,
+                });
+                // Clean up URL params immediately
                 const newUrl = window.location.pathname;
                 window.history.replaceState({}, '', newUrl);
+
+                // Auto-refresh page after delay to let Stripe webhook process
+                // Webhook typically takes 1-5 seconds to update contract/milestone status
+                const refreshTimer = setTimeout(() => {
+                    window.location.reload();
+                }, 4000);
+
+                return () => {
+                    clearTimeout(refreshTimer);
+                };
             } else if (paymentStatus === 'cancelled') {
                 toast.info("Płatność anulowana.");
                 const newUrl = window.location.pathname;

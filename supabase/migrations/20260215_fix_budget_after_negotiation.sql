@@ -80,6 +80,7 @@ BEGIN
     -- 4. Update Contract Status + sync total_amount to sum of milestones
     UPDATE contracts
     SET terms_status = 'agreed',
+        status = 'awaiting_funding',
         terms_version = terms_version + 1,
         company_approved_version = terms_version + 1,
         student_approved_version = terms_version + 1,
