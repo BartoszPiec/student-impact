@@ -10,6 +10,8 @@ import { MapPin, GraduationCap, Briefcase, Globe, Linkedin, Mail, Calendar, Spar
 import BackButton from "@/components/back-button";
 import { Stars, ReviewCard } from "@/components/ReviewCard";
 
+import { PremiumPageHeader } from "@/components/ui/premium-page-header";
+
 export const dynamic = "force-dynamic";
 
 // Stars now imported from ReviewCard
@@ -92,8 +94,8 @@ export default async function StudentProfilePage({
       .from("contracts")
       .select(`
         id, created_at, status, service_order_id, application_id, company_id,
-        application:applications!contracts_application_id_fkey(offers(tytul)), 
-        service_order:service_orders!contracts_service_order_id_fkey(package:service_packages(title))
+        application:applications!contracts_application_id_fkey(offers(tytul, id)), 
+        service_order:service_orders!contracts_service_order_id_fkey(package:service_packages(title, id))
       `)
       .eq("student_id", studentId)
       .order("created_at", { ascending: false })
@@ -120,26 +122,50 @@ export default async function StudentProfilePage({
     const isExplicitlyCompleted = ['completed', 'delivered', 'accepted'].includes(c.status);
 
     if (isExplicitlyCompleted || hasReview) {
+      let link = null;
       let title = "Zrealizowany Projekt";
+
+      // Helper to safely get relation object (Supabase can return array or object)
+      const app = Array.isArray(c.application) ? c.application[0] : c.application;
+      const so = Array.isArray(c.service_order) ? c.service_order[0] : c.service_order;
+
+      const offer = app?.offers ? (Array.isArray(app.offers) ? app.offers[0] : app.offers) : null;
+      const pkg = so?.package ? (Array.isArray(so.package) ? so.package[0] : so.package) : null;
+
       // Check Application -> Offer Title
-      if (c.application?.offers?.tytul) {
-        title = c.application.offers.tytul;
+      if (offer?.tytul) {
+        title = offer.tytul;
+        // Try to get ID from nested offer
+        if (offer.id) {
+          link = `/app/offers/${offer.id}`;
+        }
       }
       // Check Service Order -> Package Title
-      else if (c.service_order?.package?.title) {
-        title = c.service_order.package.title;
+      else if (pkg?.title) {
+        title = pkg.title;
+        if (pkg.id) {
+          link = `/app/offers/${pkg.id}`;
+        }
+      }
+
+      // Fallback link to deliverable/application if offer link is missing
+      if (!link && c.application_id) {
+        link = `/app/deliverables/${c.application_id}`;
       }
 
       normalizedProjects.push({
         id: c.id,
         title: title,
         summary: "Projekt zakończony sukcesem w ramach platformy Student2Work.",
-        link: null,
+        link: link,
         created_at: c.created_at,
         company_id: c.company_id
       });
     }
   });
+
+
+
 
   const projects = [...manualProjects, ...normalizedProjects]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -164,35 +190,36 @@ export default async function StudentProfilePage({
   return (
     <main className="min-h-screen bg-slate-50/50 pb-20">
       {/* Header Banner */}
-      <div className="h-48 w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-800 relative">
-        <div className="absolute top-4 left-4">
-          <BackButton label="← Wróć" variant="ghost" fallbackUrl="/app" />
-        </div>
-      </div>
+      <div className="container mx-auto max-w-6xl px-4 sm:px-6 pt-6">
+        <PremiumPageHeader
+          badge="Profil Studenta"
+          title={publicName}
+          description="Przeglądaj doświadczenie, projekty i opinie kandydata."
+          icon={
+            <div className="h-full w-full flex items-center justify-center bg-indigo-500 rounded-full text-white text-3xl font-bold">
+              {initials}
+            </div>
+          }
+          actions={
+            <BackButton label="Wróć" variant="secondary" fallbackUrl="/app" />
+          }
+        />
 
-      <div className="container mx-auto max-w-6xl px-4 sm:px-6 -mt-20 relative z-10">
         <div className="grid lg:grid-cols-12 gap-8">
 
           {/* LEFT SIDEBAR */}
           <div className="lg:col-span-4 space-y-6">
             {/* Profile Card */}
-            <Card className="overflow-hidden shadow-lg border-none ring-1 ring-slate-200 bg-white">
-              <CardContent className="pt-0 px-0 flex flex-col items-center">
-                <div className="mt-6 mb-4 p-1 bg-white rounded-full">
-                  <Avatar className="h-32 w-32 border-4 border-white shadow-xl">
-                    <AvatarFallback className="bg-slate-100 text-slate-400 text-3xl font-bold">{initials}</AvatarFallback>
-                  </Avatar>
-                </div>
-
+            <Card className="overflow-hidden shadow-xl shadow-indigo-100/50 border-white ring-1 ring-slate-100 bg-white rounded-3xl">
+              <CardContent className="pt-6 px-0 flex flex-col items-center">
                 <div className="text-center px-6 pb-6 w-full">
-                  <h1 className="text-2xl font-bold text-slate-900">{publicName}</h1>
                   {sp.sciezka && (
-                    <Badge variant="secondary" className="mt-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100">
+                    <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 mb-4 scale-125 px-3 py-1 rounded-full border border-indigo-100">
                       {sp.sciezka}
                     </Badge>
                   )}
 
-                  <div className="flex justify-center gap-3 mt-6">
+                  <div className="flex justify-center gap-3">
                     {sp.linkedin_url && (
                       <Button asChild variant="outline" size="sm" className="rounded-full">
                         <a href={sp.linkedin_url} target="_blank" rel="noreferrer">
@@ -212,20 +239,18 @@ export default async function StudentProfilePage({
                   </div>
                 </div>
 
-                <Separator />
-
-                <div className="grid grid-cols-3 w-full divide-x border-b">
-                  <div className="p-4 text-center">
-                    <div className="text-lg font-bold text-slate-800">{projects.length}</div>
-                    <div className="text-[10px] text-slate-500 uppercase">Projekty</div>
+                <div className="grid grid-cols-3 w-full gap-2 px-4 pb-2">
+                  <div className="p-3 text-center group hover:bg-slate-50 transition-colors rounded-2xl">
+                    <div className="text-2xl font-black text-slate-900 mb-1 group-hover:scale-110 transition-transform duration-300">{projects.length}</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Projekty</div>
                   </div>
-                  <div className="p-4 text-center">
-                    <div className="text-lg font-bold text-slate-800">{reviews.length}</div>
-                    <div className="text-[10px] text-slate-500 uppercase">Oceny</div>
+                  <div className="p-3 text-center group hover:bg-slate-50 transition-colors rounded-2xl">
+                    <div className="text-2xl font-black text-slate-900 mb-1 group-hover:scale-110 transition-transform duration-300">{reviews.length}</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Oceny</div>
                   </div>
-                  <div className="p-4 text-center">
-                    <div className="text-lg font-bold text-emerald-600">{avg ? avg.toFixed(1) : "-"}</div>
-                    <div className="text-[10px] text-slate-500 uppercase">Średnia</div>
+                  <div className="p-3 text-center group hover:bg-slate-50 transition-colors rounded-2xl">
+                    <div className="text-2xl font-black text-emerald-500 mb-1 group-hover:scale-110 transition-transform duration-300">{avg ? avg.toFixed(1) : "-"}</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Średnia</div>
                   </div>
                 </div>
 
@@ -234,10 +259,10 @@ export default async function StudentProfilePage({
                     <Sparkles className="h-4 w-4 text-amber-500" />
                     Główne Kompetencje
                   </h3>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-2 justify-center">
                     {kompetencje.length > 0 ? (
                       kompetencje.slice(0, 15).map((k: string) => (
-                        <Badge key={k} variant="outline" className="bg-white text-slate-600 font-normal">
+                        <Badge key={k} variant="secondary" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-100 px-3 py-1 text-xs">
                           {k}
                         </Badge>
                       ))
@@ -250,8 +275,8 @@ export default async function StudentProfilePage({
             </Card>
 
             {/* Education Card - Simplified / Timeline */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
+            <Card className="shadow-lg shadow-slate-200/50 border-white ring-1 ring-slate-100 rounded-3xl">
+              <CardHeader className="pb-3 border-b border-slate-50">
                 <CardTitle className="text-base flex items-center gap-2">
                   <GraduationCap className="h-4 w-4 text-indigo-500" />
                   Edukacja
@@ -260,14 +285,15 @@ export default async function StudentProfilePage({
               <CardContent className="space-y-4">
                 {/* Show database entries if available, otherwise fallback to simple fields */}
                 {education.length > 0 ? (
-                  <div className="space-y-4 relative pl-2">
-                    <div className="absolute left-[3px] top-2 bottom-2 w-0.5 bg-slate-200"></div>
+                  <div className="space-y-6 relative pl-2 pt-2">
+                    <div className="absolute left-[7px] top-3 bottom-3 w-0.5 bg-indigo-100"></div>
                     {education.map((edu: any) => (
-                      <div key={edu.id} className="relative pl-5">
-                        <div className="absolute left-[-2px] top-1.5 h-2.5 w-2.5 rounded-full bg-white border-2 border-indigo-400"></div>
-                        <div className="text-sm font-semibold text-slate-800">{edu.school_name}</div>
-                        <div className="text-xs text-slate-600">{edu.field_of_study} {edu.degree ? `(${edu.degree})` : ''}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
+                      <div key={edu.id} className="relative pl-8">
+                        <div className="absolute left-0 top-1.5 h-4 w-4 rounded-full bg-white border-4 border-indigo-500 shadow-sm z-10"></div>
+                        <div className="text-base font-bold text-slate-800">{edu.school_name}</div>
+                        <div className="text-sm text-indigo-600 font-medium mb-1">{edu.field_of_study} {edu.degree ? `(${edu.degree})` : ''}</div>
+                        <div className="text-xs text-slate-400 font-medium flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
                           {edu.start_year} - {edu.is_current ? "Obecnie" : edu.end_year}
                         </div>
                       </div>
@@ -300,10 +326,10 @@ export default async function StudentProfilePage({
                 <span className="bg-indigo-600 w-1 h-6 rounded-full inline-block"></span>
                 O mnie
               </h2>
-              <Card className="shadow-sm bg-white">
-                <CardContent className="p-6">
+              <Card className="shadow-lg shadow-slate-200/50 border-white ring-1 ring-slate-100 rounded-3xl bg-white">
+                <CardContent className="p-8">
                   {sp.bio ? (
-                    <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{sp.bio}</p>
+                    <p className="text-slate-600 leading-relaxed whitespace-pre-wrap text-lg">{sp.bio}</p>
                   ) : (
                     <p className="text-slate-400 italic">Student nie dodał jeszcze opisu "O mnie".</p>
                   )}
@@ -311,60 +337,27 @@ export default async function StudentProfilePage({
               </Card>
             </div>
 
-            {/* Experience / Projects */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <span className="bg-purple-600 w-1 h-6 rounded-full inline-block"></span>
-                Doświadczenie i Projekty
-              </h2>
+            {/* Experience */}
+            {sp.doswiadczenie && (
+              <div className="space-y-4">
+                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <span className="bg-purple-600 w-1 h-6 rounded-full inline-block"></span>
+                  Doświadczenie
+                </h2>
 
-              {/* Only show 'doswiadczenie' text if no structured projects? OR show both. styling text block first. */}
-              {sp.doswiadczenie && (
-                <Card className="shadow-sm mb-4 border-l-4 border-l-purple-500/20">
+                <Card className="shadow-none mb-6 border border-indigo-100 bg-indigo-50/30 rounded-3xl">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm uppercase tracking-wide text-slate-500 font-semibold">Opis doświadczenia</CardTitle>
+                    <CardTitle className="text-sm uppercase tracking-wide text-indigo-900/60 font-bold flex items-center gap-2">
+                      <Briefcase className="w-4 h-4" />
+                      Opis doświadczenia
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-slate-600 whitespace-pre-wrap">{sp.doswiadczenie}</p>
+                    <p className="text-base text-slate-700 whitespace-pre-wrap leading-relaxed">{sp.doswiadczenie}</p>
                   </CardContent>
                 </Card>
-              )}
-
-              {projects.length > 0 ? (
-                <div className="grid md:grid-cols-2 gap-4">
-                  {projects.map((p: any) => (
-                    <Card key={p.id} className="group hover:border-indigo-300 transition-colors cursor-default">
-                      <CardHeader className="pb-3">
-                        <div className="flex justify-between items-start gap-2">
-                          <CardTitle className="text-base font-semibold text-slate-800 line-clamp-2 group-hover:text-indigo-700 transition-colors">
-                            {p.title || "Bez tytułu"}
-                          </CardTitle>
-                          <FolderGit2 className="h-5 w-5 text-slate-300 group-hover:text-indigo-400" />
-                        </div>
-                        <div className="text-xs text-slate-400">{fmtDate(p.created_at)}</div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <p className="text-sm text-slate-600 line-clamp-3 leading-relaxed">
-                          {p.summary || "Brak opisu."}
-                        </p>
-                        {p.link && (
-                          <Button asChild variant="link" className="px-0 h-auto text-indigo-600">
-                            <a href={p.link} target="_blank" rel="noreferrer">
-                              Zobacz projekt →
-                            </a>
-                          </Button>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  <Briefcase className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-slate-500">Brak zrealizowanych projektów w Student2Work.</p>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Reviews */}
             <div className="space-y-4">

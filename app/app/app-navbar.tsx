@@ -52,7 +52,7 @@ export function AppNavbar({ user, role, unread, unreadChat = 0 }: AppNavbarProps
                     {/* Mobile Menu Trigger */}
                     <Sheet open={isOpen} onOpenChange={setIsOpen}>
                         <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon" className="md:hidden -ml-2 text-slate-500 hover:text-indigo-600">
+                            <Button variant="ghost" size="icon" className="md:hidden -ml-2 text-slate-500 hover:text-indigo-600" suppressHydrationWarning>
                                 <Menu className="h-6 w-6" />
                             </Button>
                         </SheetTrigger>

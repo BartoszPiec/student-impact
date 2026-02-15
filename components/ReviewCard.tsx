@@ -61,7 +61,7 @@ export function ReviewCard({
     reviewerLink
 }: ReviewCardProps) {
     return (
-        <Card className="border-none shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] transition-shadow duration-300 rounded-3xl overflow-hidden bg-white">
+        <Card className="border border-slate-100 shadow-lg shadow-indigo-100/20 hover:shadow-xl hover:shadow-indigo-100/40 transition-all duration-300 rounded-3xl overflow-hidden bg-white hover:-translate-y-1">
             <CardContent className="p-6 space-y-4">
                 <div className="flex items-start gap-4">
                     <CompanyAvatar name={reviewerName} />

@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Zap, Plus, ArrowRight, DollarSign, Clock, LayoutTemplate } from "lucide-react";
 import { redirect } from "next/navigation";
 import { DeleteServiceButton } from "./delete-service-button";
+import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -29,23 +30,19 @@ export default async function AdminSystemServicesPage() {
 
     return (
         <main className="container max-w-7xl mx-auto py-10 space-y-8">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="space-y-1">
-                    <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
-                        <div className="p-2 bg-amber-100 text-amber-600 rounded-xl">
-                            <Zap className="w-8 h-8" />
-                        </div>
-                        Usługi Systemowe
-                    </h1>
-                    <p className="text-slate-500 text-lg">Zarządzaj ofertami "Gwarantowanymi" i mikrozleceniami.</p>
-                </div>
-                <Button asChild size="lg" className="rounded-xl shadow-lg shadow-indigo-500/20 bg-indigo-600 hover:bg-indigo-700 font-bold">
-                    <Link href="/app/admin/system-services/new">
-                        <Plus className="w-5 h-5 mr-2" /> Dodaj Nową Usługę
-                    </Link>
-                </Button>
-            </div>
+            <PremiumPageHeader
+                badge="Admin Panel"
+                title="Usługi Systemowe"
+                description="Zarządzaj ofertami Gwarantowanymi i mikrozleceniami w systemie."
+                icon={<Zap className="w-10 h-10 text-amber-400 drop-shadow-lg" />}
+                actions={
+                    <Button asChild size="lg" className="bg-white text-indigo-900 hover:bg-amber-50 shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-all hover:scale-105 active:scale-95 px-6 h-12 rounded-2xl font-bold">
+                        <Link href="/app/admin/system-services/new">
+                            <Plus className="w-5 h-5 mr-2" /> Dodaj Usługę
+                        </Link>
+                    </Button>
+                }
+            />
 
             {/* List */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
