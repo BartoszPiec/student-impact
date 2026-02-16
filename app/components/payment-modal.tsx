@@ -39,34 +39,68 @@ export function PaymentModal({
         }
     }, [isOpen]);
 
-    // Check for payment success/cancel from URL params and auto-refresh
+    // Check for payment success/cancel from URL params and verify payment
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const params = new URLSearchParams(window.location.search);
-            const paymentStatus = params.get('payment');
+        if (typeof window === 'undefined') return;
 
-            if (paymentStatus === 'success') {
-                toast.success("Płatność przyjęta! Aktualizacja statusu...", {
-                    duration: 5000,
-                });
-                // Clean up URL params immediately
-                const newUrl = window.location.pathname;
-                window.history.replaceState({}, '', newUrl);
+        const params = new URLSearchParams(window.location.search);
+        const paymentStatus = params.get('payment');
+        const sessionId = params.get('session_id');
 
-                // Auto-refresh page after delay to let Stripe webhook process
-                // Webhook typically takes 1-5 seconds to update contract/milestone status
-                const refreshTimer = setTimeout(() => {
-                    window.location.reload();
-                }, 4000);
+        if (paymentStatus === 'success' && sessionId) {
+            toast.success("Płatność przyjęta! Weryfikacja statusu...", {
+                duration: 8000,
+            });
+            // Clean up URL params immediately
+            window.history.replaceState({}, '', window.location.pathname);
 
-                return () => {
-                    clearTimeout(refreshTimer);
-                };
-            } else if (paymentStatus === 'cancelled') {
-                toast.info("Płatność anulowana.");
-                const newUrl = window.location.pathname;
-                window.history.replaceState({}, '', newUrl);
-            }
+            // Call verify-payment endpoint to confirm and update DB
+            const verifyPayment = async () => {
+                try {
+                    const res = await fetch('/api/stripe/verify-payment', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_id: sessionId }),
+                    });
+                    const data = await res.json();
+
+                    if (data.status === 'success' || data.status === 'already_processed') {
+                        toast.success("Depozyt zasilony! Odświeżanie...");
+                        setTimeout(() => window.location.reload(), 1500);
+                    } else if (data.status === 'not_paid') {
+                        // Payment not yet confirmed by Stripe, retry after delay
+                        setTimeout(async () => {
+                            const retryRes = await fetch('/api/stripe/verify-payment', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ session_id: sessionId }),
+                            });
+                            const retryData = await retryRes.json();
+                            if (retryData.status === 'success' || retryData.status === 'already_processed') {
+                                toast.success("Depozyt zasilony!");
+                            }
+                            window.location.reload();
+                        }, 5000);
+                    } else {
+                        // Fallback: reload anyway
+                        setTimeout(() => window.location.reload(), 3000);
+                    }
+                } catch (err) {
+                    console.error('Verify payment error:', err);
+                    // Fallback: reload after delay (webhook might have processed)
+                    setTimeout(() => window.location.reload(), 4000);
+                }
+            };
+
+            verifyPayment();
+        } else if (paymentStatus === 'success') {
+            // No session_id in URL — just reload after delay
+            toast.success("Płatność przyjęta! Aktualizacja statusu...");
+            window.history.replaceState({}, '', window.location.pathname);
+            setTimeout(() => window.location.reload(), 4000);
+        } else if (paymentStatus === 'cancelled') {
+            toast.info("Płatność anulowana.");
+            window.history.replaceState({}, '', window.location.pathname);
         }
     }, []);
 
