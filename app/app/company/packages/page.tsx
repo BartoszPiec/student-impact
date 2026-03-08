@@ -142,11 +142,13 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
   const searchParams = await props.searchParams;
   const supabase = await createClient();
 
-  /* 1. Fetch ALL Packages from service_packages */
+  /* 1. Fetch ALL Packages — SECURITY: explicit columns, never expose locked_content/commission_rate */
   const { data: servicePackages, error: spError } = await supabase
     .from("service_packages")
     .select(`
-      *,
+      id, title, description, price, price_max,
+      delivery_time_days, student_id, is_system, type,
+      categories, category, variants, requires_nda, status, created_at,
       student:student_profiles (
         public_name
       )

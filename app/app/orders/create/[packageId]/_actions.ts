@@ -11,21 +11,40 @@ export async function createOrder(formData: FormData) {
     if (!user) throw new Error("Unauthorized");
 
     const packageId = formData.get("packageId") as string;
-    const price = Number(formData.get("price"));
     const title = formData.get("title") as string;
+    const selectedVariant = formData.get("selected_variant") as string | null;
+    const ndaAccepted = formData.get("nda_accepted") === "true";
 
     // Pola kontaktowe
     const contactEmail = formData.get("contact_email") as string;
     const companyWebsite = formData.get("company_website") as string;
 
-    // Fetch package details EARLY to know the schema and student
+    // SECURITY: Fetch package details from DB — price is ALWAYS determined server-side
     const { data: pkgData, error: pkgError } = await supabase
         .from("service_packages")
-        .select("student_id, is_system, form_schema")
+        .select("student_id, is_system, form_schema, commission_rate, requires_nda, variants, price")
         .eq("id", packageId)
         .single();
 
     if (pkgError || !pkgData) throw new Error("Package not found");
+
+    // Validate NDA requirement
+    if (pkgData.requires_nda && !ndaAccepted) {
+        throw new Error("NDA acceptance is required for this package");
+    }
+
+    // SECURITY: Price is ALWAYS from the database, never from client formData
+    let effectivePrice = pkgData.price;
+    if (selectedVariant && Array.isArray(pkgData.variants)) {
+        const variant = pkgData.variants.find((v: any) => v.name === selectedVariant);
+        if (variant && typeof variant.price === 'number' && variant.price > 0) {
+            effectivePrice = variant.price;
+        }
+    }
+
+    if (!effectivePrice || effectivePrice <= 0) {
+        throw new Error("Invalid package price");
+    }
 
     // Parsowanie odpowiedzi dynamicznych
     let requirementsText = "=== DANE KONTAKTOWE ===\n";
@@ -58,12 +77,14 @@ export async function createOrder(formData: FormData) {
             company_id: user.id,
             package_id: packageId,
             student_id: pkgData.is_system ? null : pkgData.student_id,
-            amount: price,
-            requirements: requirementsText, // Zapisujemy wszystko jako jeden tekst dla studenta
+            amount: effectivePrice,
+            requirements: requirementsText,
             status: "pending",
             title: title,
             contact_email: contactEmail,
-            company_website: companyWebsite
+            company_website: companyWebsite,
+            selected_variant: selectedVariant || null,
+            nda_accepted_at: ndaAccepted ? new Date().toISOString() : null
         })
         .select("id")
         .single();

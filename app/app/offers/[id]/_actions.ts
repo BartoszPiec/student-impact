@@ -248,16 +248,15 @@ export async function applyToOffer(
         const studentName = profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || profile.email : "Student";
 
         initialMsg = `Zlecenie będzie realizował ${studentName} od teraz możecie się ze sobą komunikować.`;
-        msgEvent = 'application_accepted'; // Renders as system badge
+        msgEvent = 'system.notice'; // Renders as system badge
       } else {
         // Standard/Company Micro/Job
         // If empty, use default text
         if (!initialMsg) initialMsg = "Przesłano zgłoszenie aplikacyjne.";
 
         // Use inline check to avoid any scope confusion
-        const isNegotiationCheck = proposed != null && (offer.stawka == null || Number(proposed) !== Number(offer.stawka));
-        if (isNegotiationCheck) {
-          msgEvent = 'negotiation_proposed';
+        if (isNegotiation) {
+          msgEvent = 'rate.proposed';
         }
       }
 
@@ -276,22 +275,19 @@ export async function applyToOffer(
       }
 
       // ✅ 2) jeśli negocjuje, dopisz to też na czacie
-      if (proposed != null && (offer.stawka == null || Number(proposed) !== Number(offer.stawka))) {
-        // PASS 'negotiation_proposed' EVENT HERE to trigger In-Chat UI
+      if (isNegotiation) {
         await insertChatMessage(
           supabase as any,
           conversationId,
           user.id,
           `Proponuję stawkę ${proposed} zł.`,
-          'negotiation_proposed',
+          'rate.proposed',
           { proposed_stawka: proposed }
         );
       }
 
       // ✅ powiadom firmę
       logs.push("Notifying...");
-      const isNegotiation =
-        proposed != null && (offer.stawka == null || Number(proposed) !== Number(offer.stawka));
 
       await notifyUser(
         supabase as any,

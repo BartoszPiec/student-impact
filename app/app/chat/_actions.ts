@@ -248,6 +248,36 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
     await supabase.rpc("ensure_contract_for_application", {
       p_application_id: conv.application_id,
     });
+
+    // ✅ Reject competing applications + update offer status (mirror acceptApplication logic)
+    const { data: appData } = await supabase
+      .from("applications")
+      .select("offer_id, offers!inner(id, tytul, company_id, is_platform_service, typ)")
+      .eq("id", conv.application_id)
+      .single();
+
+    if (appData) {
+      const offerRow: any = Array.isArray(appData.offers) ? appData.offers[0] : appData.offers;
+      const isMultiInstance = offerRow.is_platform_service === true ||
+        (offerRow.typ && (offerRow.typ.toLowerCase().includes("micro") || offerRow.typ.toLowerCase().includes("mikro")));
+
+      if (!isMultiInstance) {
+        const now = new Date().toISOString();
+        // Reject other sent/countered applications for same offer
+        await supabase
+          .from("applications")
+          .update({ status: "rejected", decided_at: now })
+          .eq("offer_id", appData.offer_id)
+          .neq("id", conv.application_id)
+          .in("status", ["sent", "countered"]);
+
+        // Update offer status to in_progress
+        await supabase
+          .from("offers")
+          .update({ status: "in_progress" })
+          .eq("id", appData.offer_id);
+      }
+    }
   } else {
     // Try finding related service order
     const effectivePackageId = conv.package_id;

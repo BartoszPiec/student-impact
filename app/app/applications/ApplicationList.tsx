@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Briefcase, Zap, CheckCircle2, Clock, AlertCircle, XCircle, FileText, MessageSquare, Bookmark } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { openChatForApplication } from "@/app/app/chat/_actions";
-import { acceptCounterAsStudent, withdrawApplication, removeSavedOffer } from "./_actions";
+import { acceptCounterAsStudent, rejectCounterAsStudent, proposeNewPriceAsStudent, withdrawApplication, removeSavedOffer } from "./_actions";
 import { WithdrawApplicationButton } from "./withdraw-button";
 
 import { cn } from "@/lib/utils";
@@ -127,11 +128,16 @@ function ApplicationCard({ app }: { app: any }) {
                                         </form>
                                     </>
                                 ) : isCountered ? (
-                                    <div className="flex flex-col md:items-end gap-2 w-full md:w-auto">
+                                    <div className="flex flex-col md:items-end gap-2.5 w-full md:w-auto">
                                         <div className="flex items-center gap-2">
                                             <form action={acceptCounterAsStudent.bind(null, app.id)}>
-                                                <Button className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 font-bold shadow-lg shadow-emerald-100">
+                                                <Button className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 font-bold shadow-lg shadow-emerald-100">
                                                     Akceptuj
+                                                </Button>
+                                            </form>
+                                            <form action={rejectCounterAsStudent.bind(null, app.id)}>
+                                                <Button variant="ghost" className="h-10 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50/50 px-4 font-medium">
+                                                    Odrzuć
                                                 </Button>
                                             </form>
                                             <form action={openChatForApplication.bind(null, app.id)}>
@@ -140,9 +146,18 @@ function ApplicationCard({ app }: { app: any }) {
                                                 </Button>
                                             </form>
                                         </div>
-                                        <div className="w-full md:w-auto">
-                                            <WithdrawApplicationButton applicationId={app.id} />
-                                        </div>
+                                        <form action={proposeNewPriceAsStudent.bind(null, app.id)} className="flex items-center gap-1.5 bg-slate-50/80 rounded-xl px-2 py-1 border border-slate-100">
+                                            <Input
+                                                name="proposed_stawka"
+                                                type="number"
+                                                placeholder="Kwota..."
+                                                className="h-8 w-24 rounded-lg border-none bg-white shadow-sm text-sm placeholder:text-slate-300 focus-visible:ring-indigo-200"
+                                            />
+                                            <Button variant="ghost" type="submit" size="sm" className="h-8 rounded-lg text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-semibold text-xs px-3">
+                                                Zaproponuj
+                                            </Button>
+                                        </form>
+                                        <WithdrawApplicationButton applicationId={app.id} />
                                     </div>
                                 ) : stage === "sent" ? (
                                     <>

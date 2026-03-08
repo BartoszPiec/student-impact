@@ -100,7 +100,7 @@ export async function acceptApplication(applicationId: string) {
   const { data: appRow, error: appErr } = await supabase
     .from("applications")
     .select(
-      "id, status, student_id, offer_id, proposed_stawka, agreed_stawka, offers!inner(id, tytul, stawka, company_id)"
+      "id, status, student_id, offer_id, proposed_stawka, agreed_stawka, counter_stawka, offers!inner(id, tytul, stawka, company_id)"
     )
     .eq("id", applicationId)
     .single();
@@ -113,14 +113,17 @@ export async function acceptApplication(applicationId: string) {
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
-  if (appRow.status !== "sent") {
+  if (appRow.status !== "sent" && appRow.status !== "countered") {
     revalidatePath("/app/company/applications");
     return;
   }
 
   const now = new Date().toISOString();
-  // Safe Fallback: Prefer already agreed > proposed > offer default
-  const agreed = (appRow as any).agreed_stawka ?? (appRow as any).proposed_stawka ?? offer.stawka ?? null;
+  // If countered: company accepts their own counter-offer rate
+  // If sent: use agreed > proposed > offer default
+  const agreed = appRow.status === "countered"
+    ? (appRow as any).counter_stawka ?? (appRow as any).proposed_stawka ?? offer.stawka ?? null
+    : (appRow as any).agreed_stawka ?? (appRow as any).proposed_stawka ?? offer.stawka ?? null;
 
   // ✅ zaakceptuj
   const { error: updErr } = await supabase
@@ -304,7 +307,7 @@ export async function counterOffer(applicationId: string, formData: FormData) {
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
-  if (appRow.status !== "sent") {
+  if (appRow.status !== "sent" && appRow.status !== "countered") {
     revalidatePath("/app/company/applications");
     return;
   }
@@ -330,8 +333,8 @@ export async function counterOffer(applicationId: string, formData: FormData) {
       conversationId,
       user.id,
       `Kontrpropozycja firmy: ${counter} zł.`,
-      "counter_offer",
-      { amount: counter, currency: "PLN" }
+      "rate.proposed",
+      { proposed_stawka: counter, currency: "PLN" }
     );
   } catch {
     // nie blokujemy

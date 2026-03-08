@@ -350,23 +350,23 @@ BEGIN
 
   v_amount := COALESCE(v_app.agreed_stawka, v_app.proposed_stawka, v_amount, 0);
 
+  -- ZMIANA: status = 'draft', terms_status = 'draft'
+  -- Kontrakt czeka na negocjację milestones przez studenta
   INSERT INTO public.contracts(
     source_type, application_id, company_id, student_id,
-    currency, total_amount, status
+    currency, total_amount, status, terms_status
   )
   VALUES (
     'application', p_application_id, v_company_id, v_app.student_id,
-    'PLN', v_amount, 'awaiting_funding'
+    'PLN', v_amount, 'draft', 'draft'
   )
   RETURNING id INTO v_contract_id;
 
-  -- milestone #1
-  INSERT INTO public.milestones(
-    contract_id, idx, title, amount, status
-  )
-  VALUES (
-    v_contract_id, 1, 'Realizacja zlecenia', v_amount, 'awaiting_funding'
-  );
+  -- USUNIĘTO: automatyczny milestone
+  -- Student zdefiniuje milestones przez system negocjacji (milestone_drafts)
+
+  -- Inicjalizuj draft negocjacyjny
+  PERFORM public.draft_initialize(v_contract_id, (v_amount * 100)::bigint);
 
   UPDATE public.applications SET contract_id = v_contract_id
     WHERE id = p_application_id;
@@ -445,13 +445,14 @@ BEGIN
     RETURN v_contract_id;
   END IF;
 
+  -- ZMIANA: dodano terms_status = 'agreed' - zlecenia systemowe pomijają negocjację
   INSERT INTO public.contracts(
     source_type, service_order_id, company_id, student_id,
-    currency, total_amount, status
+    currency, total_amount, status, terms_status
   )
   VALUES (
     'service_order', p_service_order_id, v_order.company_id, v_order.student_id,
-    'PLN', COALESCE(v_order.amount, 0), 'awaiting_funding'
+    'PLN', COALESCE(v_order.amount, 0), 'awaiting_funding', 'agreed'
   )
   RETURNING id INTO v_contract_id;
 

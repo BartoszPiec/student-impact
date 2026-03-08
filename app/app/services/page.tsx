@@ -22,17 +22,19 @@ export default async function ServicesCatalogPage() {
     const isCompany = profile?.role === "company";
 
     // Pobierz WSZYSTKIE pakiety (systemowe i studenckie)
+    // SECURITY: Explicit column selection — never expose locked_content or commission_rate to catalog
     const { data: allPackages } = await supabase
         .from("service_packages")
         .select(`
-            *,
-            price_max,
-            profiles:student_id (
+            id, title, description, price, price_max,
+            delivery_time_days, student_id, is_system,
+            categories, category, variants, requires_nda, status,
+            profiles (
                 imie, nazwisko, avatar_url
             )
         `)
         .eq("status", "active")
-        .order("is_system", { ascending: false }) // Systemowe najpierw
+        .order("is_system", { ascending: false })
         .order("price", { ascending: true });
 
     return (
@@ -69,7 +71,7 @@ export default async function ServicesCatalogPage() {
             </div>
 
             {/* CLIENT CATALOG WITH TABS */}
-            <CatalogClient packages={allPackages || []} isCompany={isCompany} />
+            <CatalogClient packages={(allPackages as any) || []} isCompany={isCompany} />
         </main>
     );
 }

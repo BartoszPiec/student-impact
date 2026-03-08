@@ -108,10 +108,13 @@ function getCategoryConfig(category: string | null) {
 
 export default async function CreateOrderPage({
     params,
+    searchParams,
 }: {
     params: Promise<{ packageId: string }>;
+    searchParams: Promise<{ variant?: string }>;
 }) {
     const { packageId } = await params;
+    const { variant: variantParam } = await searchParams;
     const supabase = await createClient();
 
     // Sprawdź usera
@@ -132,7 +135,7 @@ export default async function CreateOrderPage({
     // Pobierz pakiet
     const { data: pkg } = await supabase
         .from("service_packages")
-        .select("*, price_max")
+        .select("*, price_max, variants, requires_nda, commission_rate, locked_content")
         .eq("id", packageId)
         .single();
 
@@ -239,6 +242,9 @@ export default async function CreateOrderPage({
                                 formSchema={pkg.form_schema}
                                 defaultEmail={user.email}
                                 defaultWebsite={companyProfile?.website || ""}
+                                variants={pkg.variants || null}
+                                initialVariant={variantParam || null}
+                                requiresNda={pkg.requires_nda || false}
                             />
                         </div>
                     </div>

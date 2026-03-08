@@ -129,16 +129,22 @@ export function ChatList({
                                 />
                             )}
 
-                            {msg.event === "rate.proposed" && (
-                                <RateCard
-                                    rate={msg.payload.proposed_stawka}
-                                    isMine={msg.is_mine}
-                                    isLatest={msg.id === latestRateProposalId}
-                                    conversationId={conversationId}
-                                    messageId={msg.id}
-                                    status={statusMap.get(msg.id) || "pending"}
-                                />
-                            )}
+                            {msg.event === "rate.proposed" && (() => {
+                                // Extract rate from payload with multiple fallbacks
+                                const rateValue = msg.payload?.proposed_stawka
+                                    ?? msg.payload?.amount
+                                    ?? (msg.content ? parseFloat(msg.content.replace(/[^\d.]/g, '')) : undefined);
+                                return (
+                                    <RateCard
+                                        rate={rateValue}
+                                        isMine={msg.is_mine}
+                                        isLatest={msg.id === latestRateProposalId}
+                                        conversationId={conversationId}
+                                        messageId={msg.id}
+                                        status={statusMap.get(msg.id) || "pending"}
+                                    />
+                                );
+                            })()}
 
                             {msg.event === "deadline.proposed" && (
                                 <DeadlineCard

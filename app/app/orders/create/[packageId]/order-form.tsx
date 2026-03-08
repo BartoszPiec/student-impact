@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Coins, Clock, Sparkles, User, Briefcase, Star } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
 import { createOrder, startInquiry } from "./_actions";
@@ -19,6 +20,14 @@ type FormField = {
     options?: string[];
 };
 
+type Variant = {
+    name: string;
+    label: string;
+    price: number;
+    delivery_time_days?: number;
+    scope?: string;
+};
+
 interface OrderFormProps {
     packageId: string;
     price: number;
@@ -28,6 +37,9 @@ interface OrderFormProps {
     defaultEmail?: string;
     defaultPhone?: string;
     defaultWebsite?: string;
+    variants?: Variant[] | null;
+    initialVariant?: string | null;
+    requiresNda?: boolean;
 }
 
 export default function OrderForm({
@@ -38,16 +50,25 @@ export default function OrderForm({
     formSchema,
     defaultEmail,
     defaultPhone,
-    defaultWebsite
+    defaultWebsite,
+    variants,
+    initialVariant,
+    requiresNda
 }: OrderFormProps) {
     const [loading, setLoading] = useState(false);
     const [isPending, startTransition] = useTransition();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [inquiryMessage, setInquiryMessage] = useState("");
     const [step, setStep] = useState(1);
+    const [selectedVariant, setSelectedVariant] = useState<string>(
+        initialVariant || (variants && variants.length > 0 ? variants[0].name : "")
+    );
+    const [ndaAccepted, setNdaAccepted] = useState(false);
+
+    const currentVariant = variants?.find(v => v.name === selectedVariant) || null;
+    const effectivePrice = currentVariant ? currentVariant.price : price;
 
     // Stan dla odpowiedzi z formularza dynamicznego
-    // Klucz = field.id, Wartość = odpowiedź
     const [answers, setAnswers] = useState<Record<string, string>>({});
 
     const handleAnswerChange = (id: string, value: string) => {
@@ -169,8 +190,71 @@ export default function OrderForm({
                     </div>
 
                     <input type="hidden" name="packageId" value={packageId} />
-                    <input type="hidden" name="price" value={price} />
+                    {/* SECURITY: price is determined server-side from packageId + variant, not from client */}
                     <input type="hidden" name="title" value={title} />
+                    {selectedVariant && <input type="hidden" name="selected_variant" value={selectedVariant} />}
+                    {ndaAccepted && <input type="hidden" name="nda_accepted" value="true" />}
+
+                    {/* Variant Selector */}
+                    {variants && variants.length > 0 && (
+                        <div className="space-y-4">
+                            <h3 className="font-bold text-xl text-slate-900">Wybierz Pakiet</h3>
+                            <div className="grid gap-3">
+                                {variants.map((v) => (
+                                    <button
+                                        key={v.name}
+                                        type="button"
+                                        onClick={() => setSelectedVariant(v.name)}
+                                        className={cn(
+                                            "flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left",
+                                            selectedVariant === v.name
+                                                ? "border-indigo-500 bg-indigo-50/50 ring-2 ring-indigo-500/20"
+                                                : "border-slate-200 hover:border-slate-300 bg-white"
+                                        )}
+                                    >
+                                        <div>
+                                            <div className="font-bold text-slate-900">{v.label}</div>
+                                            {v.scope && <div className="text-sm text-slate-500 mt-0.5">{v.scope}</div>}
+                                            {v.delivery_time_days && (
+                                                <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                                                    <Clock className="h-3 w-3" /> {v.delivery_time_days} dni
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="font-extrabold text-lg text-slate-900">{v.price}</span>
+                                            <span className="text-sm text-slate-400 ml-1">PLN</span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* NDA Acceptance */}
+                    {requiresNda && (
+                        <div className="space-y-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                            <h3 className="font-bold text-amber-900 flex items-center gap-2">
+                                <Sparkles className="h-4 w-4" /> Wymagana Umowa NDA
+                            </h3>
+                            <p className="text-sm text-amber-800">
+                                Ta usługa wymaga podpisania Umowy o Zachowaniu Poufności (NDA) przed rozpoczęciem pracy.
+                                Student podpisze NDA elektronicznie zanim otrzyma dostęp do Twoich danych.
+                                Kara umowna za naruszenie: 10 000 PLN.
+                            </p>
+                            <label className="flex items-start gap-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={ndaAccepted}
+                                    onChange={(e) => setNdaAccepted(e.target.checked)}
+                                    className="mt-1 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                                />
+                                <span className="text-sm text-amber-900 font-medium">
+                                    Rozumiem i akceptuję wymóg NDA dla tego zlecenia
+                                </span>
+                            </label>
+                        </div>
+                    )}
 
                     {/* Sekcja Kontaktowa */}
                     <div className="space-y-6">
@@ -258,11 +342,11 @@ export default function OrderForm({
 
                     <div className="pt-6">
                         <Button
-                            disabled={loading || isPending}
+                            disabled={loading || isPending || (requiresNda === true && !ndaAccepted)}
                             type="submit"
-                            className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white h-16 text-lg font-bold rounded-2xl shadow-xl shadow-indigo-500/20 hover:shadow-indigo-500/40 hover:-translate-y-0.5 transition-all duration-300"
+                            className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white h-16 text-lg font-bold rounded-2xl shadow-xl shadow-indigo-500/20 hover:shadow-indigo-500/40 hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {loading ? "Przetwarzanie..." : "Zamów wycenę usługi"}
+                            {loading ? "Przetwarzanie..." : `Zamów wycenę — ${effectivePrice} PLN`}
                         </Button>
                         <p className="text-center text-xs text-slate-400 mt-4">
                             Klikając, akceptujesz regulamin usług Student2Work. Płatność nastąpi dopiero po akceptacji wykonania.

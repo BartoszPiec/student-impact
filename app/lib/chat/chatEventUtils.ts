@@ -33,7 +33,19 @@ export function normalizeMessage(msg: any, currentUserId: string): NormalizedMes
         switch (msg.event) {
             case "text.sent":
             case "file.sent":
+                event = msg.event;
+                break;
             case "rate.proposed":
+                event = "rate.proposed";
+                // Ensure proposed_stawka exists (fallback from amount or content)
+                if (!payload?.proposed_stawka && payload?.amount) {
+                    payload = { ...payload, proposed_stawka: payload.amount };
+                }
+                if (!payload?.proposed_stawka && msg.content) {
+                    const numMatch = msg.content.match(/(\d+)/);
+                    if (numMatch) payload = { ...payload, proposed_stawka: parseInt(numMatch[1]) };
+                }
+                break;
             case "rate.accepted":
             case "rate.rejected":
             case "deadline.proposed":
@@ -66,6 +78,10 @@ export function normalizeMessage(msg: any, currentUserId: string): NormalizedMes
 
             case "counter_offer":
                 event = "rate.proposed";
+                // Legacy counter_offer used { amount } instead of { proposed_stawka }
+                if (payload?.amount && !payload?.proposed_stawka) {
+                    payload = { ...payload, proposed_stawka: payload.amount };
+                }
                 break;
             case "counter_accepted":
                 event = "rate.accepted";

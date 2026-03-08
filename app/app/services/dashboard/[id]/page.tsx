@@ -9,6 +9,7 @@ import { ArrowLeft, Building2, Globe, MapPin, Calendar, CreditCard, Package2 } f
 import OrderDetailActions from "../order-detail-actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import LockedContentSection from "./locked-content-section";
 
 interface Props {
     params: Promise<{ id: string }>;
@@ -40,11 +41,14 @@ export default async function ServiceOrderDetailPage(props: Props) {
             amount,
             requirements,
             company_id,
+            selected_variant,
             package:service_packages!service_orders_package_id_fkey(
                 id,
                 title,
                 description,
-                price
+                price,
+                locked_content,
+                variants
             )
         `)
         .eq("id", id)
@@ -158,7 +162,21 @@ export default async function ServiceOrderDetailPage(props: Props) {
                             <h3 className="font-semibold text-slate-900 mb-2">Dotyczy Twojej usługi:</h3>
                             <p className="italic text-slate-500">{(order.package as any).description || "Brak opisu usługi."}</p>
                             <p className="mt-2 font-medium">Cena bazowa w katalogu: {(order.package as any).price} PLN</p>
+                            {order.selected_variant && (order.package as any).variants && (
+                                <p className="mt-1 font-medium text-indigo-600">
+                                    Wybrany wariant: {
+                                        ((order.package as any).variants as any[])?.find((v: any) => v.name === order.selected_variant)?.label
+                                        || order.selected_variant
+                                    }
+                                </p>
+                            )}
                         </div>
+                    )}
+
+                    {/* Locked Content - Internal Instructions for Student */}
+                    {(order.package as any)?.locked_content &&
+                        ['accepted', 'in_progress', 'completed'].includes(order.status) && (
+                        <LockedContentSection content={(order.package as any).locked_content} />
                     )}
                 </div>
 

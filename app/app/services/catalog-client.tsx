@@ -6,12 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, Clock, Sparkles, User, Briefcase } from "lucide-react";
+import { CheckCircle2, Clock, Sparkles, User, Briefcase, Shield } from "lucide-react";
 import Link from "next/link";
 import { SERVICE_CATEGORIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { createInquiryAction } from "./_actions";
 import { toast } from "sonner";
+
+type Variant = {
+    name: string;
+    label: string;
+    price: number;
+    delivery_time_days?: number;
+    scope?: string;
+};
 
 type Package = {
     id: string;
@@ -23,6 +31,9 @@ type Package = {
     student_id: string | null;
     is_system?: boolean;
     categories?: string[] | null;
+    category?: string | null;
+    variants?: Variant[] | null;
+    requires_nda?: boolean;
     profiles?: {
         imie: string;
         nazwisko: string;
@@ -34,6 +45,8 @@ export default function CatalogClient({ packages, isCompany }: { packages: Packa
     const [pending, startTransition] = useTransition();
     const [activeTab, setActiveTab] = useState<"system" | "student">("system");
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    // Track selected variant per package id
+    const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
 
     const systemPackages = packages.filter(p => p.is_system);
     const studentPackages = packages.filter(p => !p.is_system);
@@ -41,8 +54,24 @@ export default function CatalogClient({ packages, isCompany }: { packages: Packa
     const list = activeTab === "system" ? systemPackages : studentPackages;
 
     const filtered = selectedCategory
-        ? list.filter(p => p.categories?.includes(selectedCategory))
+        ? list.filter(p => p.categories?.includes(selectedCategory) || p.category === selectedCategory)
         : list;
+
+    const getSelectedVariant = (pkg: Package): Variant | null => {
+        if (!pkg.variants || pkg.variants.length === 0) return null;
+        const selected = selectedVariants[pkg.id];
+        return pkg.variants.find(v => v.name === selected) || pkg.variants[0];
+    };
+
+    const getDisplayPrice = (pkg: Package): number => {
+        const variant = getSelectedVariant(pkg);
+        return variant ? variant.price : pkg.price;
+    };
+
+    const getDisplayDelivery = (pkg: Package): number => {
+        const variant = getSelectedVariant(pkg);
+        return variant?.delivery_time_days || pkg.delivery_time_days;
+    };
 
     return (
         <div className="space-y-8">
@@ -121,32 +150,57 @@ export default function CatalogClient({ packages, isCompany }: { packages: Packa
 
                         <CardContent className="flex-1 space-y-4">
                             <Separator />
+
+                            {/* Variant Toggle S/M/L */}
+                            {pkg.variants && pkg.variants.length > 0 && (
+                                <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+                                    {pkg.variants.map((v) => {
+                                        const isActive = (selectedVariants[pkg.id] || pkg.variants![0].name) === v.name;
+                                        return (
+                                            <button
+                                                key={v.name}
+                                                onClick={() => setSelectedVariants(prev => ({ ...prev, [pkg.id]: v.name }))}
+                                                className={cn(
+                                                    "flex-1 py-1.5 px-2 rounded-md text-xs font-semibold transition-all",
+                                                    isActive
+                                                        ? "bg-white text-indigo-700 shadow-sm"
+                                                        : "text-slate-500 hover:text-slate-700"
+                                                )}
+                                            >
+                                                {v.label}
+                                                <span className="block text-[10px] font-normal mt-0.5">{v.price} PLN</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div className="flex items-center gap-2 text-slate-600 bg-slate-50 p-2 rounded">
                                     <Clock className="h-4 w-4 text-slate-400" />
-                                    <span>{pkg.delivery_time_days} dni</span>
+                                    <span>{getDisplayDelivery(pkg)} dni</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-slate-600 bg-slate-50 p-2 rounded justify-end min-w-[100px]">
-                                    {pkg.price_max ? (
-                                        <div className="flex flex-col items-end leading-none py-0.5">
-                                            <span className="font-bold text-slate-900 text-sm whitespace-nowrap">{pkg.price} - {pkg.price_max} PLN</span>
-                                            <span className="text-[10px] text-slate-400 font-medium">Szacowany budżet</span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex flex-col items-end leading-none py-0.5">
-                                            <span className="font-bold text-slate-900 text-base">{pkg.price} PLN</span>
-                                            <span className="text-[10px] text-slate-400 font-medium">Szacowany budżet</span>
-                                        </div>
-                                    )}
+                                    <div className="flex flex-col items-end leading-none py-0.5">
+                                        <span className="font-bold text-slate-900 text-base">{getDisplayPrice(pkg)} PLN</span>
+                                        <span className="text-[10px] text-slate-400 font-medium">Szacowany budżet</span>
+                                    </div>
                                 </div>
                             </div>
+
+                            {pkg.requires_nda && (
+                                <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 px-2 py-1.5 rounded-md border border-amber-100">
+                                    <Shield className="h-3 w-3" />
+                                    Wymaga NDA
+                                </div>
+                            )}
                         </CardContent>
 
                         <CardFooter className="p-4 pt-0">
                             {isCompany ? (
                                 pkg.is_system ? (
                                     <Button asChild className="w-full shadow-sm bg-slate-900 hover:bg-slate-800 transition-all">
-                                        <Link href={`/app/orders/create/${pkg.id}`}>Wybierz Pakiet</Link>
+                                        <Link href={`/app/orders/create/${pkg.id}${pkg.variants && pkg.variants.length > 0 ? `?variant=${(selectedVariants[pkg.id] || pkg.variants[0].name)}` : ''}`}>Wybierz Pakiet</Link>
                                     </Button>
                                 ) : (
                                     <Button
