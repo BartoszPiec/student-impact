@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     // Verify contract exists and user is the company
     const { data: contract, error: contractError } = await supabase
       .from("contracts")
-      .select("id, company_id, student_id, total_amount, status, terms_status, milestones(id, title, amount, status)")
+      .select("id, company_id, student_id, total_amount, status, terms_status, company_contract_accepted_at, student_contract_accepted_at, milestones(id, title, amount, status)")
       .eq("id", contractId)
       .single();
 
@@ -39,6 +39,11 @@ export async function POST(req: NextRequest) {
 
     if (contract.terms_status !== "agreed") {
       return NextResponse.json({ error: "Contract terms not yet agreed" }, { status: 400 });
+    }
+
+    // Require both parties to accept contract documents before payment
+    if (!contract.company_contract_accepted_at || !contract.student_contract_accepted_at) {
+      return NextResponse.json({ error: "Obie strony muszą zaakceptować umowę przed płatnością" }, { status: 400 });
     }
 
     if (contract.status !== "awaiting_funding" && contract.status !== "draft") {

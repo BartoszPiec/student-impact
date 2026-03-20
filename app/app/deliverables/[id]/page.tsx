@@ -248,6 +248,17 @@ export default async function RealizationWorkspace({
     }
 
 
+    // 7. Contract Documents (PDF umowy)
+    let contractDocuments: any[] = [];
+    if (contract?.id) {
+        const { data: docs } = await supabase
+            .from("contract_documents")
+            .select("*")
+            .eq("contract_id", contract.id)
+            .order("created_at", { ascending: true });
+        contractDocuments = docs || [];
+    }
+
     // --- HELPERS ---
     const currentDeliv = deliverables?.[0]; // Latest deliverable
     const status = appRow.realization_status;
@@ -256,13 +267,14 @@ export default async function RealizationWorkspace({
 
     return (
         <main className="min-h-screen bg-[#f8fafc]">
-            {/* PREMIUM HEADER - Dark Gradient */}
-            <div className="relative overflow-hidden bg-slate-900 pt-8 pb-16">
+            {/* PREMIUM HEADER - Dark Gradient (Full Width) */}
+            <div className="relative overflow-hidden bg-slate-950 pt-12 pb-20 border-b border-white/5 shadow-2xl">
                 {/* Decorative Elements */}
-                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-indigo-600/10 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+                <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+                <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-[0.03] bg-repeat pointer-events-none" />
 
-                <div className="container mx-auto max-w-6xl px-4 relative z-10">
+                <div className="container mx-auto max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
                     <div className="flex flex-col gap-6">
                         <Link
                             href={isCompany ? "/app/company/offers" : "/app/applications"}
@@ -320,9 +332,9 @@ export default async function RealizationWorkspace({
             </div>
 
             {/* MAIN CONTENT AREA */}
-            <div className="container mx-auto max-w-6xl px-4 -mt-10 relative z-20 pb-20">
+            <div className="container mx-auto max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 -mt-10 relative z-20 pb-20">
                 <Tabs defaultValue="status" className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/80 backdrop-blur-md p-3 rounded-[2rem] border border-white/50 shadow-xl shadow-slate-200/50">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/90 backdrop-blur-xl p-4 rounded-[2.5rem] border border-white/50 shadow-2xl shadow-slate-200/40">
                         <TabsList className="bg-slate-100/50 p-1.5 h-auto flex flex-wrap md:inline-flex w-full md:w-auto rounded-[1.5rem] gap-1.5 border-none">
                             <TabsTrigger value="status" className="flex-1 md:flex-none py-3 px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
                                 <Clock className="w-4 h-4 mr-2" /> Status
@@ -360,6 +372,7 @@ export default async function RealizationWorkspace({
                                 contract={contract}
                                 totalAmount={Number(appRow?.agreed_stawka || offer?.stawka || 0)}
                                 enableNegotiation={!offer?.is_platform_service && offer?.typ !== 'job_offer'}
+                                contractDocuments={contractDocuments}
                             />
                         </TabsContent>
 

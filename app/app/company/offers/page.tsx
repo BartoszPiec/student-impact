@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
+import { PageContainer } from "@/components/ui/page-container";
 import OffersTabs from "./offers-tabs";
 
 export const dynamic = "force-dynamic";
@@ -178,18 +179,20 @@ export default async function CompanyOffersPage() {
         }
       />
 
-      {error && (
-        <pre className="rounded-md border p-4 text-sm overflow-auto">
-          {JSON.stringify(error, null, 2)}
-        </pre>
-      )}
+      <PageContainer className="pb-12">
+        {error && (
+          <pre className="rounded-md border p-4 text-sm overflow-auto mb-8 bg-white/50 backdrop-blur-sm border-white/20 shadow-inner">
+            {JSON.stringify(error, null, 2)}
+          </pre>
+        )}
 
-      <OffersTabs
-        jobs={jobs}
-        systemServices={systemServices}
-        studentServices={studentServices}
-        statsMap={statsMap}
-      />
+        <OffersTabs
+          jobs={jobs}
+          systemServices={systemServices}
+          studentServices={studentServices}
+          statsMap={statsMap}
+        />
+      </PageContainer>
     </main>
   );
 }

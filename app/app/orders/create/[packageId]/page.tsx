@@ -220,7 +220,7 @@ export default async function CreateOrderPage({
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-20">
+            <div className="w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-20">
                 <div className="grid gap-8 lg:grid-cols-3">
                     {/* Formularz */}
                     <div className="lg:col-span-2 space-y-8">

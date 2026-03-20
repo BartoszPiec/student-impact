@@ -240,7 +240,7 @@ export default function LandingPage() {
           </svg>
         </div>
 
-        <div className="max-w-7xl mx-auto w-full text-center relative z-10">
+        <div className="w-full max-w-[2000px] mx-auto text-center relative z-10">
           <RevealOnScroll className="inline-block bg-white text-[#667eea] px-6 py-2 rounded-full font-bold shadow-soft mb-8 text-sm">
             <span className="text-[#667eea] mr-2">●</span> Nowa era pracy dla studentów
           </RevealOnScroll>
@@ -277,7 +277,7 @@ export default function LandingPage() {
 
       {/* --- STATS SECTION --- */}
       <section className="py-20 px-[5%] bg-white">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="w-full max-w-[2000px] mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard icon="🎓" label="Aktywnych studentów" sublabel="+234 w tym miesiącu" value="2847" />
           <StatCard icon="🏢" label="Firm partnerskich" sublabel="Z różnych branż" value="512" />
           <StatCard icon="✅" label="Zrealizowanych projektów" sublabel="Wartość 2.4M PLN" value="1429" />
@@ -287,7 +287,7 @@ export default function LandingPage() {
 
       {/* --- JOURNEY SECTION --- */}
       <section className="py-24 px-[5%] bg-white border-t border-slate-100">
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full max-w-[2000px] mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Jak działa <span className="gradient-text">współpraca?</span></h2>
             <p className="text-lg text-[#5a5a7a]">Wybierz model współpracy dopasowany do Twoich potrzeb</p>
@@ -444,7 +444,7 @@ export default function LandingPage() {
 
       {/* --- SERVICES SECTION --- */}
       <section className="py-24 px-[5%] bg-white">
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full max-w-[2000px] mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Jakie <span className="gradient-text">usługi</span> znajdziesz?</h2>
             <p className="text-lg text-[#5a5a7a]">Szeroki wybór usług oferowanych przez utalentowanych studentów</p>
@@ -460,7 +460,7 @@ export default function LandingPage() {
 
       {/* --- TESTIMONIALS SECTION --- */}
       <section className="py-24 px-[5%] bg-slate-50">
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full max-w-[2000px] mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Co mówią <span className="gradient-text">nasi użytkownicy?</span></h2>
             <p className="text-lg text-[#5a5a7a]">Zaufało nam już tysiące studentów i firm z całej Polski.</p>
@@ -504,7 +504,7 @@ export default function LandingPage() {
 
       {/* --- FOOTER --- */}
       <footer className="py-10 px-[5%] bg-[#1a1a2e] text-white/50 border-t border-white/5">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="w-full max-w-[2000px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="text-xl font-bold text-white">🎓 Student2Work</div>
           <div className="text-sm">© 2026 Student2Work. All rights reserved.</div>
         </div>

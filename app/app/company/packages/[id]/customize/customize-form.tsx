@@ -23,13 +23,15 @@ export default function CustomizePackageForm({
     packageTitle,
     packageCategory,
     initialData = {},
-    offerId
+    offerId,
+    gradient = "from-indigo-600 to-purple-600"
 }: {
     packageId: string,
     packageTitle: string,
     packageCategory: string,
     initialData?: Record<string, string>,
-    offerId?: string
+    offerId?: string,
+    gradient?: string
 }) {
     const [isPending, startTransition] = useTransition();
 
@@ -146,7 +148,7 @@ export default function CustomizePackageForm({
 
             {/* --- VIDEO SECTION --- */}
             {isVideo && (
-                <Card className="border-indigo-100 shadow-lg shadow-indigo-50 overflow-hidden bg-white/90 backdrop-blur-sm">
+                <Card className="border-indigo-100 shadow-xl shadow-indigo-500/10 overflow-hidden bg-white/80 backdrop-blur-2xl rounded-[2rem]">
                     <CardHeader className="bg-gradient-to-r from-indigo-50 to-white border-b border-indigo-50">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
@@ -258,7 +260,7 @@ export default function CustomizePackageForm({
 
             {/* --- LOGO / DESIGN SECTION --- */}
             {isLogo && (
-                <Card className="border-purple-100 shadow-lg shadow-purple-50 overflow-hidden bg-white/90 backdrop-blur-sm">
+                <Card className="border-purple-100 shadow-xl shadow-purple-500/10 overflow-hidden bg-white/80 backdrop-blur-2xl rounded-[2rem]">
                     <CardHeader className="bg-gradient-to-r from-purple-50 to-white border-b border-purple-50">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-purple-100 rounded-lg text-purple-600">
@@ -322,7 +324,7 @@ export default function CustomizePackageForm({
 
             {/* --- MARKETING SECTION --- */}
             {isMarketing && (
-                <Card className="border-pink-100 shadow-lg shadow-pink-50 overflow-hidden bg-white/90 backdrop-blur-sm">
+                <Card className="border-pink-100 shadow-xl shadow-pink-500/10 overflow-hidden bg-white/80 backdrop-blur-2xl rounded-[2rem]">
                     <CardHeader className="bg-gradient-to-r from-pink-50 to-white border-b border-pink-50">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-pink-100 rounded-lg text-pink-600">
@@ -379,7 +381,7 @@ export default function CustomizePackageForm({
 
             {/* --- AUTOMATION / IT SECTION --- */}
             {isAutomation && (
-                <Card className="border-blue-100 shadow-lg shadow-blue-50 overflow-hidden bg-white/90 backdrop-blur-sm">
+                <Card className="border-blue-100 shadow-xl shadow-blue-500/10 overflow-hidden bg-white/80 backdrop-blur-2xl rounded-[2rem]">
                     <CardHeader className="bg-gradient-to-r from-blue-50 to-white border-b border-blue-50">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
@@ -406,8 +408,8 @@ export default function CustomizePackageForm({
             )}
 
             {/* --- COMMON FIELDS (ALWAYS VISIBLE) --- */}
-            <Card className="border-slate-100 shadow-lg bg-white/90 backdrop-blur-sm">
-                <CardContent className="p-6 md:p-8 space-y-6 pt-8">
+            <Card className="border-white shadow-2xl shadow-slate-200/50 bg-white/80 backdrop-blur-2xl rounded-[2.5rem]">
+                <CardContent className="p-8 md:p-12 space-y-8">
                     <div className="space-y-3">
                         <Label htmlFor="notes" className="text-slate-700 font-medium text-lg">Dodatkowe uwagi</Label>
                         <Textarea
@@ -432,7 +434,7 @@ export default function CustomizePackageForm({
                                 type="submit"
                                 disabled={isPending}
                                 size="lg"
-                                className="w-full md:w-auto min-w-[200px] h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-lg shadow-indigo-200 rounded-xl font-medium text-base transition-all hover:scale-[1.02]"
+                                className={`w-full md:w-auto min-w-[200px] h-14 bg-gradient-to-r ${gradient} text-white shadow-xl shadow-indigo-500/20 hover:shadow-indigo-500/40 rounded-xl font-bold text-lg transition-all hover:-translate-y-1`}
                             >
                                 {isPending ? (
                                     <>

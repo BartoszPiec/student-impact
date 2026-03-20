@@ -31,7 +31,7 @@ export default async function CompanyOfferDashboard({
   }
 
   return (
-    <div className="max-w-7xl mx-auto pb-10 px-4 md:px-8 space-y-8">
+    <div className="w-full max-w-[2000px] mx-auto pb-10 px-4 md:px-8 space-y-8">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 py-6 border-b border-slate-100">
         <div>

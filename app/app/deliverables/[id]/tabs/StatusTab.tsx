@@ -17,6 +17,8 @@ import {
     submitReview,
     fundMilestoneAction,
     generateContract,
+    generateContractDocuments,
+    acceptContractDocument,
     fundContractAction,
     submitMilestoneWorkAction,
     reviewMilestoneAction,
@@ -26,6 +28,7 @@ import { toast } from "sonner";
 import { Shield, ShieldCheck, AlertCircle, CircleDollarSign, CheckCircle2, Lock, Clock, FileText, ChevronDown, ChevronUp, Star, Medal, MessageSquare } from "lucide-react";
 import { PaymentModal } from "@/app/components/payment-modal";
 import { MilestoneNegotiation } from "./MilestoneNegotiation";
+import { ContractDocumentsCard } from "./ContractDocumentsCard";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 import { SecureImageViewer } from "@/app/components/SecureImageViewer";
@@ -41,7 +44,8 @@ export function StatusTab({
     theirReview,
     contract,
     totalAmount,
-    enableNegotiation = false
+    enableNegotiation = false,
+    contractDocuments = [],
 }: any) {
     // State for Payment Modal
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -189,11 +193,7 @@ export function StatusTab({
                                     </span>
                                 </p>
                             )}
-                            {isCompany && contract?.terms_status === 'agreed' && (
-                                <div className="mt-2 text-left">
-                                    <RegenerateContractButton contractId={contract.id} applicationId={applicationId} />
-                                </div>
-                            )}
+                            {/* Contract documents generation handled by ContractDocumentsCard below */}
                         </div>
 
                         {/* Escrow Badge */}
@@ -265,8 +265,8 @@ export function StatusTab({
                             </p>
                         </div>
 
-                        {/* Payment Button */}
-                        {isCompany && !isEscrowReady && contract?.terms_status === 'agreed' && (
+                        {/* Payment Button — requires both contract acceptances */}
+                        {isCompany && !isEscrowReady && contract?.terms_status === 'agreed' && contract?.company_contract_accepted_at && contract?.student_contract_accepted_at && (
                             <Button
                                 size="lg"
                                 onClick={() => setIsPaymentModalOpen(true)}
@@ -277,7 +277,7 @@ export function StatusTab({
                             </Button>
                         )}
 
-                        {isStudent && !isEscrowReady && contract?.terms_status === 'agreed' && (
+                        {isStudent && !isEscrowReady && contract?.terms_status === 'agreed' && contract?.company_contract_accepted_at && contract?.student_contract_accepted_at && (
                             <div className="relative z-10 px-5 py-3 bg-white border border-slate-200 rounded-xl text-slate-500 text-sm font-medium flex items-center gap-3 shadow-sm">
                                 <div className="p-1.5 bg-amber-50 rounded-full">
                                     <Clock className="w-4 h-4 text-amber-500" />
@@ -298,6 +298,21 @@ export function StatusTab({
                     isCompany={isCompany}
                     isStudent={isStudent}
                     totalAmount={totalAmount}
+                />
+            )}
+
+            {/* CONTRACT DOCUMENTS (after negotiation, before payment) */}
+            {contract && contract?.terms_status === 'agreed' && (
+                <ContractDocumentsCard
+                    contractId={contract.id}
+                    applicationId={applicationId}
+                    isCompany={isCompany}
+                    isStudent={isStudent}
+                    documents={contractDocuments}
+                    documentsGeneratedAt={contract.documents_generated_at}
+                    companyAcceptedAt={contract.company_contract_accepted_at}
+                    studentAcceptedAt={contract.student_contract_accepted_at}
+                    termsAgreed={contract.terms_status === 'agreed'}
                 />
             )}
 
@@ -695,26 +710,4 @@ function ReviewControls({ label = "Zatwierdź realizację" }: { label?: string }
 }
 
 
-function RegenerateContractButton({ contractId, applicationId }: { contractId: string, applicationId: string }) {
-    const [loading, setLoading] = useState(false);
-    const handleRegen = async () => {
-        if (!confirm("Wygenerować ponownie umowę? (DEBUG)")) return;
-        setLoading(true);
-        try {
-            await generateContract(contractId, applicationId);
-            // @ts-ignore
-            toast.success("Umowa wygenerowana i dodana do plików.");
-        } catch (e: any) {
-            // @ts-ignore
-            toast.error("Błąd: " + e.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <Button onClick={handleRegen} disabled={loading} variant="outline" size="sm" className="text-xs border-dashed text-slate-400 hover:text-indigo-600">
-            {loading ? "Generowanie..." : "⚡ Regeneruj Umowę (Debug)"}
-        </Button>
-    )
-}
+// RegenerateContractButton removed — replaced by ContractDocumentsCard

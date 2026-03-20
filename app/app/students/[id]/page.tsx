@@ -11,6 +11,7 @@ import BackButton from "@/components/back-button";
 import { Stars, ReviewCard } from "@/components/ReviewCard";
 
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
+import { PageContainer } from "@/components/ui/page-container";
 
 export const dynamic = "force-dynamic";
 
@@ -190,7 +191,7 @@ export default async function StudentProfilePage({
   return (
     <main className="min-h-screen bg-slate-50/50 pb-20">
       {/* Header Banner */}
-      <div className="container mx-auto max-w-6xl px-4 sm:px-6 pt-6">
+      <PageContainer className="max-w-6xl pt-6">
         <PremiumPageHeader
           badge="Profil Studenta"
           title={publicName}
@@ -394,7 +395,7 @@ export default async function StudentProfilePage({
 
           </div>
         </div>
-      </div>
+      </PageContainer>
 
 
 

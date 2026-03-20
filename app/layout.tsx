@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import { Outfit } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
-
-const outfit = Outfit({
-  subsets: ["latin"],
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin", "latin-ext"],
   variable: "--font-sans",
 });
 
@@ -22,7 +21,7 @@ export default function RootLayout({
     <html lang="pl">
       <body
         suppressHydrationWarning={true}
-        className={`${outfit.variable} antialiased font-sans`}
+        className={`${jakarta.variable} antialiased font-sans overflow-x-hidden`}
       >
         {children}
       </body>

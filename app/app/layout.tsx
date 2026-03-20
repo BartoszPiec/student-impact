@@ -71,7 +71,7 @@ export default async function AppLayout({
       {needsOnboarding && <EnsureOnboarding />}
       <AppNavbar user={user} role={role} unread={unread} unreadChat={unreadChat} />
 
-      <main className="mx-auto max-w-7xl p-4">{children}</main>
+      <main className="min-h-screen">{children}</main>
     </div>
   );
 }

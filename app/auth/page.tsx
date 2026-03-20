@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function AuthPage() {
   const router = useRouter();
@@ -17,6 +18,11 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // RODO consent states
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [acceptedMarketing, setAcceptedMarketing] = useState(false);
 
   // Rotator tekstów
   const [textIndex, setTextIndex] = useState(0);
@@ -35,13 +41,24 @@ export default function AuthPage() {
 
   async function signUp(e: React.FormEvent) {
     e.preventDefault();
+    if (!acceptedTerms || !acceptedPrivacy) {
+      setInfo("Musisz zaakceptować regulamin oraz zgodę RODO, aby założyć konto.");
+      return;
+    }
     setLoading(true);
     setInfo(null);
 
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { role } }, // trigger w bazie stworzy profiles z rolą
+      options: {
+        data: {
+          role,
+          accepted_terms: true,
+          accepted_privacy: true,
+          accepted_marketing: acceptedMarketing,
+        },
+      },
     });
 
     setLoading(false);
@@ -186,7 +203,45 @@ export default function AuthPage() {
                   <Label className="text-[#1a1a2e] font-semibold">Hasło</Label>
                   <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 bg-gray-50 border-2 border-gray-200 focus:bg-white focus:border-[#667eea] transition-all rounded-xl" />
                 </div>
-                <Button className="w-full h-12 bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:shadow-[0_6px_25px_rgba(102,126,234,0.5)] text-white font-semibold shadow-[0_4px_15px_rgba(102,126,234,0.4)] rounded-xl transition-all hover:-translate-y-0.5" disabled={loading}>
+
+                {/* RODO Consent Checkboxes */}
+                <div className="space-y-3 pt-2 border-t border-gray-100">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="terms"
+                      checked={acceptedTerms}
+                      onCheckedChange={(v) => setAcceptedTerms(v === true)}
+                      className="mt-0.5 border-gray-300 data-[state=checked]:bg-[#667eea] data-[state=checked]:border-[#667eea]"
+                    />
+                    <label htmlFor="terms" className="text-xs text-gray-600 leading-relaxed cursor-pointer select-none">
+                      Akceptuję <a href="/regulamin" target="_blank" className="text-[#667eea] underline hover:text-[#764ba2]">regulamin</a> i <a href="/polityka-prywatnosci" target="_blank" className="text-[#667eea] underline hover:text-[#764ba2]">politykę prywatności</a> serwisu Student2Work. <span className="text-red-500">*</span>
+                    </label>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="privacy"
+                      checked={acceptedPrivacy}
+                      onCheckedChange={(v) => setAcceptedPrivacy(v === true)}
+                      className="mt-0.5 border-gray-300 data-[state=checked]:bg-[#667eea] data-[state=checked]:border-[#667eea]"
+                    />
+                    <label htmlFor="privacy" className="text-xs text-gray-600 leading-relaxed cursor-pointer select-none">
+                      Wyrażam zgodę na przetwarzanie moich danych osobowych w celu realizacji usług serwisu (RODO). <span className="text-red-500">*</span>
+                    </label>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="marketing"
+                      checked={acceptedMarketing}
+                      onCheckedChange={(v) => setAcceptedMarketing(v === true)}
+                      className="mt-0.5 border-gray-300 data-[state=checked]:bg-[#667eea] data-[state=checked]:border-[#667eea]"
+                    />
+                    <label htmlFor="marketing" className="text-xs text-gray-600 leading-relaxed cursor-pointer select-none">
+                      Chcę otrzymywać informacje o nowych ofertach i promocjach.
+                    </label>
+                  </div>
+                </div>
+
+                <Button className="w-full h-12 bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:shadow-[0_6px_25px_rgba(102,126,234,0.5)] text-white font-semibold shadow-[0_4px_15px_rgba(102,126,234,0.4)] rounded-xl transition-all hover:-translate-y-0.5" disabled={loading || !acceptedTerms || !acceptedPrivacy}>
                   {loading ? "Rejestracja..." : "Załóż darmowe konto"}
                 </Button>
               </form>

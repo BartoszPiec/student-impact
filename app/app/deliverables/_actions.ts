@@ -4,6 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import React from "react";
+import { renderPdfToBuffer } from "@/lib/pdf/render";
+import { ContractADocument } from "@/lib/pdf/contract-a-template";
+import { ContractBDocument } from "@/lib/pdf/contract-b-template";
+import { generateStudentInvoice } from "@/lib/pdf/generate-invoice";
+import type { ContractData } from "@/lib/pdf/types";
 
 
 export async function getSignedStorageUrl(bucket: string, pathOrUrl: string, expiresInSeconds: number = 600) {
@@ -356,6 +362,31 @@ export async function reviewMilestoneAction(
 
   // Sync application status after milestone review
   if (decision === "accepted") {
+    // Generate student invoice for the accepted milestone (non-blocking)
+    try {
+      const { data: milestoneData } = await supabase
+        .from("milestones")
+        .select("id, title, amount, contract_id")
+        .eq("id", milestoneId)
+        .single();
+
+      if (milestoneData) {
+        const amount = Number(milestoneData.amount);
+        const fee = Math.round(amount * 0.05 * 100) / 100;
+        const net = Math.round(amount * 0.95 * 100) / 100;
+        await generateStudentInvoice(
+          milestoneData.contract_id,
+          milestoneId,
+          milestoneData.title,
+          amount,
+          fee,
+          net
+        );
+      }
+    } catch (invoiceErr) {
+      console.error("Failed to generate student invoice (non-critical):", invoiceErr);
+    }
+
     // Check if contract became completed (all milestones released)
     const { data: contractRow } = await supabase
       .from("contracts")
@@ -472,4 +503,218 @@ export async function generateContract(contractId: string, applicationId: string
   }
 
   revalidatePath(`/app/deliverables/${applicationId}`);
+}
+
+// --- CONTRACT PDF GENERATION ---
+export async function generateContractDocuments(contractId: string, applicationId: string) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) redirect("/auth");
+
+  // 1. Fetch contract with milestones
+  const { data: contract, error: contractError } = await supabase
+    .from("contracts")
+    .select("*, milestones(*)")
+    .eq("id", contractId)
+    .single();
+
+  if (contractError || !contract) {
+    throw new Error("Nie znaleziono kontraktu: " + (contractError?.message || ""));
+  }
+
+  // 2. Fetch company profile
+  const { data: companyProfile } = await supabase
+    .from("company_profiles")
+    .select("nazwa, nip, address, city, osoba_kontaktowa")
+    .eq("user_id", contract.company_id)
+    .single();
+
+  // 3. Fetch student profile + email
+  const { data: studentProfile } = await supabase
+    .from("student_profiles")
+    .select("public_name")
+    .eq("user_id", contract.student_id)
+    .single();
+
+  // Get student email from admin client (auth.users)
+  const admin = createAdminClient();
+  const { data: studentAuth } = await admin.auth.admin.getUserById(contract.student_id);
+  const studentEmail = studentAuth?.user?.email || "brak@email.com";
+
+  // 4. Fetch offer details
+  let offerTitle = "Zlecenie";
+  let offerDescription = "";
+
+  if (contract.application_id) {
+    const { data: app } = await supabase
+      .from("applications")
+      .select("offers(tytul, opis)")
+      .eq("id", contract.application_id)
+      .single();
+    offerTitle = (app?.offers as any)?.tytul || offerTitle;
+    offerDescription = (app?.offers as any)?.opis || "";
+  }
+
+  // 5. Build ContractData
+  const milestones = (contract.milestones || [])
+    .sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0));
+
+  const totalAmount = Number(contract.total_amount) || 0;
+  const platformFeePercent = 5;
+  const platformFee = Math.round(totalAmount * platformFeePercent) / 100;
+  const netAmount = totalAmount - platformFee;
+  const dateStr = new Date().toLocaleDateString("pl-PL");
+
+  const contractData: ContractData = {
+    contractId,
+    createdAt: dateStr,
+    companyName: companyProfile?.nazwa || "Firma",
+    companyNip: companyProfile?.nip || "",
+    companyAddress: companyProfile?.address || "",
+    companyCity: companyProfile?.city || "",
+    companyContactPerson: companyProfile?.osoba_kontaktowa || "",
+    studentName: studentProfile?.public_name || "Student",
+    studentEmail,
+    offerTitle,
+    offerDescription,
+    milestones: milestones.map((m: any, i: number) => ({
+      idx: m.idx || i + 1,
+      title: m.title || `Etap ${i + 1}`,
+      criteria: m.acceptance_criteria || "",
+      amount: Number(m.amount) || 0,
+      dueAt: m.due_at ? new Date(m.due_at).toLocaleDateString("pl-PL") : null,
+    })),
+    totalAmount,
+    platformFeePercent,
+    platformFee,
+    netAmount,
+    currency: contract.currency || "PLN",
+    reviewWindowDays: contract.review_window_days || 8,
+  };
+
+  // 6. Render PDFs
+  const pdfA = await renderPdfToBuffer(
+    React.createElement(ContractADocument, { data: contractData })
+  );
+  const pdfB = await renderPdfToBuffer(
+    React.createElement(ContractBDocument, { data: contractData })
+  );
+
+  const timestamp = Date.now();
+
+  // 7. Upload Contract A
+  const pathA = `contracts/${contractId}/Umowa_A_Firma_${timestamp}.pdf`;
+  const { error: uploadErrorA } = await supabase.storage
+    .from("deliverables")
+    .upload(pathA, pdfA, { contentType: "application/pdf" });
+
+  if (uploadErrorA) {
+    console.error("Upload Contract A Error:", uploadErrorA);
+    throw new Error("Błąd wgrywania Umowy A: " + uploadErrorA.message);
+  }
+
+  // 8. Upload Contract B
+  const pathB = `contracts/${contractId}/Umowa_B_Student_${timestamp}.pdf`;
+  const { error: uploadErrorB } = await supabase.storage
+    .from("deliverables")
+    .upload(pathB, pdfB, { contentType: "application/pdf" });
+
+  if (uploadErrorB) {
+    console.error("Upload Contract B Error:", uploadErrorB);
+    throw new Error("Błąd wgrywania Umowy B: " + uploadErrorB.message);
+  }
+
+  // 9. Insert contract_documents records
+  const { error: docInsertError } = await supabase
+    .from("contract_documents")
+    .insert([
+      {
+        contract_id: contractId,
+        document_type: "contract_a",
+        storage_path: pathA,
+        file_name: `Umowa_o_Swiadczenie_Uslugi_${dateStr}.pdf`,
+        generated_by: userData.user.id,
+      },
+      {
+        contract_id: contractId,
+        document_type: "contract_b",
+        storage_path: pathB,
+        file_name: `Umowa_o_Dzielo_${dateStr}.pdf`,
+        generated_by: userData.user.id,
+      },
+    ]);
+
+  if (docInsertError) {
+    console.error("Insert contract_documents Error:", docInsertError);
+    throw new Error("Błąd zapisu dokumentów: " + docInsertError.message);
+  }
+
+  // 10. Update contract — mark documents as generated
+  await supabase
+    .from("contracts")
+    .update({ documents_generated_at: new Date().toISOString() })
+    .eq("id", contractId);
+
+  revalidatePath(`/app/deliverables/${applicationId}`);
+
+  return { success: true, pathA, pathB };
+}
+
+// --- ACCEPT CONTRACT DOCUMENT ---
+export async function acceptContractDocument(
+  contractDocumentId: string,
+  contractId: string,
+  applicationId: string
+) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) redirect("/auth");
+
+  const userId = userData.user.id;
+
+  // 1. Fetch contract to determine role
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("id, company_id, student_id")
+    .eq("id", contractId)
+    .single();
+
+  if (!contract) throw new Error("Kontrakt nie znaleziony");
+
+  const isCompany = contract.company_id === userId;
+  const isStudent = contract.student_id === userId;
+
+  if (!isCompany && !isStudent) {
+    throw new Error("Brak uprawnień do akceptacji tego dokumentu");
+  }
+
+  const now = new Date().toISOString();
+
+  // 2. Update contract_documents
+  if (isCompany) {
+    await supabase
+      .from("contract_documents")
+      .update({ company_accepted_at: now })
+      .eq("id", contractDocumentId);
+
+    // Also update the contract-level timestamp
+    await supabase
+      .from("contracts")
+      .update({ company_contract_accepted_at: now })
+      .eq("id", contractId);
+  } else {
+    await supabase
+      .from("contract_documents")
+      .update({ student_accepted_at: now })
+      .eq("id", contractDocumentId);
+
+    await supabase
+      .from("contracts")
+      .update({ student_contract_accepted_at: now })
+      .eq("id", contractId);
+  }
+
+  revalidatePath(`/app/deliverables/${applicationId}`);
+
+  return { success: true, role: isCompany ? "company" : "student" };
 }

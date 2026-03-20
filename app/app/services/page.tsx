@@ -7,6 +7,13 @@ import CatalogClient from "./catalog-client";
 
 export const dynamic = "force-dynamic";
 
+// ── Full-bleed wrapper style ─────────────────────────────────
+const fullBleedStyle = {
+    width: '100vw',
+    marginLeft: 'calc(-50vw + 50%)',
+    marginTop: '-2rem', // adjust for layout padding
+} as const;
+
 export default async function ServicesCatalogPage() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -38,9 +45,9 @@ export default async function ServicesCatalogPage() {
     return (
         <main className="space-y-8 pb-20">
             {/* HERO SECTION */}
-            <div className="relative rounded-3xl bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 px-6 py-12 text-white shadow-xl overflow-hidden">
+            <div style={fullBleedStyle} className="relative bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 px-6 sm:px-12 lg:px-24 py-16 text-white shadow-xl overflow-hidden mb-12">
                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
-                <div className="relative z-10 max-w-2xl">
+                <div className="relative z-10 w-full max-w-[2000px] mx-auto">
                     <Badge variant="outline" className="mb-4 border-white/20 text-indigo-300 bg-white/5 backdrop-blur-sm px-3 py-1">
                         <Sparkles className="mr-2 h-3.5 w-3.5" />
                         Katalog Rozwiązań

@@ -29,7 +29,7 @@ export default async function AdminSystemServicesPage() {
     }
 
     return (
-        <main className="container max-w-7xl mx-auto py-10 space-y-8">
+        <main className="container w-full max-w-[2000px] mx-auto py-10 space-y-8">
             <PremiumPageHeader
                 badge="Admin Panel"
                 title="Usługi Systemowe"

@@ -96,6 +96,31 @@ export async function saveCompanyProfile(formData: FormData) {
   revalidatePath("/app/profile");
 }
 
+export async function saveStudentTaxData(formData: FormData) {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
+  if (!user) redirect("/auth");
+
+  const tax_residence_pl = formData.get("tax_residence_pl") === "true";
+  const birth_date = String(formData.get("birth_date") ?? "").trim() || null;
+  const pesel = String(formData.get("pesel") ?? "").trim() || null;
+
+  // Basic PESEL validation (11 digits)
+  if (pesel && !/^\d{11}$/.test(pesel)) {
+    throw new Error("PESEL musi składać się z 11 cyfr.");
+  }
+
+  const { error } = await supabase
+    .from("student_profiles")
+    .update({ tax_residence_pl, birth_date, pesel })
+    .eq("user_id", user.id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/app/profile");
+}
+
 export async function addEducationEntry(formData: FormData) {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();

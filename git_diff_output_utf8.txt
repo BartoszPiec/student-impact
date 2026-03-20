@@ -1,0 +1,2494 @@
+﻿diff --git a/app/api/stripe/create-checkout/route.ts b/app/api/stripe/create-checkout/route.ts
+index 065c78d..14e96d5 100644
+--- a/app/api/stripe/create-checkout/route.ts
++++ b/app/api/stripe/create-checkout/route.ts
+@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
+     // Verify contract exists and user is the company
+     const { data: contract, error: contractError } = await supabase
+       .from("contracts")
+-      .select("id, company_id, student_id, total_amount, status, terms_status, milestones(id, title, amount, status)")
++      .select("id, company_id, student_id, total_amount, status, terms_status, company_contract_accepted_at, student_contract_accepted_at, milestones(id, title, amount, status)")
+       .eq("id", contractId)
+       .single();
+ 
+@@ -41,6 +41,11 @@ export async function POST(req: NextRequest) {
+       return NextResponse.json({ error: "Contract terms not yet agreed" }, { status: 400 });
+     }
+ 
++    // Require both parties to accept contract documents before payment
++    if (!contract.company_contract_accepted_at || !contract.student_contract_accepted_at) {
++      return NextResponse.json({ error: "Obie strony musz─ů zaakceptowa─ç umow─Ö przed p┼éatno┼Ťci─ů" }, { status: 400 });
++    }
++
+     if (contract.status !== "awaiting_funding" && contract.status !== "draft") {
+       return NextResponse.json({ error: "Contract already funded or in invalid state" }, { status: 400 });
+     }
+diff --git a/app/api/stripe/webhook/route.ts b/app/api/stripe/webhook/route.ts
+index ea6a486..9d0d168 100644
+--- a/app/api/stripe/webhook/route.ts
++++ b/app/api/stripe/webhook/route.ts
+@@ -1,6 +1,7 @@
+ import { NextRequest, NextResponse } from "next/server";
+ import { getStripe } from "@/lib/stripe";
+ import { createAdminClient } from "@/lib/supabase/admin";
++import { generateCompanyInvoice } from "@/lib/pdf/generate-invoice";
+ import Stripe from "stripe";
+ 
+ export const dynamic = "force-dynamic";
+@@ -205,6 +206,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+       }
+     }
+ 
++    // Generate company invoice (non-blocking, don't fail if it doesn't work)
++    try {
++      const amountPLN = session.amount_total ? session.amount_total / 100 : 0;
++      const feePLN = session.metadata?.platform_fee
++        ? Number(session.metadata.platform_fee) / 100
++        : amountPLN * 0.05;
++      await generateCompanyInvoice(contractId, amountPLN, feePLN, "Stripe");
++      console.log(`­čôä Company invoice generated for contract ${contractId}`);
++    } catch (invoiceErr) {
++      console.error("Failed to generate company invoice (non-critical):", invoiceErr);
++    }
++
+     console.log(`Ôťů Successfully processed payment for contract ${contractId}`);
+   } catch (error) {
+     console.error("Error processing checkout completion:", error);
+diff --git a/app/app/app-navbar.tsx b/app/app/app-navbar.tsx
+index 07f9470..f8c0585 100644
+--- a/app/app/app-navbar.tsx
++++ b/app/app/app-navbar.tsx
+@@ -4,7 +4,7 @@ import Link from "next/link";
+ import { usePathname } from "next/navigation";
+ import { cn } from "@/lib/utils";
+ import NotificationsBell from "@/components/notifications-bell";
+-import { LogOut, User, Bell, Package, Briefcase, FileText, LayoutGrid, PlusCircle, Search, Menu, MessageSquare, CircleDollarSign } from "lucide-react";
++import { LogOut, User, Bell, Package, Briefcase, FileText, LayoutGrid, PlusCircle, Search, Menu, MessageSquare, CircleDollarSign, Wallet } from "lucide-react";
+ import { signOut } from "./_actions/auth";
+ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+ import { Button } from "@/components/ui/button";
+@@ -187,7 +187,10 @@ export function AppNavbar({ user, role, unread, unreadChat = 0 }: AppNavbarProps
+ 
+                     {/* Admin Links */}
+                     {role === "admin" && (
+-                        <NavLink href="/app/admin/offers" icon={LayoutGrid}>Wszystkie Oferty (Admin)</NavLink>
++                        <>
++                            <NavLink href="/app/admin/offers" icon={LayoutGrid}>Oferty (Admin)</NavLink>
++                            <NavLink href="/app/admin/payouts" icon={Wallet}>Wyp┼éaty (Admin)</NavLink>
++                        </>
+                     )}
+ 
+                 </nav>
+diff --git a/app/app/company/packages/[id]/page.tsx b/app/app/company/packages/[id]/page.tsx
+index ee9ea0d..cedb28d 100644
+--- a/app/app/company/packages/[id]/page.tsx
++++ b/app/app/company/packages/[id]/page.tsx
+@@ -3,13 +3,13 @@ import { notFound } from "next/navigation";
+ import Link from "next/link";
+ import { Button } from "@/components/ui/button";
+ import { Badge } from "@/components/ui/badge";
++import { cn } from "@/lib/utils";
+ import {
+     ArrowLeft,
+     CheckCircle2,
+     Timer,
+     ShieldCheck,
+     Sparkles,
+-    Clock,
+     Coins,
+     Clapperboard,
+     Palette,
+@@ -19,40 +19,53 @@ import {
+     BarChart3,
+     Languages,
+     Scale,
+-    TrendingUp,
+     Cpu,
+     ArrowRight,
+-    Star,
+     Zap,
+     Shield,
+-    Users
++    Users,
++    FileText,
++    Briefcase,
++    Globe,
++    ShieldAlert,
++    Package,
++    Lightbulb
+ } from "lucide-react";
+ 
+-
+ import { MarkdownLite } from "@/components/markdown-lite";
++import { AnimateOnScroll } from "@/components/animate-on-scroll";
++import { VariantPicker } from "./variant-picker";
++import { SectionNav } from "./section-nav";
+ export const dynamic = "force-dynamic";
+ 
+-// Configuration for category-specific styles
++// ÔöÇÔöÇ Category config ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++
+ const categoryConfig: Record<string, { icon: React.ReactNode; gradient: string; lightBg: string; darkText: string }> = {
+-    "video": {
++    "multimedia": {
+         icon: <Clapperboard className="w-8 h-8" />,
+         gradient: "from-rose-500 to-orange-500",
+         lightBg: "bg-rose-50",
+         darkText: "text-rose-600"
+     },
+-    "grafika": {
++    "design": {
+         icon: <Palette className="w-8 h-8" />,
+         gradient: "from-violet-500 to-purple-600",
+         lightBg: "bg-violet-50",
+         darkText: "text-violet-600"
+     },
+-    "it": {
++    "programowanie i it": {
+         icon: <Code className="w-8 h-8" />,
+         gradient: "from-cyan-500 to-blue-600",
+         lightBg: "bg-cyan-50",
+         darkText: "text-cyan-600"
+     },
+-    "content": {
++    "serwisy internetowe": {
++        icon: <Globe className="w-8 h-8" />,
++        gradient: "from-teal-500 to-cyan-600",
++        lightBg: "bg-teal-50",
++        darkText: "text-teal-600"
++    },
++    "copywriting": {
+         icon: <PenTool className="w-8 h-8" />,
+         gradient: "from-emerald-500 to-teal-600",
+         lightBg: "bg-emerald-50",
+@@ -64,13 +77,13 @@ const categoryConfig: Record<string, { icon: React.ReactNode; gradient: string;
+         lightBg: "bg-blue-50",
+         darkText: "text-blue-600"
+     },
+-    "analiza": {
++    "analiza danych": {
+         icon: <BarChart3 className="w-8 h-8" />,
+         gradient: "from-amber-500 to-orange-600",
+         lightBg: "bg-amber-50",
+         darkText: "text-amber-600"
+     },
+-    "tlumaczenia": {
++    "t┼éumaczenia": {
+         icon: <Languages className="w-8 h-8" />,
+         gradient: "from-green-500 to-emerald-600",
+         lightBg: "bg-green-50",
+@@ -82,18 +95,24 @@ const categoryConfig: Record<string, { icon: React.ReactNode; gradient: string;
+         lightBg: "bg-slate-50",
+         darkText: "text-slate-600"
+     },
+-    "finanse": {
+-        icon: <TrendingUp className="w-8 h-8" />,
+-        gradient: "from-yellow-500 to-amber-600",
+-        lightBg: "bg-yellow-50",
+-        darkText: "text-yellow-600"
++    "prace biurowe": {
++        icon: <Briefcase className="w-8 h-8" />,
++        gradient: "from-stone-500 to-stone-700",
++        lightBg: "bg-stone-50",
++        darkText: "text-stone-600"
+     },
+-    "ai": {
++    "usprawnienia ai": {
+         icon: <Cpu className="w-8 h-8" />,
+         gradient: "from-purple-600 to-pink-600",
+         lightBg: "bg-purple-50",
+         darkText: "text-purple-600"
+     },
++    "inne prace": {
++        icon: <FileText className="w-8 h-8" />,
++        gradient: "from-gray-500 to-slate-600",
++        lightBg: "bg-gray-50",
++        darkText: "text-gray-600"
++    },
+     "default": {
+         icon: <Sparkles className="w-8 h-8" />,
+         gradient: "from-[#667eea] to-[#764ba2]",
+@@ -108,6 +127,217 @@ function getCategoryConfig(category: string | null) {
+     return categoryConfig[key] || categoryConfig.default;
+ }
+ 
++// ÔöÇÔöÇ Section splitting ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++
++type SectionType = 'intro' | 'features' | 'pricing' | 'comparison'
++    | 'requirements' | 'exclusions' | 'process' | 'deliverables' | 'default';
++
++interface DescriptionSection {
++    title: string;
++    content: string;
++    type: SectionType;
++}
++
++function detectSectionType(title: string): SectionType {
++    const t = title.toLowerCase();
++    if (t.includes('chodzi') || t.includes('czym jest') || t.includes('o us┼éudze') || t.includes('o pakiecie')) return 'intro';
++    if ((t.includes('wybierz') && t.includes('pakiet')) || t.includes('wariant') || t.includes('cennik') || t === 'pakiety') return 'pricing';
++    if (t.includes('cen') && (t.includes('rynk') || t.includes('tle') || t.includes('por├│wnan'))) return 'comparison';
++    if (t.includes('dostarcz') || t.includes('musisz') || t.includes('materia┼é') || t.includes('potrzeb')) return 'requirements';
++    if (t.includes('nie obejmuj') || t.includes('nie zawiera') || t.includes('ograniczen')) return 'exclusions';
++    if (t.includes('proces') || t.includes('etap') || t.includes('przebieg') || t.includes('jak to dzia┼éa')) return 'process';
++    if (t.includes('otrzym') || t.includes('dostaje') || t.includes('co dostajesz')) return 'deliverables';
++    if (t.includes('analizow') || t.includes('zakres') || t.includes('co mo┼╝na') || t.includes('co obejmuje') || t.includes('mo┼╝liw')) return 'features';
++    return 'default';
++}
++
++function splitDescriptionIntoSections(description: string): { intro: string | null; sections: DescriptionSection[] } {
++    const lines = description.split('\n');
++    const introLines: string[] = [];
++    const sections: DescriptionSection[] = [];
++    let currentTitle: string | null = null;
++    let currentLines: string[] = [];
++
++    for (const line of lines) {
++        const trimmed = line.trim();
++        if (trimmed.startsWith('### ') && !trimmed.startsWith('#### ')) {
++            if (currentTitle !== null) {
++                sections.push({
++                    title: currentTitle,
++                    content: currentLines.join('\n').trim(),
++                    type: detectSectionType(currentTitle)
++                });
++            }
++            currentTitle = trimmed.replace(/^###\s*/, '');
++            currentLines = [];
++        } else if (currentTitle !== null) {
++            currentLines.push(line);
++        } else {
++            introLines.push(line);
++        }
++    }
++
++    if (currentTitle !== null) {
++        sections.push({
++            title: currentTitle,
++            content: currentLines.join('\n').trim(),
++            type: detectSectionType(currentTitle)
++        });
++    }
++
++    const introText = introLines.join('\n').trim();
++    return { intro: introText || null, sections };
++}
++
++// ÔöÇÔöÇ Section ID generation (Polish diacritics safe) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++
++function generateSectionId(title: string, index: number): string {
++    const map: Record<string, string> = {
++        '─ů': 'a', '─ç': 'c', '─Ö': 'e', '┼é': 'l', '┼ä': 'n',
++        '├│': 'o', '┼Ť': 's', '┼║': 'z', '┼╝': 'z',
++        '─ä': 'A', '─ć': 'C', '─ś': 'E', '┼ü': 'L', '┼â': 'N',
++        '├ô': 'O', '┼Ü': 'S', '┼╣': 'Z', '┼╗': 'Z',
++    };
++    const slug = title
++        .toLowerCase()
++        .split('')
++        .map(c => map[c] || c)
++        .join('')
++        .replace(/[^a-z0-9]+/g, '-')
++        .replace(/^-|-$/g, '');
++    return `section-${slug || index}`;
++}
++
++// ÔöÇÔöÇ Section card config ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++
++interface SectionCardConfig {
++    icon: React.ReactNode;
++    iconBg: string;
++    iconColor: string;
++    borderColor: string;
++    listIcon: "check" | "x" | "arrow" | "dot";
++    bgClass: string;
++    accentGradient: string;
++}
++
++const SECTION_CONFIGS: Record<SectionType, SectionCardConfig> = {
++    intro: {
++        icon: <Lightbulb className="w-6 h-6" />,
++        iconBg: 'bg-amber-100',
++        iconColor: 'text-amber-600',
++        borderColor: 'border-l-amber-400',
++        listIcon: 'dot',
++        bgClass: 'bg-gradient-to-br from-white to-amber-50/30',
++        accentGradient: 'from-amber-400 to-orange-400'
++    },
++    features: {
++        icon: <Sparkles className="w-6 h-6" />,
++        iconBg: 'bg-emerald-100',
++        iconColor: 'text-emerald-600',
++        borderColor: 'border-l-emerald-400',
++        listIcon: 'check',
++        bgClass: 'bg-white',
++        accentGradient: 'from-emerald-400 to-teal-400'
++    },
++    pricing: {
++        icon: <Package className="w-6 h-6" />,
++        iconBg: 'bg-indigo-100',
++        iconColor: 'text-indigo-600',
++        borderColor: 'border-l-indigo-400',
++        listIcon: 'dot',
++        bgClass: 'bg-white',
++        accentGradient: 'from-indigo-400 to-purple-400'
++    },
++    comparison: {
++        icon: <BarChart3 className="w-6 h-6" />,
++        iconBg: 'bg-violet-100',
++        iconColor: 'text-violet-600',
++        borderColor: 'border-l-violet-400',
++        listIcon: 'dot',
++        bgClass: 'bg-gradient-to-br from-white to-violet-50/30',
++        accentGradient: 'from-violet-400 to-purple-400'
++    },
++    requirements: {
++        icon: <FileText className="w-6 h-6" />,
++        iconBg: 'bg-blue-100',
++        iconColor: 'text-blue-600',
++        borderColor: 'border-l-blue-400',
++        listIcon: 'arrow',
++        bgClass: 'bg-white',
++        accentGradient: 'from-blue-400 to-cyan-400'
++    },
++    exclusions: {
++        icon: <ShieldAlert className="w-6 h-6" />,
++        iconBg: 'bg-red-100',
++        iconColor: 'text-red-500',
++        borderColor: 'border-l-red-300',
++        listIcon: 'x',
++        bgClass: 'bg-gradient-to-br from-white to-red-50/40',
++        accentGradient: 'from-red-400 to-rose-400'
++    },
++    process: {
++        icon: <Timer className="w-6 h-6" />,
++        iconBg: 'bg-cyan-100',
++        iconColor: 'text-cyan-600',
++        borderColor: 'border-l-cyan-400',
++        listIcon: 'arrow',
++        bgClass: 'bg-white',
++        accentGradient: 'from-cyan-400 to-blue-400'
++    },
++    deliverables: {
++        icon: <CheckCircle2 className="w-6 h-6" />,
++        iconBg: 'bg-emerald-100',
++        iconColor: 'text-emerald-600',
++        borderColor: 'border-l-emerald-400',
++        listIcon: 'check',
++        bgClass: 'bg-white',
++        accentGradient: 'from-emerald-400 to-green-400'
++    },
++    default: {
++        icon: <FileText className="w-6 h-6" />,
++        iconBg: 'bg-slate-100',
++        iconColor: 'text-slate-500',
++        borderColor: 'border-l-slate-300',
++        listIcon: 'dot',
++        bgClass: 'bg-white',
++        accentGradient: 'from-slate-300 to-slate-400'
++    }
++};
++
++// ÔöÇÔöÇ Hero subtitle extraction ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++
++function extractHeroSubtitle(description: string | null): string {
++    if (!description) return "Sprawd┼║ szczeg├│┼éy pakietu poni┼╝ej.";
++
++    const lines = description.split("\n");
++    for (const line of lines) {
++        const trimmed = line.trim();
++        if (!trimmed) continue;
++        if (trimmed.startsWith("#")) continue;
++        if (trimmed.startsWith("*")) continue;
++        if (trimmed.startsWith("|")) continue;
++        if (trimmed.length < 30) continue;
++
++        const clean = trimmed.replace(/\*\*/g, "");
++        if (clean.length <= 160) return clean;
++        const truncated = clean.substring(0, 160);
++        const lastSpace = truncated.lastIndexOf(" ");
++        return (lastSpace > 100 ? truncated.substring(0, lastSpace) : truncated) + "...";
++    }
++
++    return "Sprawd┼║ szczeg├│┼éy pakietu poni┼╝ej.";
++}
++
++// ÔöÇÔöÇ Full-bleed wrapper style ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++// Breaks out of parent <main className="mx-auto max-w-7xl p-4">
++const fullBleedStyle = {
++    width: '100vw',
++    marginLeft: 'calc(-50vw + 50%)',
++    marginTop: '-1rem',
++} as const;
++
++// ÔöÇÔöÇ Page component ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++
+ export default async function PackageDetailsPage(props: { params: Promise<{ id: string }> }) {
+     const params = await props.params;
+     const supabase = await createClient();
+@@ -115,7 +345,9 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id:
+     const { data: pkg, error } = await supabase
+         .from("service_packages")
+         .select(`
+-            *,
++            id, title, description, price, price_max,
++            delivery_time_days, student_id, is_system, type,
++            category, variants, requires_nda, status,
+             student:student_profiles (
+                 public_name
+             )
+@@ -128,46 +360,57 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id:
+     }
+ 
+     const config = getCategoryConfig(pkg.category);
++    const heroSubtitle = extractHeroSubtitle(pkg.description);
++
++    const variants = Array.isArray(pkg.variants) ? pkg.variants as Array<{
++        name: string;
++        label: string;
++        price: number;
++        delivery_time_days?: number;
++        scope?: string;
++    }> : null;
++
++    const hasVariants = variants && variants.length > 0;
+ 
+-    // Predefined benefits/process steps (mocked for now, or could be in DB)
+-    const features = [
+-        "Pe┼éna obs┼éuga od A do Z",
+-        "Weryfikacja jako┼Ťci przez system",
+-        "Bezpieczna p┼éatno┼Ť─ç po realizacji",
+-        "Faktura VAT (po stronie platformy/studenta)"
+-    ];
+-
+-    const steps = [
+-        { title: "Z┼éo┼╝enie zam├│wienia", desc: "Klikasz i tworzysz draft zlecenia." },
+-        { title: "Dopasowanie wykonawcy", desc: "System dobiera najlepszego studenta." },
+-        { title: "Realizacja", desc: "Student wykonuje prac─Ö w terminie." },
+-        { title: "Akceptacja", desc: "Otrzymujesz pliki i akceptujesz jako┼Ť─ç." }
+-    ];
++    const publicDescription = pkg.description
++        ? pkg.description.split("--- [MATERIA┼üY DLA WYKONAWCY] ---")[0].trim()
++        : null;
++
++    const cleanDescription = publicDescription
++        ? publicDescription.replace(/\nStudent2Work ÔÇö ┼ü─ůczymy ambicje student├│w z potrzebami firm$/, "").trim()
++        : null;
++
++    const { intro: introText, sections } = cleanDescription
++        ? splitDescriptionIntoSections(cleanDescription)
++        : { intro: null, sections: [] };
++
++    // Build nav items for SectionNav (serializable ÔÇö no JSX)
++    const navItems = sections.map((section, index) => ({
++        id: generateSectionId(section.title, index),
++        title: section.title,
++        type: section.type as string,
++    }));
+ 
+     return (
+-        <div className="min-h-screen bg-slate-50/50 pb-20">
+-            {/* Dynamic Hero Section */}
+-            <div className={`relative overflow-hidden bg-gradient-to-br ${config.gradient} pb-32 pt-12`}>
+-                {/* Animated Background Elements */}
+-                <div className="absolute inset-0 overflow-hidden">
+-                    <div className="absolute -top-40 -right-40 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
+-                    <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
++        <div style={fullBleedStyle} className="min-h-screen bg-slate-50/50 pb-20 overflow-x-hidden">
+ 
+-                    {/* Floating shapes */}
+-                    <div className="absolute top-20 left-20 w-4 h-4 bg-white/20 rounded-full animate-bounce" style={{ animationDuration: '3s' }}></div>
+-                    <div className="absolute top-40 right-1/4 w-6 h-6 bg-white/10 rounded-lg rotate-45 animate-pulse"></div>
++            {/* ÔĽÉÔĽÉÔĽÉ HERO ÔÇö full viewport width ÔĽÉÔĽÉÔĽÉ */}
++            <div className={`relative overflow-hidden bg-gradient-to-br ${config.gradient} pb-16 pt-12`}>
++                <div className="absolute inset-0 overflow-hidden">
++                    <div className="absolute -top-40 -right-40 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse" />
++                    <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl" />
++                    <div className="absolute top-20 left-20 w-4 h-4 bg-white/20 rounded-full animate-bounce" style={{ animationDuration: '3s' }} />
++                    <div className="absolute top-40 right-1/4 w-6 h-6 bg-white/10 rounded-lg rotate-45 animate-pulse" />
+                 </div>
+ 
+-                <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+-                    {/* Back Link */}
++                <div className="relative z-10 max-w-[1600px] mx-auto px-6 sm:px-8 lg:px-10">
+                     <Link href="/app/company/packages" className="inline-flex items-center text-sm font-medium text-white/80 hover:text-white mb-8 transition-colors bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
+                         <ArrowLeft className="w-4 h-4 mr-2" />
+                         Wr├│─ç do katalogu
+                     </Link>
+ 
+-
+                     <div className="max-w-4xl">
+-                        <div className="flex flex-wrap items-center gap-4 mb-6">
++                        <div className="flex flex-wrap items-center gap-3 mb-6">
+                             <Badge className="bg-white/20 backdrop-blur-md border-0 text-white text-sm font-semibold px-4 py-1.5">
+                                 <Zap className="w-4 h-4 mr-1.5" />
+                                 {pkg.category || "Us┼éuga Systemowa"}
+@@ -178,166 +421,240 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id:
+                                     Oferta Studenta
+                                 </Badge>
+                             )}
++                            {pkg.requires_nda && (
++                                <Badge className="bg-red-500/30 backdrop-blur-md border border-red-400/30 text-white text-sm font-semibold px-4 py-1.5">
++                                    <ShieldAlert className="w-4 h-4 mr-1.5" />
++                                    Wymaga NDA
++                                </Badge>
++                            )}
++                            {hasVariants && (
++                                <Badge className="bg-amber-500/30 backdrop-blur-md border border-amber-400/30 text-white text-sm font-semibold px-4 py-1.5">
++                                    <Package className="w-4 h-4 mr-1.5" />
++                                    {variants!.length} warianty
++                                </Badge>
++                            )}
+                         </div>
+                         <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-6 leading-tight">
+                             {pkg.title}
+                         </h1>
+-                        {/* Description moved to body */}
+-                        <p className="text-xl md:text-2xl text-white/80 max-w-3xl leading-relaxed font-light">
+-                            Sprawd┼║ szczeg├│┼éy pakietu poni┼╝ej.
++                        <p className="text-2xl md:text-3xl text-white/80 max-w-3xl leading-relaxed font-light">
++                            {heroSubtitle}
+                         </p>
+                     </div>
+                 </div>
+             </div>
+ 
+-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-20">
+-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+-
+-
+-                    {/* LEFT COLUMN: Main Content */}
+-                    <div className="lg:col-span-2 space-y-8">
+-
+-                        {/* Features / What's included */}
+-                        <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-slate-100 shadow-xl shadow-slate-200/50">
+-                            <h3 className="text-2xl font-bold text-slate-900 mb-8 flex items-center gap-3">
+-                                <span className={`p-2 rounded-xl ${config.lightBg} ${config.darkText}`}>
+-                                    <Sparkles className="w-6 h-6" />
+-                                </span>
+-                                Co otrzymujesz w pakiecie?
+-                            </h3>
+-                            <ul className="grid gap-5">
+-                                {features.map((feat, i) => (
+-                                    <li key={i} className="group flex items-start gap-4 text-slate-700 bg-slate-50 hover:bg-white p-4 rounded-2xl transition-all hover:shadow-md border border-transparent hover:border-slate-100">
+-                                        <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+-                                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+-                                        </div>
+-                                        <span className="font-medium">{feat}</span>
+-                                    </li>
+-                                ))}
+-                                <li className="flex items-start gap-4 text-slate-900 bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100">
+-                                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
+-                                        <Timer className="w-4 h-4 text-emerald-600" />
++            {/* ÔĽÉÔĽÉÔĽÉ SECTION NAV (sticky anchor navigation) ÔĽÉÔĽÉÔĽÉ */}
++            {navItems.length > 0 && (
++                <SectionNav sections={navItems} gradient={config.gradient} />
++            )}
++
++            {/* ÔĽÉÔĽÉÔĽÉ MAIN CONTENT ÔĽÉÔĽÉÔĽÉ */}
++            <div className="max-w-[1600px] mx-auto px-6 sm:px-8 lg:px-10 pt-8">
++
++                {/* ÔöÇÔöÇ Trust Signals ÔÇö full-width metrics strip ÔöÇÔöÇ */}
++                <AnimateOnScroll>
++                    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-lg shadow-slate-200/40 mb-8">
++                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
++                            <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-xl">
++                                <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
++                                    <Coins className="w-6 h-6 text-emerald-600" />
++                                </div>
++                                <div>
++                                    <div className="text-xs text-emerald-600 font-semibold uppercase tracking-wide">Cena od</div>
++                                    <div className="text-lg font-extrabold text-slate-900">{pkg.price} PLN</div>
++                                </div>
++                            </div>
++                            <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl">
++                                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
++                                    <Timer className="w-6 h-6 text-blue-600" />
++                                </div>
++                                <div>
++                                    <div className="text-xs text-blue-600 font-semibold uppercase tracking-wide">Realizacja</div>
++                                    <div className="text-lg font-extrabold text-slate-900">
++                                        {hasVariants
++                                            ? `${pkg.delivery_time_days}ÔÇô${Math.max(...variants!.map(v => v.delivery_time_days || pkg.delivery_time_days))} dni`
++                                            : `${pkg.delivery_time_days} dni`
++                                        }
+                                     </div>
+-                                    <span>Gwarantowany termin realizacji: <span className="font-bold text-emerald-700">{pkg.delivery_time_days} dni</span></span>
+-                                </li>
+-                            </ul>
++                                </div>
++                            </div>
++                            <div className="flex items-center gap-3 p-4 bg-violet-50 rounded-xl">
++                                <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
++                                    <Shield className="w-6 h-6 text-violet-600" />
++                                </div>
++                                <div>
++                                    <div className="text-xs text-violet-600 font-semibold uppercase tracking-wide">Bezpiecze┼ästwo</div>
++                                    <div className="text-lg font-extrabold text-slate-900">Escrow</div>
++                                </div>
++                            </div>
++                            <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-xl">
++                                <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
++                                    <ShieldCheck className="w-6 h-6 text-amber-600" />
++                                </div>
++                                <div>
++                                    <div className="text-xs text-amber-600 font-semibold uppercase tracking-wide">Gwarancja</div>
++                                    <div className="text-lg font-extrabold text-slate-900">Satysfakcji</div>
++                                </div>
++                            </div>
+                         </div>
++                    </div>
++                </AnimateOnScroll>
+ 
+-                        {/* Description Section (Moved from Hero) */}
+-                        {pkg.description && (
+-                            <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-slate-100 shadow-xl shadow-slate-200/50">
+-                                <h3 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-3">
+-                                    <span className="p-2 rounded-xl bg-orange-50 text-orange-600">
+-                                        <Megaphone className="w-6 h-6" />
+-                                    </span>
+-                                    Szczeg├│┼éy pakietu
+-                                </h3>
+-                                <div className="prose prose-slate max-w-none">
+-                                    <MarkdownLite content={pkg.description.split("--- [MATERIA┼üY DLA WYKONAWCY] ---")[0]} />
++                {/* ÔöÇÔöÇ Full-width intro section ÔöÇÔöÇ */}
++                {introText && (
++                    <AnimateOnScroll delay={100}>
++                        <div className="bg-white rounded-3xl p-10 md:p-14 border border-slate-100 shadow-xl shadow-slate-200/40 mb-8 relative overflow-hidden">
++                            <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-400 to-orange-400 rounded-full" />
++                            <div className="flex items-start gap-5 mb-6">
++                                <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
++                                    <Lightbulb className="w-7 h-7 text-amber-600" />
++                                </div>
++                                <div>
++                                    <h2 className="text-3xl font-extrabold text-slate-900">O czym jest ta us┼éuga?</h2>
++                                    <p className="text-slate-500 mt-1 text-lg">Najwa┼╝niejsze informacje o pakiecie</p>
+                                 </div>
+                             </div>
+-                        )}
++                            <MarkdownLite content={introText} className="text-lg" />
++                        </div>
++                    </AnimateOnScroll>
++                )}
++
++                {/* ÔöÇÔöÇ 2+1 Grid: Sections + Sidebar ÔöÇÔöÇ */}
++                <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
++
++                    {/* LEFT COLUMN: Section Cards */}
++                    <div className="lg:col-span-2 space-y-7">
+ 
+-                        {/* Process Steps */}
+-                        <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-slate-100 shadow-xl shadow-slate-200/50">
+-                            <h3 className="text-2xl font-bold text-slate-900 mb-8 flex items-center gap-3">
+-                                <span className="p-2 rounded-xl bg-blue-50 text-blue-600">
+-                                    <Clock className="w-6 h-6" />
+-                                </span>
+-                                Jak wygl─ůda proces?
+-                            </h3>
+-                            <div className="relative">
+-                                {/* Connector Line */}
+-                                <div className="absolute left-[27px] top-4 bottom-4 w-0.5 bg-slate-100 md:hidden"></div>
+-
+-                                <div className="grid gap-6 md:grid-cols-2">
+-                                    {steps.map((step, i) => (
+-                                        <div key={i} className="relative bg-white rounded-2xl p-6 border-2 border-slate-100 hover:border-indigo-100 hover:shadow-lg transition-all group">
+-                                            <div className="absolute -top-3 -right-3 w-8 h-8 bg-slate-100 text-slate-500 rounded-lg flex items-center justify-center font-bold text-sm shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+-                                                {i + 1}
++                        {sections.map((section, index) => {
++                            const sConfig = SECTION_CONFIGS[section.type];
++                            const sectionId = generateSectionId(section.title, index);
++                            return (
++                                <AnimateOnScroll key={index} delay={150 + index * 80}>
++                                    <div
++                                        id={sectionId}
++                                        className={cn(
++                                            "rounded-2xl p-8 md:p-10 border border-slate-100 shadow-lg shadow-slate-200/40 border-l-4 scroll-mt-[120px]",
++                                            sConfig.borderColor,
++                                            sConfig.bgClass
++                                        )}
++                                    >
++                                        <div className="flex items-center gap-4 mb-2">
++                                            <div className={cn(
++                                                "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
++                                                sConfig.iconBg,
++                                                sConfig.iconColor
++                                            )}>
++                                                {sConfig.icon}
+                                             </div>
+-                                            <div className="font-bold text-slate-900 text-lg mb-2 group-hover:text-indigo-700 transition-colors">{step.title}</div>
+-                                            <div className="text-slate-500 leading-relaxed">{step.desc}</div>
++                                            <h2 className="text-3xl font-extrabold text-slate-900">
++                                                {section.title}
++                                            </h2>
+                                         </div>
+-                                    ))}
++                                        <div className={`w-16 h-1 rounded-full bg-gradient-to-r ${sConfig.accentGradient} mb-6 ml-16`} />
++
++                                        <MarkdownLite
++                                            content={section.content}
++                                            listIcon={sConfig.listIcon}
++                                        />
++                                    </div>
++                                </AnimateOnScroll>
++                            );
++                        })}
++
++                        {/* Fallback: no sections found */}
++                        {sections.length === 0 && cleanDescription && (
++                            <AnimateOnScroll delay={100}>
++                                <div className="bg-white rounded-2xl p-8 md:p-10 border border-slate-100 shadow-lg shadow-slate-200/40">
++                                    <MarkdownLite content={cleanDescription} />
+                                 </div>
+-                            </div>
+-                        </div>
++                            </AnimateOnScroll>
++                        )}
+                     </div>
+ 
+-                    {/* RIGHT COLUMN: Sidebar / Action Card */}
++                    {/* RIGHT COLUMN: Sidebar */}
+                     <div className="lg:col-span-1">
+-                        <div className="sticky top-24">
+-                            <div className="bg-white rounded-[2rem] border border-slate-200 p-8 shadow-2xl shadow-indigo-500/10 backdrop-blur-xl relative overflow-hidden">
++                        <div className="sticky top-[120px] space-y-6">
+ 
+-                                {/* Top decoration */}
+-                                <div className={`absolute top-0 inset-x-0 h-2 bg-gradient-to-r ${config.gradient}`}></div>
++                            {hasVariants ? (
++                                <VariantPicker
++                                    variants={variants!}
++                                    baseDeliveryDays={pkg.delivery_time_days}
++                                    gradient={config.gradient}
++                                    packageId={pkg.id}
++                                />
++                            ) : (
++                                <div className="bg-white rounded-[2rem] border border-slate-200 p-8 shadow-2xl shadow-indigo-500/10 backdrop-blur-xl relative overflow-hidden">
++                                    <div className={`absolute top-0 inset-x-0 h-2 bg-gradient-to-r ${config.gradient}`} />
+ 
+-                                <div className="mb-8 text-center">
+-                                    <div className="text-sm text-slate-500 font-medium mb-2 uppercase tracking-wide">Ca┼ékowity koszt</div>
+-                                    <div className="flex items-baseline justify-center gap-2">
+-                                        <span className="text-5xl font-extrabold text-slate-900 tracking-tight">{pkg.price}</span>
+-                                        <span className="text-xl font-medium text-slate-400">PLN</span>
+-                                    </div>
+-                                    <div className="mt-4 flex items-center justify-center gap-2 text-sm font-semibold text-emerald-700 bg-emerald-50 rounded-full px-4 py-2 w-fit mx-auto border border-emerald-100">
+-                                        <ShieldCheck className="w-4 h-4" />
+-                                        Gwarancja satysfakcji
++                                    <div className="mb-8 text-center">
++                                        <div className="text-sm text-slate-500 font-medium mb-2 uppercase tracking-wide">
++                                            Ca┼ékowity koszt
++                                        </div>
++                                        <div className="flex items-baseline justify-center gap-2">
++                                            <span className="text-5xl font-extrabold text-slate-900 tracking-tight">{pkg.price}</span>
++                                            <span className="text-xl font-medium text-slate-400">PLN</span>
++                                        </div>
++                                        <div className="mt-4 flex items-center justify-center gap-2 text-sm font-semibold text-emerald-700 bg-emerald-50 rounded-full px-4 py-2 w-fit mx-auto border border-emerald-100">
++                                            <ShieldCheck className="w-4 h-4" />
++                                            Gwarancja satysfakcji
++                                        </div>
+                                     </div>
+-                                </div>
+ 
+-                                <div className="space-y-6 mb-8">
+-                                    <div className="flex justify-between items-center py-3 border-b border-slate-100">
+-                                        <span className="text-slate-500 flex items-center gap-3 font-medium">
+-                                            <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
+-                                                <Timer className="w-4 h-4" />
+-                                            </div>
+-                                            Czas realizacji
+-                                        </span>
+-                                        <span className="font-bold text-slate-900">{pkg.delivery_time_days} dni</span>
+-                                    </div>
+-                                    <div className="flex justify-between items-center py-3 border-b border-slate-100">
+-                                        <span className="text-slate-500 flex items-center gap-3 font-medium">
+-                                            <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
+-                                                <Coins className="w-4 h-4" />
+-                                            </div>
+-                                            P┼éatno┼Ť─ç
+-                                        </span>
+-                                        <span className="font-bold text-slate-900">Po akceptacji</span>
+-                                    </div>
+-                                    <div className="flex justify-between items-center py-3">
+-                                        <span className="text-slate-500 flex items-center gap-3 font-medium">
+-                                            <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
+-                                                <Shield className="w-4 h-4" />
+-                                            </div>
+-                                            Bezpiecze┼ästwo
+-                                        </span>
+-                                        <span className="font-bold text-slate-900">Escrow</span>
++                                    <div className="space-y-4 mb-8">
++                                        <div className="flex justify-between items-center py-3 border-b border-slate-100">
++                                            <span className="text-slate-500 flex items-center gap-3 font-medium">
++                                                <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
++                                                    <Timer className="w-4 h-4" />
++                                                </div>
++                                                Czas realizacji
++                                            </span>
++                                            <span className="font-bold text-slate-900">{pkg.delivery_time_days} dni</span>
++                                        </div>
++                                        <div className="flex justify-between items-center py-3 border-b border-slate-100">
++                                            <span className="text-slate-500 flex items-center gap-3 font-medium">
++                                                <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
++                                                    <Coins className="w-4 h-4" />
++                                                </div>
++                                                P┼éatno┼Ť─ç
++                                            </span>
++                                            <span className="font-bold text-slate-900">Po akceptacji</span>
++                                        </div>
++                                        <div className="flex justify-between items-center py-3">
++                                            <span className="text-slate-500 flex items-center gap-3 font-medium">
++                                                <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
++                                                    <Shield className="w-4 h-4" />
++                                                </div>
++                                                Bezpiecze┼ästwo
++                                            </span>
++                                            <span className="font-bold text-slate-900">Escrow</span>
++                                        </div>
+                                     </div>
+-                                </div>
+ 
+-                                <Button asChild className={`w-full h-auto py-4 text-lg bg-gradient-to-r ${config.gradient} hover:shadow-xl hover:shadow-indigo-500/30 hover:scale-[1.02] transition-all duration-300 rounded-xl`}>
+-                                    <Link href={`/app/company/packages/${pkg.id}/customize`}>
+-                                        Zamawiam Pakiet
+-                                        <ArrowRight className="ml-2 w-5 h-5" />
+-                                    </Link>
+-                                </Button>
+-
+-                                <div className="mt-6 text-center">
+-                                    <p className="text-xs text-slate-400 leading-tight">
+-                                        Klikaj─ůc przycisk, przejdziesz do konfiguracji szczeg├│┼é├│w zam├│wienia.
+-                                    </p>
++                                    <Button asChild className={`w-full h-auto py-4 text-lg bg-gradient-to-r ${config.gradient} hover:shadow-xl hover:shadow-indigo-500/30 hover:scale-[1.02] transition-all duration-300 rounded-xl`}>
++                                        <Link href={`/app/company/packages/${pkg.id}/customize`}>
++                                            Zamawiam Pakiet
++                                            <ArrowRight className="ml-2 w-5 h-5" />
++                                        </Link>
++                                    </Button>
++
++                                    <div className="mt-6 text-center">
++                                        <p className="text-xs text-slate-400 leading-tight">
++                                            Klikaj─ůc przycisk, przejdziesz do konfiguracji szczeg├│┼é├│w zam├│wienia.
++                                        </p>
++                                    </div>
+                                 </div>
+-                            </div>
++                            )}
+ 
+-                            {/* Student Profile Card (if student gig) */}
++                            {/* Student Profile Card */}
+                             {pkg.type === 'student_gig' && pkg.student && (
+-                                <div className="mt-6 bg-white rounded-3xl p-6 border border-slate-100 shadow-lg flex items-center gap-4">
++                                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-lg flex items-center gap-4">
+                                     <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-xl text-slate-400">
+-                                        {pkg.student.public_name[0]}
++                                        {(pkg.student as any).public_name[0]}
+                                     </div>
+                                     <div>
+                                         <div className="text-xs text-slate-500 uppercase font-bold tracking-wider">Realizuje</div>
+-                                        <div className="font-bold text-slate-900">{pkg.student.public_name}</div>
++                                        <div className="font-bold text-slate-900">{(pkg.student as any).public_name}</div>
+                                     </div>
+                                 </div>
+                             )}
+@@ -348,4 +665,3 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id:
+         </div>
+     );
+ }
+-
+diff --git a/app/app/deliverables/[id]/page.tsx b/app/app/deliverables/[id]/page.tsx
+index 8d4d9fe..a2df5a1 100644
+--- a/app/app/deliverables/[id]/page.tsx
++++ b/app/app/deliverables/[id]/page.tsx
+@@ -248,6 +248,17 @@ export default async function RealizationWorkspace({
+     }
+ 
+ 
++    // 7. Contract Documents (PDF umowy)
++    let contractDocuments: any[] = [];
++    if (contract?.id) {
++        const { data: docs } = await supabase
++            .from("contract_documents")
++            .select("*")
++            .eq("contract_id", contract.id)
++            .order("created_at", { ascending: true });
++        contractDocuments = docs || [];
++    }
++
+     // --- HELPERS ---
+     const currentDeliv = deliverables?.[0]; // Latest deliverable
+     const status = appRow.realization_status;
+@@ -360,6 +371,7 @@ export default async function RealizationWorkspace({
+                                 contract={contract}
+                                 totalAmount={Number(appRow?.agreed_stawka || offer?.stawka || 0)}
+                                 enableNegotiation={!offer?.is_platform_service && offer?.typ !== 'job_offer'}
++                                contractDocuments={contractDocuments}
+                             />
+                         </TabsContent>
+ 
+diff --git a/app/app/deliverables/[id]/tabs/StatusTab.tsx b/app/app/deliverables/[id]/tabs/StatusTab.tsx
+index f64b065..b544f23 100644
+--- a/app/app/deliverables/[id]/tabs/StatusTab.tsx
++++ b/app/app/deliverables/[id]/tabs/StatusTab.tsx
+@@ -17,6 +17,8 @@ import {
+     submitReview,
+     fundMilestoneAction,
+     generateContract,
++    generateContractDocuments,
++    acceptContractDocument,
+     fundContractAction,
+     submitMilestoneWorkAction,
+     reviewMilestoneAction,
+@@ -26,6 +28,7 @@ import { toast } from "sonner";
+ import { Shield, ShieldCheck, AlertCircle, CircleDollarSign, CheckCircle2, Lock, Clock, FileText, ChevronDown, ChevronUp, Star, Medal, MessageSquare } from "lucide-react";
+ import { PaymentModal } from "@/app/components/payment-modal";
+ import { MilestoneNegotiation } from "./MilestoneNegotiation";
++import { ContractDocumentsCard } from "./ContractDocumentsCard";
+ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+ 
+ import { SecureImageViewer } from "@/app/components/SecureImageViewer";
+@@ -41,7 +44,8 @@ export function StatusTab({
+     theirReview,
+     contract,
+     totalAmount,
+-    enableNegotiation = false
++    enableNegotiation = false,
++    contractDocuments = [],
+ }: any) {
+     // State for Payment Modal
+     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+@@ -189,11 +193,7 @@ export function StatusTab({
+                                     </span>
+                                 </p>
+                             )}
+-                            {isCompany && contract?.terms_status === 'agreed' && (
+-                                <div className="mt-2 text-left">
+-                                    <RegenerateContractButton contractId={contract.id} applicationId={applicationId} />
+-                                </div>
+-                            )}
++                            {/* Contract documents generation handled by ContractDocumentsCard below */}
+                         </div>
+ 
+                         {/* Escrow Badge */}
+@@ -265,8 +265,8 @@ export function StatusTab({
+                             </p>
+                         </div>
+ 
+-                        {/* Payment Button */}
+-                        {isCompany && !isEscrowReady && contract?.terms_status === 'agreed' && (
++                        {/* Payment Button ÔÇö requires both contract acceptances */}
++                        {isCompany && !isEscrowReady && contract?.terms_status === 'agreed' && contract?.company_contract_accepted_at && contract?.student_contract_accepted_at && (
+                             <Button
+                                 size="lg"
+                                 onClick={() => setIsPaymentModalOpen(true)}
+@@ -277,7 +277,7 @@ export function StatusTab({
+                             </Button>
+                         )}
+ 
+-                        {isStudent && !isEscrowReady && contract?.terms_status === 'agreed' && (
++                        {isStudent && !isEscrowReady && contract?.terms_status === 'agreed' && contract?.company_contract_accepted_at && contract?.student_contract_accepted_at && (
+                             <div className="relative z-10 px-5 py-3 bg-white border border-slate-200 rounded-xl text-slate-500 text-sm font-medium flex items-center gap-3 shadow-sm">
+                                 <div className="p-1.5 bg-amber-50 rounded-full">
+                                     <Clock className="w-4 h-4 text-amber-500" />
+@@ -301,6 +301,21 @@ export function StatusTab({
+                 />
+             )}
+ 
++            {/* CONTRACT DOCUMENTS (after negotiation, before payment) */}
++            {contract && contract?.terms_status === 'agreed' && (
++                <ContractDocumentsCard
++                    contractId={contract.id}
++                    applicationId={applicationId}
++                    isCompany={isCompany}
++                    isStudent={isStudent}
++                    documents={contractDocuments}
++                    documentsGeneratedAt={contract.documents_generated_at}
++                    companyAcceptedAt={contract.company_contract_accepted_at}
++                    studentAcceptedAt={contract.student_contract_accepted_at}
++                    termsAgreed={contract.terms_status === 'agreed'}
++                />
++            )}
++
+             {/* MILESTONE LIST (Step 3+) */}
+             {((contract?.terms_status === 'agreed') || isAnyFunded) && milestones.length > 0 && (
+                 <div className="space-y-6">
+@@ -695,26 +710,4 @@ function ReviewControls({ label = "Zatwierd┼║ realizacj─Ö" }: { label?: string }
+ }
+ 
+ 
+-function RegenerateContractButton({ contractId, applicationId }: { contractId: string, applicationId: string }) {
+-    const [loading, setLoading] = useState(false);
+-    const handleRegen = async () => {
+-        if (!confirm("Wygenerowa─ç ponownie umow─Ö? (DEBUG)")) return;
+-        setLoading(true);
+-        try {
+-            await generateContract(contractId, applicationId);
+-            // @ts-ignore
+-            toast.success("Umowa wygenerowana i dodana do plik├│w.");
+-        } catch (e: any) {
+-            // @ts-ignore
+-            toast.error("B┼é─ůd: " + e.message);
+-        } finally {
+-            setLoading(false);
+-        }
+-    };
+-
+-    return (
+-        <Button onClick={handleRegen} disabled={loading} variant="outline" size="sm" className="text-xs border-dashed text-slate-400 hover:text-indigo-600">
+-            {loading ? "Generowanie..." : "ÔÜí Regeneruj Umow─Ö (Debug)"}
+-        </Button>
+-    )
+-}
++// RegenerateContractButton removed ÔÇö replaced by ContractDocumentsCard
+diff --git a/app/app/deliverables/_actions.ts b/app/app/deliverables/_actions.ts
+index 5f52e74..bd798cb 100644
+--- a/app/app/deliverables/_actions.ts
++++ b/app/app/deliverables/_actions.ts
+@@ -4,6 +4,12 @@ import { createClient } from "@/lib/supabase/server";
+ import { createAdminClient } from "@/lib/supabase/admin";
+ import { redirect } from "next/navigation";
+ import { revalidatePath } from "next/cache";
++import React from "react";
++import { renderPdfToBuffer } from "@/lib/pdf/render";
++import { ContractADocument } from "@/lib/pdf/contract-a-template";
++import { ContractBDocument } from "@/lib/pdf/contract-b-template";
++import { generateStudentInvoice } from "@/lib/pdf/generate-invoice";
++import type { ContractData } from "@/lib/pdf/types";
+ 
+ 
+ export async function getSignedStorageUrl(bucket: string, pathOrUrl: string, expiresInSeconds: number = 600) {
+@@ -356,6 +362,31 @@ export async function reviewMilestoneAction(
+ 
+   // Sync application status after milestone review
+   if (decision === "accepted") {
++    // Generate student invoice for the accepted milestone (non-blocking)
++    try {
++      const { data: milestoneData } = await supabase
++        .from("milestones")
++        .select("id, title, amount, contract_id")
++        .eq("id", milestoneId)
++        .single();
++
++      if (milestoneData) {
++        const amount = Number(milestoneData.amount);
++        const fee = Math.round(amount * 0.05 * 100) / 100;
++        const net = Math.round(amount * 0.95 * 100) / 100;
++        await generateStudentInvoice(
++          milestoneData.contract_id,
++          milestoneId,
++          milestoneData.title,
++          amount,
++          fee,
++          net
++        );
++      }
++    } catch (invoiceErr) {
++      console.error("Failed to generate student invoice (non-critical):", invoiceErr);
++    }
++
+     // Check if contract became completed (all milestones released)
+     const { data: contractRow } = await supabase
+       .from("contracts")
+@@ -473,3 +504,217 @@ export async function generateContract(contractId: string, applicationId: string
+ 
+   revalidatePath(`/app/deliverables/${applicationId}`);
+ }
++
++// --- CONTRACT PDF GENERATION ---
++export async function generateContractDocuments(contractId: string, applicationId: string) {
++  const supabase = await createClient();
++  const { data: userData } = await supabase.auth.getUser();
++  if (!userData.user) redirect("/auth");
++
++  // 1. Fetch contract with milestones
++  const { data: contract, error: contractError } = await supabase
++    .from("contracts")
++    .select("*, milestones(*)")
++    .eq("id", contractId)
++    .single();
++
++  if (contractError || !contract) {
++    throw new Error("Nie znaleziono kontraktu: " + (contractError?.message || ""));
++  }
++
++  // 2. Fetch company profile
++  const { data: companyProfile } = await supabase
++    .from("company_profiles")
++    .select("nazwa, nip, address, city, osoba_kontaktowa")
++    .eq("user_id", contract.company_id)
++    .single();
++
++  // 3. Fetch student profile + email
++  const { data: studentProfile } = await supabase
++    .from("student_profiles")
++    .select("public_name")
++    .eq("user_id", contract.student_id)
++    .single();
++
++  // Get student email from admin client (auth.users)
++  const admin = createAdminClient();
++  const { data: studentAuth } = await admin.auth.admin.getUserById(contract.student_id);
++  const studentEmail = studentAuth?.user?.email || "brak@email.com";
++
++  // 4. Fetch offer details
++  let offerTitle = "Zlecenie";
++  let offerDescription = "";
++
++  if (contract.application_id) {
++    const { data: app } = await supabase
++      .from("applications")
++      .select("offers(tytul, opis)")
++      .eq("id", contract.application_id)
++      .single();
++    offerTitle = (app?.offers as any)?.tytul || offerTitle;
++    offerDescription = (app?.offers as any)?.opis || "";
++  }
++
++  // 5. Build ContractData
++  const milestones = (contract.milestones || [])
++    .sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0));
++
++  const totalAmount = Number(contract.total_amount) || 0;
++  const platformFeePercent = 5;
++  const platformFee = Math.round(totalAmount * platformFeePercent) / 100;
++  const netAmount = totalAmount - platformFee;
++  const dateStr = new Date().toLocaleDateString("pl-PL");
++
++  const contractData: ContractData = {
++    contractId,
++    createdAt: dateStr,
++    companyName: companyProfile?.nazwa || "Firma",
++    companyNip: companyProfile?.nip || "",
++    companyAddress: companyProfile?.address || "",
++    companyCity: companyProfile?.city || "",
++    companyContactPerson: companyProfile?.osoba_kontaktowa || "",
++    studentName: studentProfile?.public_name || "Student",
++    studentEmail,
++    offerTitle,
++    offerDescription,
++    milestones: milestones.map((m: any, i: number) => ({
++      idx: m.idx || i + 1,
++      title: m.title || `Etap ${i + 1}`,
++      criteria: m.acceptance_criteria || "",
++      amount: Number(m.amount) || 0,
++      dueAt: m.due_at ? new Date(m.due_at).toLocaleDateString("pl-PL") : null,
++    })),
++    totalAmount,
++    platformFeePercent,
++    platformFee,
++    netAmount,
++    currency: contract.currency || "PLN",
++    reviewWindowDays: contract.review_window_days || 8,
++  };
++
++  // 6. Render PDFs
++  const pdfA = await renderPdfToBuffer(
++    React.createElement(ContractADocument, { data: contractData })
++  );
++  const pdfB = await renderPdfToBuffer(
++    React.createElement(ContractBDocument, { data: contractData })
++  );
++
++  const timestamp = Date.now();
++
++  // 7. Upload Contract A
++  const pathA = `contracts/${contractId}/Umowa_A_Firma_${timestamp}.pdf`;
++  const { error: uploadErrorA } = await supabase.storage
++    .from("deliverables")
++    .upload(pathA, pdfA, { contentType: "application/pdf" });
++
++  if (uploadErrorA) {
++    console.error("Upload Contract A Error:", uploadErrorA);
++    throw new Error("B┼é─ůd wgrywania Umowy A: " + uploadErrorA.message);
++  }
++
++  // 8. Upload Contract B
++  const pathB = `contracts/${contractId}/Umowa_B_Student_${timestamp}.pdf`;
++  const { error: uploadErrorB } = await supabase.storage
++    .from("deliverables")
++    .upload(pathB, pdfB, { contentType: "application/pdf" });
++
++  if (uploadErrorB) {
++    console.error("Upload Contract B Error:", uploadErrorB);
++    throw new Error("B┼é─ůd wgrywania Umowy B: " + uploadErrorB.message);
++  }
++
++  // 9. Insert contract_documents records
++  const { error: docInsertError } = await supabase
++    .from("contract_documents")
++    .insert([
++      {
++        contract_id: contractId,
++        document_type: "contract_a",
++        storage_path: pathA,
++        file_name: `Umowa_o_Swiadczenie_Uslugi_${dateStr}.pdf`,
++        generated_by: userData.user.id,
++      },
++      {
++        contract_id: contractId,
++        document_type: "contract_b",
++        storage_path: pathB,
++        file_name: `Umowa_o_Dzielo_${dateStr}.pdf`,
++        generated_by: userData.user.id,
++      },
++    ]);
++
++  if (docInsertError) {
++    console.error("Insert contract_documents Error:", docInsertError);
++    throw new Error("B┼é─ůd zapisu dokument├│w: " + docInsertError.message);
++  }
++
++  // 10. Update contract ÔÇö mark documents as generated
++  await supabase
++    .from("contracts")
++    .update({ documents_generated_at: new Date().toISOString() })
++    .eq("id", contractId);
++
++  revalidatePath(`/app/deliverables/${applicationId}`);
++
++  return { success: true, pathA, pathB };
++}
++
++// --- ACCEPT CONTRACT DOCUMENT ---
++export async function acceptContractDocument(
++  contractDocumentId: string,
++  contractId: string,
++  applicationId: string
++) {
++  const supabase = await createClient();
++  const { data: userData } = await supabase.auth.getUser();
++  if (!userData.user) redirect("/auth");
++
++  const userId = userData.user.id;
++
++  // 1. Fetch contract to determine role
++  const { data: contract } = await supabase
++    .from("contracts")
++    .select("id, company_id, student_id")
++    .eq("id", contractId)
++    .single();
++
++  if (!contract) throw new Error("Kontrakt nie znaleziony");
++
++  const isCompany = contract.company_id === userId;
++  const isStudent = contract.student_id === userId;
++
++  if (!isCompany && !isStudent) {
++    throw new Error("Brak uprawnie┼ä do akceptacji tego dokumentu");
++  }
++
++  const now = new Date().toISOString();
++
++  // 2. Update contract_documents
++  if (isCompany) {
++    await supabase
++      .from("contract_documents")
++      .update({ company_accepted_at: now })
++      .eq("id", contractDocumentId);
++
++    // Also update the contract-level timestamp
++    await supabase
++      .from("contracts")
++      .update({ company_contract_accepted_at: now })
++      .eq("id", contractId);
++  } else {
++    await supabase
++      .from("contract_documents")
++      .update({ student_accepted_at: now })
++      .eq("id", contractDocumentId);
++
++    await supabase
++      .from("contracts")
++      .update({ student_contract_accepted_at: now })
++      .eq("id", contractId);
++  }
++
++  revalidatePath(`/app/deliverables/${applicationId}`);
++
++  return { success: true, role: isCompany ? "company" : "student" };
++}
+diff --git a/app/globals.css b/app/globals.css
+index 1a251ab..d04e8dd 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -235,4 +235,14 @@
+ 
+ .animate-star-bounce {
+   animation: starBounce 0.5s ease infinite;
++}
++
++/* Scrollbar hide utility for horizontal pill navigation */
++.scrollbar-hide::-webkit-scrollbar {
++  display: none;
++}
++
++.scrollbar-hide {
++  -ms-overflow-style: none;
++  scrollbar-width: none;
+ }
+\ No newline at end of file
+diff --git a/components/markdown-lite.tsx b/components/markdown-lite.tsx
+index 6ac36fa..9adb458 100644
+--- a/components/markdown-lite.tsx
++++ b/components/markdown-lite.tsx
+@@ -1,61 +1,250 @@
+ import { cn } from "@/lib/utils";
++import { CheckCircle2, XCircle, ChevronRight } from "lucide-react";
+ 
+ interface MarkdownLiteProps {
+     content: string;
+     className?: string;
++    listIcon?: "check" | "x" | "arrow" | "dot";
+ }
+ 
+-export function MarkdownLite({ content, className }: MarkdownLiteProps) {
++export function MarkdownLite({ content, className, listIcon = "dot" }: MarkdownLiteProps) {
+     if (!content) return null;
++    const blocks = parseBlocks(content);
++    return (
++        <div className={cn("space-y-5 text-slate-600", className)}>
++            {blocks.map((block, i) => renderBlock(block, i, listIcon))}
++        </div>
++    );
++}
+ 
+-    // Split by double newline to separate paragraphs
+-    const paragraphs = content.split(/\n\n+/);
++// ÔöÇÔöÇ Block types ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+ 
+-    return (
+-        <div className={cn("space-y-4 text-slate-600 leading-relaxed", className)}>
+-            {paragraphs.map((paragraph, i) => {
+-                // Header detection (### Header)
+-                if (paragraph.startsWith("###")) {
+-                    return (
+-                        <h3 key={i} className="text-xl font-bold text-slate-900 mt-6 mb-2">
+-                            {paragraph.replace(/^###\s*/, "")}
+-                        </h3>
+-                    );
+-                }
++type Block =
++    | { type: "h3"; text: string }
++    | { type: "h4"; text: string }
++    | { type: "list"; items: string[] }
++    | { type: "table"; headers: string[]; rows: string[][] }
++    | { type: "paragraph"; text: string };
+ 
+-                // Header detection (**Header:** at start of line)
+-                if (paragraph.startsWith("**") && paragraph.includes("**")) {
+-                    // Check if it's a stand-alone header line like "**Hook:**"
+-                    // or just a paragraph starting with bold.
+-                    // If it's short, treat as subheader? No, let's just render bold.
+-                }
++// ÔöÇÔöÇ Parser ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+ 
+-                // List detection (* item)
+-                if (paragraph.trim().startsWith("* ")) {
+-                    const items = paragraph.split(/\n/).filter(line => line.trim().startsWith("*"));
+-                    return (
+-                        <ul key={i} className="list-disc pl-5 space-y-2">
+-                            {items.map((item, j) => (
+-                                <li key={j} className="pl-1">
+-                                    <FormatText text={item.replace(/^\*\s*/, "")} />
+-                                </li>
+-                            ))}
+-                        </ul>
+-                    );
+-                }
++function parseBlocks(content: string): Block[] {
++    const lines = content.split("\n");
++    const blocks: Block[] = [];
++    let i = 0;
+ 
+-                // Default paragraph
+-                return (
+-                    <p key={i}>
+-                        <FormatText text={paragraph} />
+-                    </p>
+-                );
+-            })}
++    while (i < lines.length) {
++        const line = lines[i];
++        const trimmed = line.trim();
++
++        // Skip empty lines
++        if (!trimmed) { i++; continue; }
++
++        // H4 header (####)
++        if (trimmed.startsWith("#### ")) {
++            blocks.push({ type: "h4", text: trimmed.replace(/^####\s*/, "") });
++            i++; continue;
++        }
++
++        // H3 header (###)
++        if (trimmed.startsWith("### ")) {
++            blocks.push({ type: "h3", text: trimmed.replace(/^###\s*/, "") });
++            i++; continue;
++        }
++
++        // Table detection (| ... |)
++        if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
++            const tableLines: string[] = [];
++            while (i < lines.length && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
++                tableLines.push(lines[i].trim());
++                i++;
++            }
++            if (tableLines.length >= 2) {
++                const parsed = parseTable(tableLines);
++                if (parsed) { blocks.push(parsed); continue; }
++            }
++            for (const tl of tableLines) {
++                blocks.push({ type: "paragraph", text: tl });
++            }
++            continue;
++        }
++
++        // List detection (* item or - item)
++        if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
++            const items: string[] = [];
++            while (i < lines.length && (lines[i].trim().startsWith("* ") || lines[i].trim().startsWith("- "))) {
++                items.push(lines[i].trim().replace(/^[*\-]\s*/, ""));
++                i++;
++            }
++            blocks.push({ type: "list", items });
++            continue;
++        }
++
++        // Regular paragraph ÔÇö collect consecutive non-special lines
++        const paragraphLines: string[] = [];
++        while (
++            i < lines.length &&
++            lines[i].trim() !== "" &&
++            !lines[i].trim().startsWith("### ") &&
++            !lines[i].trim().startsWith("#### ") &&
++            !lines[i].trim().startsWith("* ") &&
++            !lines[i].trim().startsWith("- ") &&
++            !(lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|"))
++        ) {
++            paragraphLines.push(lines[i].trim());
++            i++;
++        }
++        if (paragraphLines.length > 0) {
++            blocks.push({ type: "paragraph", text: paragraphLines.join("\n") });
++        }
++    }
++
++    return blocks;
++}
++
++function parseTable(lines: string[]): Block | null {
++    const headerLine = lines[0];
++    const headers = headerLine
++        .split("|")
++        .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1)
++        .map(cell => cell.trim());
++
++    // Check if second line is separator (| --- | --- |)
++    let dataStartIdx = 1;
++    if (lines.length > 1 && /^\|[\s\-:|]+\|$/.test(lines[1])) {
++        dataStartIdx = 2;
++    }
++
++    const rows: string[][] = [];
++    for (let r = dataStartIdx; r < lines.length; r++) {
++        const cells = lines[r]
++            .split("|")
++            .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1)
++            .map(cell => cell.trim());
++        rows.push(cells);
++    }
++
++    if (headers.length === 0) return null;
++    return { type: "table", headers, rows };
++}
++
++// ÔöÇÔöÇ Renderers ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++
++function renderBlock(block: Block, key: number, listIcon: string) {
++    switch (block.type) {
++        case "h3":
++            return (
++                <h3 key={key} className="text-2xl font-bold text-slate-900 mt-8 mb-3 first:mt-0">
++                    <FormatText text={block.text} />
++                </h3>
++            );
++
++        case "h4":
++            return (
++                <h4 key={key} className="text-lg font-bold text-slate-800 mt-6 mb-2 flex items-center gap-2.5">
++                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
++                    <FormatText text={block.text} />
++                </h4>
++            );
++
++        case "list":
++            return (
++                <ul key={key} className="space-y-3 my-1">
++                    {block.items.map((item, j) => (
++                        <li key={j} className="flex items-start gap-3">
++                            <ListIcon type={listIcon} />
++                            <span className="text-[17px] leading-[1.8] flex-1">
++                                <FormatText text={item} />
++                            </span>
++                        </li>
++                    ))}
++                </ul>
++            );
++
++        case "table":
++            return <MarkdownTable key={key} headers={block.headers} rows={block.rows} />;
++
++        case "paragraph":
++            return (
++                <p key={key} className="text-[17px] leading-[1.8]">
++                    <FormatText text={block.text} />
++                </p>
++            );
++    }
++}
++
++// ÔöÇÔöÇ List icon component ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++
++function ListIcon({ type }: { type: string }) {
++    switch (type) {
++        case "check":
++            return <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-[3px] shrink-0" />;
++        case "x":
++            return <XCircle className="w-5 h-5 text-red-400 mt-[3px] shrink-0" />;
++        case "arrow":
++            return <ChevronRight className="w-5 h-5 text-blue-400 mt-[3px] shrink-0" />;
++        default:
++            return <div className="w-[7px] h-[7px] rounded-full bg-slate-300 mt-[9px] shrink-0" />;
++    }
++}
++
++// ÔöÇÔöÇ Table component ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++
++function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
++    return (
++        <div className="overflow-x-auto rounded-xl border border-slate-200 my-5 shadow-sm">
++            <table className="w-full text-[15px]">
++                <thead>
++                    <tr className="bg-gradient-to-r from-slate-100 to-slate-50 border-b-2 border-slate-200">
++                        {headers.map((header, i) => (
++                            <th
++                                key={i}
++                                className={cn(
++                                    "px-4 py-3.5 text-left font-bold text-slate-700 whitespace-nowrap text-xs uppercase tracking-wider",
++                                    i === 0 && "bg-slate-100/80"
++                                )}
++                            >
++                                <FormatText text={header} />
++                            </th>
++                        ))}
++                    </tr>
++                </thead>
++                <tbody className="divide-y divide-slate-100">
++                    {rows.map((row, i) => (
++                        <tr
++                            key={i}
++                            className={cn(
++                                "hover:bg-blue-50/40 transition-colors",
++                                i % 2 === 0 ? "bg-white" : "bg-slate-50/50"
++                            )}
++                        >
++                            {row.map((cell, j) => (
++                                <td
++                                    key={j}
++                                    className={cn(
++                                        "px-4 py-3 text-slate-600",
++                                        j === 0 && "font-medium text-slate-700 bg-slate-50/30"
++                                    )}
++                                >
++                                    <FormatText text={cell} />
++                                </td>
++                            ))}
++                            {/* Pad missing cells */}
++                            {row.length < headers.length &&
++                                Array.from({ length: headers.length - row.length }).map((_, j) => (
++                                    <td key={`pad-${j}`} className="px-4 py-3 text-slate-400">ÔÇö</td>
++                                ))
++                            }
++                        </tr>
++                    ))}
++                </tbody>
++            </table>
+         </div>
+     );
+ }
+ 
+-// Helper to render bold text (**text**)
++// ÔöÇÔöÇ Inline formatting ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++
+ function FormatText({ text }: { text: string }) {
+     const parts = text.split(/(\*\*.*?\*\*)/);
+ 
+@@ -63,9 +252,28 @@ function FormatText({ text }: { text: string }) {
+         <>
+             {parts.map((part, i) => {
+                 if (part.startsWith("**") && part.endsWith("**")) {
+-                    return <strong key={i} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>;
++                    return (
++                        <strong key={i} className="font-semibold text-slate-900">
++                            <InlineMarks text={part.slice(2, -2)} />
++                        </strong>
++                    );
+                 }
+-                return part;
++                return <InlineMarks key={i} text={part} />;
++            })}
++        </>
++    );
++}
++
++// Styles Ôťö/Ôťô in green, ÔťŚ/ÔťĽ in red
++function InlineMarks({ text }: { text: string }) {
++    const parts = text.split(/(Ôťö|Ôťô|ÔťŚ|ÔťĽ)/);
++    if (parts.length === 1) return <>{text}</>;
++    return (
++        <>
++            {parts.map((p, i) => {
++                if (p === "Ôťö" || p === "Ôťô") return <span key={i} className="text-emerald-500 font-bold">Ôťô</span>;
++                if (p === "ÔťŚ" || p === "ÔťĽ") return <span key={i} className="text-red-400 font-bold">ÔťŚ</span>;
++                return <span key={i}>{p}</span>;
+             })}
+         </>
+     );
+diff --git a/package-lock.json b/package-lock.json
+index 2084bd3..4f0368e 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -20,6 +20,7 @@
+         "@radix-ui/react-separator": "^1.1.8",
+         "@radix-ui/react-slot": "^1.2.4",
+         "@radix-ui/react-tabs": "^1.1.13",
++        "@react-pdf/renderer": "^4.3.2",
+         "@stripe/stripe-js": "^8.7.0",
+         "@supabase/ssr": "^0.8.0",
+         "@supabase/supabase-js": "^2.87.2",
+@@ -254,6 +255,15 @@
+         "node": ">=6.0.0"
+       }
+     },
++    "node_modules/@babel/runtime": {
++      "version": "7.28.6",
++      "resolved": "https://registry.npmjs.org/@babel/runtime/-/runtime-7.28.6.tgz",
++      "integrity": "sha512-05WQkdpL9COIMz4LjTxGpPNCdlpyimKppYNoJ5Di5EUObifl8t4tuLuUBBZEpoLYOmfvIWrsp9fCl0HoPRVTdA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=6.9.0"
++      }
++    },
+     "node_modules/@babel/template": {
+       "version": "7.27.2",
+       "resolved": "https://registry.npmjs.org/@babel/template/-/template-7.27.2.tgz",
+@@ -3070,6 +3080,180 @@
+       "integrity": "sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==",
+       "license": "MIT"
+     },
++    "node_modules/@react-pdf/fns": {
++      "version": "3.1.2",
++      "resolved": "https://registry.npmjs.org/@react-pdf/fns/-/fns-3.1.2.tgz",
++      "integrity": "sha512-qTKGUf0iAMGg2+OsUcp9ffKnKi41RukM/zYIWMDJ4hRVYSr89Q7e3wSDW/Koqx3ea3Uy/z3h2y3wPX6Bdfxk6g==",
++      "license": "MIT"
++    },
++    "node_modules/@react-pdf/font": {
++      "version": "4.0.4",
++      "resolved": "https://registry.npmjs.org/@react-pdf/font/-/font-4.0.4.tgz",
++      "integrity": "sha512-8YtgGtL511txIEc9AjiilpZ7yjid8uCd8OGUl6jaL3LIHnrToUupSN4IzsMQpVTCMYiDLFnDNQzpZsOYtRS/Pg==",
++      "license": "MIT",
++      "dependencies": {
++        "@react-pdf/pdfkit": "^4.1.0",
++        "@react-pdf/types": "^2.9.2",
++        "fontkit": "^2.0.2",
++        "is-url": "^1.2.4"
++      }
++    },
++    "node_modules/@react-pdf/image": {
++      "version": "3.0.4",
++      "resolved": "https://registry.npmjs.org/@react-pdf/image/-/image-3.0.4.tgz",
++      "integrity": "sha512-z0ogVQE0bKqgXQ5smgzIU857rLV7bMgVdrYsu3UfXDDLSzI7QPvzf6MFTFllX6Dx2rcsF13E01dqKPtJEM799g==",
++      "license": "MIT",
++      "dependencies": {
++        "@react-pdf/png-js": "^3.0.0",
++        "jay-peg": "^1.1.1"
++      }
++    },
++    "node_modules/@react-pdf/layout": {
++      "version": "4.4.2",
++      "resolved": "https://registry.npmjs.org/@react-pdf/layout/-/layout-4.4.2.tgz",
++      "integrity": "sha512-gNu2oh8MiGR+NJZYTJ4c4q0nWCESBI6rKFiodVhE7OeVAjtzZzd6l65wsN7HXdWJqOZD3ttD97iE+tf5SOd/Yg==",
++      "license": "MIT",
++      "dependencies": {
++        "@react-pdf/fns": "3.1.2",
++        "@react-pdf/image": "^3.0.4",
++        "@react-pdf/primitives": "^4.1.1",
++        "@react-pdf/stylesheet": "^6.1.2",
++        "@react-pdf/textkit": "^6.1.0",
++        "@react-pdf/types": "^2.9.2",
++        "emoji-regex-xs": "^1.0.0",
++        "queue": "^6.0.1",
++        "yoga-layout": "^3.2.1"
++      }
++    },
++    "node_modules/@react-pdf/pdfkit": {
++      "version": "4.1.0",
++      "resolved": "https://registry.npmjs.org/@react-pdf/pdfkit/-/pdfkit-4.1.0.tgz",
++      "integrity": "sha512-Wm/IOAv0h/U5Ra94c/PltFJGcpTUd/fwVMVeFD6X9tTTPCttIwg0teRG1Lqq617J8K4W7jpL/B0HTH0mjp3QpQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@babel/runtime": "^7.20.13",
++        "@react-pdf/png-js": "^3.0.0",
++        "browserify-zlib": "^0.2.0",
++        "crypto-js": "^4.2.0",
++        "fontkit": "^2.0.2",
++        "jay-peg": "^1.1.1",
++        "linebreak": "^1.1.0",
++        "vite-compatible-readable-stream": "^3.6.1"
++      }
++    },
++    "node_modules/@react-pdf/png-js": {
++      "version": "3.0.0",
++      "resolved": "https://registry.npmjs.org/@react-pdf/png-js/-/png-js-3.0.0.tgz",
++      "integrity": "sha512-eSJnEItZ37WPt6Qv5pncQDxLJRK15eaRwPT+gZoujP548CodenOVp49GST8XJvKMFt9YqIBzGBV/j9AgrOQzVA==",
++      "license": "MIT",
++      "dependencies": {
++        "browserify-zlib": "^0.2.0"
++      }
++    },
++    "node_modules/@react-pdf/primitives": {
++      "version": "4.1.1",
++      "resolved": "https://registry.npmjs.org/@react-pdf/primitives/-/primitives-4.1.1.tgz",
++      "integrity": "sha512-IuhxYls1luJb7NUWy6q5avb1XrNaVj9bTNI40U9qGRuS6n7Hje/8H8Qi99Z9UKFV74bBP3DOf3L1wV2qZVgVrQ==",
++      "license": "MIT"
++    },
++    "node_modules/@react-pdf/reconciler": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/@react-pdf/reconciler/-/reconciler-2.0.0.tgz",
++      "integrity": "sha512-7zaPRujpbHSmCpIrZ+b9HSTJHthcVZzX0Wx7RzvQGsGBUbHP4p6s5itXrAIOuQuPvDepoHGNOvf6xUuMVvdoyw==",
++      "license": "MIT",
++      "dependencies": {
++        "object-assign": "^4.1.1",
++        "scheduler": "0.25.0-rc-603e6108-20241029"
++      },
++      "peerDependencies": {
++        "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
++      }
++    },
++    "node_modules/@react-pdf/reconciler/node_modules/scheduler": {
++      "version": "0.25.0-rc-603e6108-20241029",
++      "resolved": "https://registry.npmjs.org/scheduler/-/scheduler-0.25.0-rc-603e6108-20241029.tgz",
++      "integrity": "sha512-pFwF6H1XrSdYYNLfOcGlM28/j8CGLu8IvdrxqhjWULe2bPcKiKW4CV+OWqR/9fT52mywx65l7ysNkjLKBda7eA==",
++      "license": "MIT"
++    },
++    "node_modules/@react-pdf/render": {
++      "version": "4.3.2",
++      "resolved": "https://registry.npmjs.org/@react-pdf/render/-/render-4.3.2.tgz",
++      "integrity": "sha512-el5KYM1sH/PKcO4tRCIm8/AIEmhtraaONbwCrBhFdehoGv6JtgnXiMxHGAvZbI5kEg051GbyP+XIU6f6YbOu6Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@babel/runtime": "^7.20.13",
++        "@react-pdf/fns": "3.1.2",
++        "@react-pdf/primitives": "^4.1.1",
++        "@react-pdf/textkit": "^6.1.0",
++        "@react-pdf/types": "^2.9.2",
++        "abs-svg-path": "^0.1.1",
++        "color-string": "^1.9.1",
++        "normalize-svg-path": "^1.1.0",
++        "parse-svg-path": "^0.1.2",
++        "svg-arc-to-cubic-bezier": "^3.2.0"
++      }
++    },
++    "node_modules/@react-pdf/renderer": {
++      "version": "4.3.2",
++      "resolved": "https://registry.npmjs.org/@react-pdf/renderer/-/renderer-4.3.2.tgz",
++      "integrity": "sha512-EhPkj35gO9rXIyyx29W3j3axemvVY5RigMmlK4/6Ku0pXB8z9PEE/sz4ZBOShu2uot6V4xiCR3aG+t9IjJJlBQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@babel/runtime": "^7.20.13",
++        "@react-pdf/fns": "3.1.2",
++        "@react-pdf/font": "^4.0.4",
++        "@react-pdf/layout": "^4.4.2",
++        "@react-pdf/pdfkit": "^4.1.0",
++        "@react-pdf/primitives": "^4.1.1",
++        "@react-pdf/reconciler": "^2.0.0",
++        "@react-pdf/render": "^4.3.2",
++        "@react-pdf/types": "^2.9.2",
++        "events": "^3.3.0",
++        "object-assign": "^4.1.1",
++        "prop-types": "^15.6.2",
++        "queue": "^6.0.1"
++      },
++      "peerDependencies": {
++        "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
++      }
++    },
++    "node_modules/@react-pdf/stylesheet": {
++      "version": "6.1.2",
++      "resolved": "https://registry.npmjs.org/@react-pdf/stylesheet/-/stylesheet-6.1.2.tgz",
++      "integrity": "sha512-E3ftGRYUQGKiN3JOgtGsLDo0hGekA6dmkmi/MYACytmPTKxQRBSO3126MebmCq+t1rgU9uRlREIEawJ+8nzSbw==",
++      "license": "MIT",
++      "dependencies": {
++        "@react-pdf/fns": "3.1.2",
++        "@react-pdf/types": "^2.9.2",
++        "color-string": "^1.9.1",
++        "hsl-to-hex": "^1.0.0",
++        "media-engine": "^1.0.3",
++        "postcss-value-parser": "^4.1.0"
++      }
++    },
++    "node_modules/@react-pdf/textkit": {
++      "version": "6.1.0",
++      "resolved": "https://registry.npmjs.org/@react-pdf/textkit/-/textkit-6.1.0.tgz",
++      "integrity": "sha512-sFlzDC9CDFrJsnL3B/+NHrk9+Advqk7iJZIStiYQDdskbow8GF/AGYrpIk+vWSnh35YxaGbHkqXq53XOxnyrjQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@react-pdf/fns": "3.1.2",
++        "bidi-js": "^1.0.2",
++        "hyphen": "^1.6.4",
++        "unicode-properties": "^1.4.1"
++      }
++    },
++    "node_modules/@react-pdf/types": {
++      "version": "2.9.2",
++      "resolved": "https://registry.npmjs.org/@react-pdf/types/-/types-2.9.2.tgz",
++      "integrity": "sha512-dufvpKId9OajLLbgn9q7VLUmyo1Jf+iyGk2ZHmCL8nIDtL8N1Ejh9TH7+pXXrR0tdie1nmnEb5Bz9U7g4hI4/g==",
++      "license": "MIT",
++      "dependencies": {
++        "@react-pdf/font": "^4.0.4",
++        "@react-pdf/primitives": "^4.1.1",
++        "@react-pdf/stylesheet": "^6.1.2"
++      }
++    },
+     "node_modules/@rtsao/scc": {
+       "version": "1.1.0",
+       "resolved": "https://registry.npmjs.org/@rtsao/scc/-/scc-1.1.0.tgz",
+@@ -4076,6 +4260,12 @@
+         "win32"
+       ]
+     },
++    "node_modules/abs-svg-path": {
++      "version": "0.1.1",
++      "resolved": "https://registry.npmjs.org/abs-svg-path/-/abs-svg-path-0.1.1.tgz",
++      "integrity": "sha512-d8XPSGjfyzlXC3Xx891DJRyZfqk5JU0BJrDQcsWomFIV1/BIzPW5HDH5iDdWpqWaav0YVIEzT1RHTwWr0FFshA==",
++      "license": "MIT"
++    },
+     "node_modules/acorn": {
+       "version": "8.15.0",
+       "resolved": "https://registry.npmjs.org/acorn/-/acorn-8.15.0.tgz",
+@@ -4382,6 +4572,26 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/base64-js": {
++      "version": "1.5.1",
++      "resolved": "https://registry.npmjs.org/base64-js/-/base64-js-1.5.1.tgz",
++      "integrity": "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==",
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/feross"
++        },
++        {
++          "type": "patreon",
++          "url": "https://www.patreon.com/feross"
++        },
++        {
++          "type": "consulting",
++          "url": "https://feross.org/support"
++        }
++      ],
++      "license": "MIT"
++    },
+     "node_modules/baseline-browser-mapping": {
+       "version": "2.9.7",
+       "resolved": "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.9.7.tgz",
+@@ -4392,6 +4602,15 @@
+         "baseline-browser-mapping": "dist/cli.js"
+       }
+     },
++    "node_modules/bidi-js": {
++      "version": "1.0.3",
++      "resolved": "https://registry.npmjs.org/bidi-js/-/bidi-js-1.0.3.tgz",
++      "integrity": "sha512-RKshQI1R3YQ+n9YJz2QQ147P66ELpa1FQEg20Dk8oW9t2KgLbpDLLp9aGZ7y8WHSshDknG0bknqGw5/tyCs5tw==",
++      "license": "MIT",
++      "dependencies": {
++        "require-from-string": "^2.0.2"
++      }
++    },
+     "node_modules/brace-expansion": {
+       "version": "1.1.12",
+       "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.12.tgz",
+@@ -4416,6 +4635,24 @@
+         "node": ">=8"
+       }
+     },
++    "node_modules/brotli": {
++      "version": "1.3.3",
++      "resolved": "https://registry.npmjs.org/brotli/-/brotli-1.3.3.tgz",
++      "integrity": "sha512-oTKjJdShmDuGW94SyyaoQvAjf30dZaHnjJ8uAF+u2/vGJkJbJPJAT1gDiOJP5v1Zb6f9KEyW/1HpuaWIXtGHPg==",
++      "license": "MIT",
++      "dependencies": {
++        "base64-js": "^1.1.2"
++      }
++    },
++    "node_modules/browserify-zlib": {
++      "version": "0.2.0",
++      "resolved": "https://registry.npmjs.org/browserify-zlib/-/browserify-zlib-0.2.0.tgz",
++      "integrity": "sha512-Z942RysHXmJrhqk88FmKBVq/v5tqmSkDz7p54G/MGyjMnCFFnC79XWNbg+Vta8W6Wb2qtSZTSxIGkJrRpCFEiA==",
++      "license": "MIT",
++      "dependencies": {
++        "pako": "~1.0.5"
++      }
++    },
+     "node_modules/browserslist": {
+       "version": "4.28.1",
+       "resolved": "https://registry.npmjs.org/browserslist/-/browserslist-4.28.1.tgz",
+@@ -4566,6 +4803,15 @@
+       "integrity": "sha512-IV3Ou0jSMzZrd3pZ48nLkT9DA7Ag1pnPzaiQhpW7c3RbcqqzvzzVu+L8gfqMp/8IM2MQtSiqaCxrrcfu8I8rMA==",
+       "license": "MIT"
+     },
++    "node_modules/clone": {
++      "version": "2.1.2",
++      "resolved": "https://registry.npmjs.org/clone/-/clone-2.1.2.tgz",
++      "integrity": "sha512-3Pe/CF1Nn94hyhIYpjtiLhdCoEoz0DqQ+988E9gmeEdQZlojxnOb74wctFyuwWQHzqyf9X7C7MG8juUpqBJT8w==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.8"
++      }
++    },
+     "node_modules/clsx": {
+       "version": "2.1.1",
+       "resolved": "https://registry.npmjs.org/clsx/-/clsx-2.1.1.tgz",
+@@ -4592,9 +4838,18 @@
+       "version": "1.1.4",
+       "resolved": "https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz",
+       "integrity": "sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==",
+-      "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/color-string": {
++      "version": "1.9.1",
++      "resolved": "https://registry.npmjs.org/color-string/-/color-string-1.9.1.tgz",
++      "integrity": "sha512-shrVawQFojnZv6xM40anx4CkoDP+fZsw/ZerEMsW/pyzsRbElpsL/DBVW7q3ExxwusdNXI3lXpuhEZkzs8p5Eg==",
++      "license": "MIT",
++      "dependencies": {
++        "color-name": "^1.0.0",
++        "simple-swizzle": "^0.2.2"
++      }
++    },
+     "node_modules/concat-map": {
+       "version": "0.0.1",
+       "resolved": "https://registry.npmjs.org/concat-map/-/concat-map-0.0.1.tgz",
+@@ -4637,6 +4892,12 @@
+         "node": ">= 8"
+       }
+     },
++    "node_modules/crypto-js": {
++      "version": "4.2.0",
++      "resolved": "https://registry.npmjs.org/crypto-js/-/crypto-js-4.2.0.tgz",
++      "integrity": "sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==",
++      "license": "MIT"
++    },
+     "node_modules/csstype": {
+       "version": "3.2.3",
+       "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
+@@ -4792,6 +5053,12 @@
+       "integrity": "sha512-ypdmJU/TbBby2Dxibuv7ZLW3Bs1QEmM7nHjEANfohJLvE0XVujisn1qPJcZxg+qDucsr+bP6fLD1rPS3AhJ7EQ==",
+       "license": "MIT"
+     },
++    "node_modules/dfa": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/dfa/-/dfa-1.2.0.tgz",
++      "integrity": "sha512-ED3jP8saaweFTjeGX8HQPjeC1YYyZs98jGNZx6IiBvxW7JG5v492kamAQB3m2wop07CvU/RQmzcKr6bgcC5D/Q==",
++      "license": "MIT"
++    },
+     "node_modules/doctrine": {
+       "version": "2.1.0",
+       "resolved": "https://registry.npmjs.org/doctrine/-/doctrine-2.1.0.tgz",
+@@ -4834,6 +5101,12 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/emoji-regex-xs": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/emoji-regex-xs/-/emoji-regex-xs-1.0.0.tgz",
++      "integrity": "sha512-LRlerrMYoIDrT6jgpeZ2YYl/L8EulRTt5hQcYjy5AInh7HWXKimpqx68aknBFpGL2+/IcogTcaydJEgaTmOpDg==",
++      "license": "MIT"
++    },
+     "node_modules/enhanced-resolve": {
+       "version": "5.18.4",
+       "resolved": "https://registry.npmjs.org/enhanced-resolve/-/enhanced-resolve-5.18.4.tgz",
+@@ -5474,11 +5747,19 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/events": {
++      "version": "3.3.0",
++      "resolved": "https://registry.npmjs.org/events/-/events-3.3.0.tgz",
++      "integrity": "sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.8.x"
++      }
++    },
+     "node_modules/fast-deep-equal": {
+       "version": "3.1.3",
+       "resolved": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz",
+       "integrity": "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==",
+-      "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/fast-glob": {
+@@ -5599,6 +5880,23 @@
+       "dev": true,
+       "license": "ISC"
+     },
++    "node_modules/fontkit": {
++      "version": "2.0.4",
++      "resolved": "https://registry.npmjs.org/fontkit/-/fontkit-2.0.4.tgz",
++      "integrity": "sha512-syetQadaUEDNdxdugga9CpEYVaQIxOwk7GlwZWWZ19//qW4zE5bknOKeMBDYAASwnpaSHKJITRLMF9m1fp3s6g==",
++      "license": "MIT",
++      "dependencies": {
++        "@swc/helpers": "^0.5.12",
++        "brotli": "^1.3.2",
++        "clone": "^2.1.2",
++        "dfa": "^1.2.0",
++        "fast-deep-equal": "^3.1.3",
++        "restructure": "^3.0.0",
++        "tiny-inflate": "^1.0.3",
++        "unicode-properties": "^1.4.0",
++        "unicode-trie": "^2.0.0"
++      }
++    },
+     "node_modules/for-each": {
+       "version": "0.3.5",
+       "resolved": "https://registry.npmjs.org/for-each/-/for-each-0.3.5.tgz",
+@@ -5929,6 +6227,27 @@
+         "hermes-estree": "0.25.1"
+       }
+     },
++    "node_modules/hsl-to-hex": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/hsl-to-hex/-/hsl-to-hex-1.0.0.tgz",
++      "integrity": "sha512-K6GVpucS5wFf44X0h2bLVRDsycgJmf9FF2elg+CrqD8GcFU8c6vYhgXn8NjUkFCwj+xDFb70qgLbTUm6sxwPmA==",
++      "license": "MIT",
++      "dependencies": {
++        "hsl-to-rgb-for-reals": "^1.1.0"
++      }
++    },
++    "node_modules/hsl-to-rgb-for-reals": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/hsl-to-rgb-for-reals/-/hsl-to-rgb-for-reals-1.1.1.tgz",
++      "integrity": "sha512-LgOWAkrN0rFaQpfdWBQlv/VhkOxb5AsBjk6NQVx4yEzWS923T07X0M1Y0VNko2H52HeSpZrZNNMJ0aFqsdVzQg==",
++      "license": "ISC"
++    },
++    "node_modules/hyphen": {
++      "version": "1.14.1",
++      "resolved": "https://registry.npmjs.org/hyphen/-/hyphen-1.14.1.tgz",
++      "integrity": "sha512-kvL8xYl5QMTh+LwohVN72ciOxC0OEV79IPdJSTwEXok9y9QHebXGdFgrED4sWfiax/ODx++CAMk3hMy4XPJPOw==",
++      "license": "ISC"
++    },
+     "node_modules/iceberg-js": {
+       "version": "0.8.1",
+       "resolved": "https://registry.npmjs.org/iceberg-js/-/iceberg-js-0.8.1.tgz",
+@@ -5975,6 +6294,12 @@
+         "node": ">=0.8.19"
+       }
+     },
++    "node_modules/inherits": {
++      "version": "2.0.4",
++      "resolved": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
++      "integrity": "sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==",
++      "license": "ISC"
++    },
+     "node_modules/internal-slot": {
+       "version": "1.1.0",
+       "resolved": "https://registry.npmjs.org/internal-slot/-/internal-slot-1.1.0.tgz",
+@@ -6008,6 +6333,12 @@
+         "url": "https://github.com/sponsors/ljharb"
+       }
+     },
++    "node_modules/is-arrayish": {
++      "version": "0.3.4",
++      "resolved": "https://registry.npmjs.org/is-arrayish/-/is-arrayish-0.3.4.tgz",
++      "integrity": "sha512-m6UrgzFVUYawGBh1dUsWR5M2Clqic9RVXC/9f8ceNlv2IcO9j9J/z8UoCLPqtsPBFNzEpfR3xftohbfqDx8EQA==",
++      "license": "MIT"
++    },
+     "node_modules/is-async-function": {
+       "version": "2.1.1",
+       "resolved": "https://registry.npmjs.org/is-async-function/-/is-async-function-2.1.1.tgz",
+@@ -6359,6 +6690,12 @@
+         "url": "https://github.com/sponsors/ljharb"
+       }
+     },
++    "node_modules/is-url": {
++      "version": "1.2.4",
++      "resolved": "https://registry.npmjs.org/is-url/-/is-url-1.2.4.tgz",
++      "integrity": "sha512-ITvGim8FhRiYe4IQ5uHSkj7pVaPDrCTkNd3yq3cV7iZAcJdHTUMPMEHcqSOy9xZ9qFenQCvi+2wjH9a1nXqHww==",
++      "license": "MIT"
++    },
+     "node_modules/is-weakmap": {
+       "version": "2.0.2",
+       "resolved": "https://registry.npmjs.org/is-weakmap/-/is-weakmap-2.0.2.tgz",
+@@ -6437,6 +6774,15 @@
+         "node": ">= 0.4"
+       }
+     },
++    "node_modules/jay-peg": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/jay-peg/-/jay-peg-1.1.1.tgz",
++      "integrity": "sha512-D62KEuBxz/ip2gQKOEhk/mx14o7eiFRaU+VNNSP4MOiIkwb/D6B3G1Mfas7C/Fit8EsSV2/IWjZElx/Gs6A4ww==",
++      "license": "MIT",
++      "dependencies": {
++        "restructure": "^3.0.0"
++      }
++    },
+     "node_modules/jiti": {
+       "version": "2.6.1",
+       "resolved": "https://registry.npmjs.org/jiti/-/jiti-2.6.1.tgz",
+@@ -6451,7 +6797,6 @@
+       "version": "4.0.0",
+       "resolved": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz",
+       "integrity": "sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==",
+-      "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/js-yaml": {
+@@ -6835,6 +7180,25 @@
+         "url": "https://opencollective.com/parcel"
+       }
+     },
++    "node_modules/linebreak": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/linebreak/-/linebreak-1.1.0.tgz",
++      "integrity": "sha512-MHp03UImeVhB7XZtjd0E4n6+3xr5Dq/9xI/5FptGk5FrbDR3zagPa2DS6U8ks/3HjbKWG9Q1M2ufOzxV2qLYSQ==",
++      "license": "MIT",
++      "dependencies": {
++        "base64-js": "0.0.8",
++        "unicode-trie": "^2.0.0"
++      }
++    },
++    "node_modules/linebreak/node_modules/base64-js": {
++      "version": "0.0.8",
++      "resolved": "https://registry.npmjs.org/base64-js/-/base64-js-0.0.8.tgz",
++      "integrity": "sha512-3XSA2cR/h/73EzlXXdU6YNycmYI7+kicTxks4eJg2g39biHR84slg2+des+p7iHYhbRg/udIS4TD53WabcOUkw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.4"
++      }
++    },
+     "node_modules/locate-path": {
+       "version": "6.0.0",
+       "resolved": "https://registry.npmjs.org/locate-path/-/locate-path-6.0.0.tgz",
+@@ -6862,7 +7226,6 @@
+       "version": "1.4.0",
+       "resolved": "https://registry.npmjs.org/loose-envify/-/loose-envify-1.4.0.tgz",
+       "integrity": "sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==",
+-      "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "js-tokens": "^3.0.0 || ^4.0.0"
+@@ -6910,6 +7273,12 @@
+         "node": ">= 0.4"
+       }
+     },
++    "node_modules/media-engine": {
++      "version": "1.0.3",
++      "resolved": "https://registry.npmjs.org/media-engine/-/media-engine-1.0.3.tgz",
++      "integrity": "sha512-aa5tG6sDoK+k70B9iEX1NeyfT8ObCKhNDs6lJVpwF6r8vhUfuKMslIcirq6HIUYuuUYLefcEQOn9bSBOvawtwg==",
++      "license": "MIT"
++    },
+     "node_modules/merge2": {
+       "version": "1.4.1",
+       "resolved": "https://registry.npmjs.org/merge2/-/merge2-1.4.1.tgz",
+@@ -7102,11 +7471,19 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/normalize-svg-path": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/normalize-svg-path/-/normalize-svg-path-1.1.0.tgz",
++      "integrity": "sha512-r9KHKG2UUeB5LoTouwDzBy2VxXlHsiM6fyLQvnJa0S5hrhzqElH/CH7TUGhT1fVvIYBIKf3OpY4YJ4CK+iaqHg==",
++      "license": "MIT",
++      "dependencies": {
++        "svg-arc-to-cubic-bezier": "^3.0.0"
++      }
++    },
+     "node_modules/object-assign": {
+       "version": "4.1.1",
+       "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
+       "integrity": "sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==",
+-      "dev": true,
+       "license": "MIT",
+       "engines": {
+         "node": ">=0.10.0"
+@@ -7293,6 +7670,12 @@
+         "url": "https://github.com/sponsors/sindresorhus"
+       }
+     },
++    "node_modules/pako": {
++      "version": "1.0.11",
++      "resolved": "https://registry.npmjs.org/pako/-/pako-1.0.11.tgz",
++      "integrity": "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==",
++      "license": "(MIT AND Zlib)"
++    },
+     "node_modules/parent-module": {
+       "version": "1.0.1",
+       "resolved": "https://registry.npmjs.org/parent-module/-/parent-module-1.0.1.tgz",
+@@ -7306,6 +7689,12 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/parse-svg-path": {
++      "version": "0.1.2",
++      "resolved": "https://registry.npmjs.org/parse-svg-path/-/parse-svg-path-0.1.2.tgz",
++      "integrity": "sha512-JyPSBnkTJ0AI8GGJLfMXvKq42cj5c006fnLz6fXy6zfoVjJizi8BNTpu8on8ziI1cKy9d9DGNuY17Ce7wuejpQ==",
++      "license": "MIT"
++    },
+     "node_modules/path-exists": {
+       "version": "4.0.0",
+       "resolved": "https://registry.npmjs.org/path-exists/-/path-exists-4.0.0.tgz",
+@@ -7391,6 +7780,12 @@
+         "node": "^10 || ^12 || >=14"
+       }
+     },
++    "node_modules/postcss-value-parser": {
++      "version": "4.2.0",
++      "resolved": "https://registry.npmjs.org/postcss-value-parser/-/postcss-value-parser-4.2.0.tgz",
++      "integrity": "sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==",
++      "license": "MIT"
++    },
+     "node_modules/prelude-ls": {
+       "version": "1.2.1",
+       "resolved": "https://registry.npmjs.org/prelude-ls/-/prelude-ls-1.2.1.tgz",
+@@ -7405,7 +7800,6 @@
+       "version": "15.8.1",
+       "resolved": "https://registry.npmjs.org/prop-types/-/prop-types-15.8.1.tgz",
+       "integrity": "sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==",
+-      "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "loose-envify": "^1.4.0",
+@@ -7423,6 +7817,15 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/queue": {
++      "version": "6.0.2",
++      "resolved": "https://registry.npmjs.org/queue/-/queue-6.0.2.tgz",
++      "integrity": "sha512-iHZWu+q3IdFZFX36ro/lKBkSvfkztY5Y7HMiPlOUjhupPcG2JMfst2KKEpu5XndviX/3UhFbRngUPNKtgvtZiA==",
++      "license": "MIT",
++      "dependencies": {
++        "inherits": "~2.0.3"
++      }
++    },
+     "node_modules/queue-microtask": {
+       "version": "1.2.3",
+       "resolved": "https://registry.npmjs.org/queue-microtask/-/queue-microtask-1.2.3.tgz",
+@@ -7471,7 +7874,6 @@
+       "version": "16.13.1",
+       "resolved": "https://registry.npmjs.org/react-is/-/react-is-16.13.1.tgz",
+       "integrity": "sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==",
+-      "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/react-remove-scroll": {
+@@ -7587,6 +7989,15 @@
+         "url": "https://github.com/sponsors/ljharb"
+       }
+     },
++    "node_modules/require-from-string": {
++      "version": "2.0.2",
++      "resolved": "https://registry.npmjs.org/require-from-string/-/require-from-string-2.0.2.tgz",
++      "integrity": "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
+     "node_modules/resolve": {
+       "version": "1.22.11",
+       "resolved": "https://registry.npmjs.org/resolve/-/resolve-1.22.11.tgz",
+@@ -7628,6 +8039,12 @@
+         "url": "https://github.com/privatenumber/resolve-pkg-maps?sponsor=1"
+       }
+     },
++    "node_modules/restructure": {
++      "version": "3.0.2",
++      "resolved": "https://registry.npmjs.org/restructure/-/restructure-3.0.2.tgz",
++      "integrity": "sha512-gSfoiOEA0VPE6Tukkrr7I0RBdE0s7H1eFCDBk05l1KIQT1UIKNc5JZy6jdyW6eYH3aR3g5b3PuL77rq0hvwtAw==",
++      "license": "MIT"
++    },
+     "node_modules/reusify": {
+       "version": "1.1.0",
+       "resolved": "https://registry.npmjs.org/reusify/-/reusify-1.1.0.tgz",
+@@ -7683,6 +8100,26 @@
+         "url": "https://github.com/sponsors/ljharb"
+       }
+     },
++    "node_modules/safe-buffer": {
++      "version": "5.2.1",
++      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
++      "integrity": "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==",
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/feross"
++        },
++        {
++          "type": "patreon",
++          "url": "https://www.patreon.com/feross"
++        },
++        {
++          "type": "consulting",
++          "url": "https://feross.org/support"
++        }
++      ],
++      "license": "MIT"
++    },
+     "node_modules/safe-push-apply": {
+       "version": "1.0.0",
+       "resolved": "https://registry.npmjs.org/safe-push-apply/-/safe-push-apply-1.0.0.tgz",
+@@ -7940,6 +8377,15 @@
+         "url": "https://github.com/sponsors/ljharb"
+       }
+     },
++    "node_modules/simple-swizzle": {
++      "version": "0.2.4",
++      "resolved": "https://registry.npmjs.org/simple-swizzle/-/simple-swizzle-0.2.4.tgz",
++      "integrity": "sha512-nAu1WFPQSMNr2Zn9PGSZK9AGn4t/y97lEm+MXTtUDwfP0ksAIX4nO+6ruD9Jwut4C49SB1Ws+fbXsm/yScWOHw==",
++      "license": "MIT",
++      "dependencies": {
++        "is-arrayish": "^0.3.1"
++      }
++    },
+     "node_modules/sonner": {
+       "version": "2.0.7",
+       "resolved": "https://registry.npmjs.org/sonner/-/sonner-2.0.7.tgz",
+@@ -7980,6 +8426,15 @@
+         "node": ">= 0.4"
+       }
+     },
++    "node_modules/string_decoder": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz",
++      "integrity": "sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==",
++      "license": "MIT",
++      "dependencies": {
++        "safe-buffer": "~5.2.0"
++      }
++    },
+     "node_modules/string.prototype.includes": {
+       "version": "2.0.1",
+       "resolved": "https://registry.npmjs.org/string.prototype.includes/-/string.prototype.includes-2.0.1.tgz",
+@@ -8182,6 +8637,12 @@
+         "url": "https://github.com/sponsors/ljharb"
+       }
+     },
++    "node_modules/svg-arc-to-cubic-bezier": {
++      "version": "3.2.0",
++      "resolved": "https://registry.npmjs.org/svg-arc-to-cubic-bezier/-/svg-arc-to-cubic-bezier-3.2.0.tgz",
++      "integrity": "sha512-djbJ/vZKZO+gPoSDThGNpKDO+o+bAeA4XQKovvkNCqnIS2t+S4qnLAGQhyyrulhCFRl1WWzAp0wUDV8PpTVU3g==",
++      "license": "ISC"
++    },
+     "node_modules/tailwind-merge": {
+       "version": "3.4.0",
+       "resolved": "https://registry.npmjs.org/tailwind-merge/-/tailwind-merge-3.4.0.tgz",
+@@ -8213,6 +8674,12 @@
+         "url": "https://opencollective.com/webpack"
+       }
+     },
++    "node_modules/tiny-inflate": {
++      "version": "1.0.3",
++      "resolved": "https://registry.npmjs.org/tiny-inflate/-/tiny-inflate-1.0.3.tgz",
++      "integrity": "sha512-pkY1fj1cKHb2seWDy0B16HeWyczlJA9/WW3u3c4z/NiWDsO3DOU5D7nhTLE9CF0yXv/QZFY7sEJmj24dK+Rrqw==",
++      "license": "MIT"
++    },
+     "node_modules/tinyglobby": {
+       "version": "0.2.15",
+       "resolved": "https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.15.tgz",
+@@ -8485,6 +8952,32 @@
+       "integrity": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==",
+       "license": "MIT"
+     },
++    "node_modules/unicode-properties": {
++      "version": "1.4.1",
++      "resolved": "https://registry.npmjs.org/unicode-properties/-/unicode-properties-1.4.1.tgz",
++      "integrity": "sha512-CLjCCLQ6UuMxWnbIylkisbRj31qxHPAurvena/0iwSVbQ2G1VY5/HjV0IRabOEbDHlzZlRdCrD4NhB0JtU40Pg==",
++      "license": "MIT",
++      "dependencies": {
++        "base64-js": "^1.3.0",
++        "unicode-trie": "^2.0.0"
++      }
++    },
++    "node_modules/unicode-trie": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/unicode-trie/-/unicode-trie-2.0.0.tgz",
++      "integrity": "sha512-x7bc76x0bm4prf1VLg79uhAzKw8DVboClSN5VxJuQ+LKDOVEW9CdH+VY7SP+vX7xCYQqzzgQpFqz15zeLvAtZQ==",
++      "license": "MIT",
++      "dependencies": {
++        "pako": "^0.2.5",
++        "tiny-inflate": "^1.0.0"
++      }
++    },
++    "node_modules/unicode-trie/node_modules/pako": {
++      "version": "0.2.9",
++      "resolved": "https://registry.npmjs.org/pako/-/pako-0.2.9.tgz",
++      "integrity": "sha512-NUcwaKxUxWrZLpDG+z/xZaCgQITkA/Dv4V/T6bw7VON6l1Xz/VnrBqrYjZQ12TamKHzITTfOEIYUj48y2KXImA==",
++      "license": "MIT"
++    },
+     "node_modules/unrs-resolver": {
+       "version": "1.11.1",
+       "resolved": "https://registry.npmjs.org/unrs-resolver/-/unrs-resolver-1.11.1.tgz",
+@@ -8625,6 +9118,26 @@
+         "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
+       }
+     },
++    "node_modules/util-deprecate": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
++      "integrity": "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==",
++      "license": "MIT"
++    },
++    "node_modules/vite-compatible-readable-stream": {
++      "version": "3.6.1",
++      "resolved": "https://registry.npmjs.org/vite-compatible-readable-stream/-/vite-compatible-readable-stream-3.6.1.tgz",
++      "integrity": "sha512-t20zYkrSf868+j/p31cRIGN28Phrjm3nRSLR2fyc2tiWi4cZGVdv68yNlwnIINTkMTmPoMiSlc0OadaO7DXZaQ==",
++      "license": "MIT",
++      "dependencies": {
++        "inherits": "^2.0.3",
++        "string_decoder": "^1.1.1",
++        "util-deprecate": "^1.0.1"
++      },
++      "engines": {
++        "node": ">= 6"
++      }
++    },
+     "node_modules/which": {
+       "version": "2.0.2",
+       "resolved": "https://registry.npmjs.org/which/-/which-2.0.2.tgz",
+@@ -8781,6 +9294,12 @@
+         "url": "https://github.com/sponsors/sindresorhus"
+       }
+     },
++    "node_modules/yoga-layout": {
++      "version": "3.2.1",
++      "resolved": "https://registry.npmjs.org/yoga-layout/-/yoga-layout-3.2.1.tgz",
++      "integrity": "sha512-0LPOt3AxKqMdFBZA3HBAt/t/8vIKq7VaQYbuA8WxCgung+p9TVyKRYdpvCb80HcdTN2NkbIKbhNwKUfm3tQywQ==",
++      "license": "MIT"
++    },
+     "node_modules/zod": {
+       "version": "4.1.13",
+       "resolved": "https://registry.npmjs.org/zod/-/zod-4.1.13.tgz",
+diff --git a/package.json b/package.json
+index d3aa479..99cdc79 100644
+--- a/package.json
++++ b/package.json
+@@ -21,6 +21,7 @@
+     "@radix-ui/react-separator": "^1.1.8",
+     "@radix-ui/react-slot": "^1.2.4",
+     "@radix-ui/react-tabs": "^1.1.13",
++    "@react-pdf/renderer": "^4.3.2",
+     "@stripe/stripe-js": "^8.7.0",
+     "@supabase/ssr": "^0.8.0",
+     "@supabase/supabase-js": "^2.87.2",

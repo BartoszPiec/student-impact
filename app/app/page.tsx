@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OfferCard } from "./_components/offer-card";
 import HeroSection from "./_components/hero-section";
+import { PageContainer } from "@/components/ui/page-container";
 
 export const dynamic = "force-dynamic";
 
@@ -150,8 +151,10 @@ export default async function OffersPage({
   const appliedCount = myAppByOfferId.size;
 
   return (
-    <main className="space-y-12 pb-20">
+    <main className="pb-20">
       <HeroSection />
+
+      <PageContainer className="space-y-12">
 
       {/* KATEGORIE */}
       <section>
@@ -246,7 +249,8 @@ export default async function OffersPage({
           </Button>
         </div>
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-primary/30 to-transparent pointer-events-none"></div>
-      </section>
+        </section>
+      </PageContainer>
     </main>
   );
 }

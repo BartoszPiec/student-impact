@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import ApplyCard from "./apply-card";
 import SaveButton from "./save-button";
 import { openChatForApplication, openChatForOfferInquiry } from "@/app/app/chat/_actions";
-import { Clock, MapPin, Building2, Banknote, Briefcase, GraduationCap, ArrowLeft, CheckCircle2, MessageSquare, Lock, HelpCircle, Star } from "lucide-react";
+import { Clock, MapPin, Building2, Banknote, Briefcase, GraduationCap, ArrowLeft, CheckCircle2, MessageSquare, Lock, HelpCircle, Star, Zap } from "lucide-react";
+import { PageContainer } from "@/components/ui/page-container";
 
 export const dynamic = "force-dynamic";
 
@@ -39,11 +40,6 @@ export default async function OfferDetailsPage({
     .maybeSingle();
 
   if (error || !offer) redirect("/app");
-
-  // Platform Service check logic used similarly as before
-  const isPlatformService = (offer as any).is_platform_service || false;
-  // Note: Obligations might be passed for mocked services, or actually from DB if column exists. 
-  // We'll trust the DB or partial type. 
 
   // User Context
   const { data: userData } = await supabase.auth.getUser();
@@ -135,17 +131,13 @@ export default async function OfferDetailsPage({
 
   if (hasDetails) {
     const parts = offer.opis.split(separator);
-    descriptionMain = parts[0]; // General Description
+    descriptionMain = parts[0]; 
     const detailsBlock = parts[1];
-
-    // Simple parsing of lines like "🎯 Cel: Sprzedaż"
     const lines = detailsBlock.split("\n").filter((l: string) => l.trim().length > 0);
     lines.forEach((line: string) => {
-      // Detect Key-Value pair (usually separated by colon)
       if (line.includes(":")) {
         const [rawKey, ...valParts] = line.split(":");
         const val = valParts.join(":").trim();
-        // Exclude some internal sections that might be multiline or redundant
         if (val && !rawKey.includes("LINK DO MATERIAŁÓW") && !rawKey.includes("Dodatkowe uwagi") && !rawKey.includes("Preferowany termin")) {
           customDetails.push({ label: rawKey.trim(), value: val });
         }
@@ -153,250 +145,200 @@ export default async function OfferDetailsPage({
     });
   }
 
+  const isPlatformService = (offer as any).is_platform_service || false;
+  const gradient = isPlatformService ? "from-amber-600 to-orange-600" 
+    : isJob ? "from-blue-600 to-indigo-700" 
+    : "from-violet-600 to-purple-700";
 
   return (
-    <div className="max-w-7xl mx-auto pb-20 space-y-10">
-      {/* HEADER SECTION - PREMIUM BANNER */}
-      <div className="relative overflow-hidden rounded-[2.5rem] bg-slate-900 px-8 py-12 md:px-12 md:py-16 text-white shadow-2xl">
-        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
-        <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px]" />
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-purple-500/10 rounded-full blur-[80px]" />
-
-        <Link href="/app/jobs" className="relative z-20 inline-flex items-center gap-2 text-sm font-bold text-indigo-300 hover:text-white transition-colors mb-10 group">
-          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" /> Wróć do listy ofert
-        </Link>
-
-        <div className="relative z-10 flex flex-col lg:flex-row items-start justify-between gap-10">
-          <div className="flex flex-col md:flex-row items-start gap-8 flex-1">
-            <div className="h-20 w-20 md:h-28 md:w-28 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 shadow-2xl backdrop-blur-xl group hover:scale-105 transition-transform duration-500">
-              <Building2 className="h-10 w-10 text-indigo-400 drop-shadow-[0_0_15px_rgba(165,180,252,0.4)]" />
-            </div>
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge variant="secondary" className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold uppercase tracking-widest text-[10px] px-3">
-                  {isJob ? "Praca & Staż" : "Mikrozlecenie"}
-                </Badge>
-                {isPlatformService && (
-                  <Badge variant="secondary" className="bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold uppercase tracking-widest text-[10px] px-3">
-                    🛡️ Systemowe
-                  </Badge>
-                )}
-              </div>
-              <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight leading-none bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-transparent">
-                {offer.tytul}
-              </h1>
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-slate-400 font-bold text-sm uppercase tracking-wider">
-                <span className="flex items-center gap-2 text-indigo-300">
-                  <Briefcase className="h-4 w-4" />
-                  <Link href={`/app/companies/${offer.company_id}`} className="hover:text-white transition-colors">
-                    {companyName}
-                  </Link>
-                </span>
-                <span className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
-                  {offer.is_remote ? (offer.location ? `Remote • ${offer.location}` : "Praca zdalna") : offer.location}
-                </span>
-                <span className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  {new Date(offer.created_at).toLocaleDateString("pl-PL")}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-4 relative z-20">
-            {isEditable && (
-              <Button asChild variant="outline" className="rounded-2xl border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold h-12 px-6">
-                <Link href={`/app/company/offers/${offer.id}/edit`}>Edytuj ofertę</Link>
-              </Button>
-            )}
-            {role === "student" && !isOwner && !myApplication && (
-              <form action={askQuestionAction}>
-                <Button variant="secondary" className="h-12 px-6 rounded-2xl bg-white text-slate-900 hover:bg-slate-100 font-bold shadow-xl">
-                  <HelpCircle className="mr-2 h-4 w-4 text-indigo-500" /> Dopytaj o ofertę
-                </Button>
-              </form>
-            )}
-            {role === "student" && (
-              <SaveButton offerId={offer.id} isSaved={isSaved} />
-            )}
-          </div>
+    <main className="min-h-screen bg-slate-50/50 pb-20 font-sans">
+      {/* ═══ PREMIUM DARK HERO ═══ */}
+      <div className="relative overflow-hidden bg-[#0a0f1c] pb-32 pt-16">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className={`absolute top-[-20%] left-[-10%] w-[50%] h-[80%] rounded-full opacity-20 blur-[120px] bg-gradient-to-br ${gradient}`} />
+            <div className={`absolute bottom-[-20%] right-[-10%] w-[40%] h-[60%] rounded-full opacity-20 blur-[100px] bg-gradient-to-tl ${gradient}`} />
+            <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-[0.03] bg-repeat" />
         </div>
+
+        <PageContainer className="relative z-10">
+          <Link href="/app/jobs" className="inline-flex items-center text-sm font-medium text-slate-300 hover:text-white mb-10 transition-colors group bg-white/5 backdrop-blur-md px-5 py-2.5 rounded-full border border-white/10 hover:bg-white/10">
+            <ArrowLeft className="h-4 w-4 mr-2 transition-transform group-hover:-translate-x-1" /> 
+            Wróć do listy ofert
+          </Link>
+
+          <div className="flex flex-col lg:flex-row items-start justify-between gap-10">
+            <div className="flex flex-col md:flex-row items-start gap-8 flex-1">
+              <div className="h-20 w-20 md:h-28 md:w-28 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 shadow-2xl backdrop-blur-xl group hover:scale-105 transition-transform duration-500">
+                <Building2 className={`h-10 w-10 ${isPlatformService ? 'text-amber-400' : 'text-indigo-400'} drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`} />
+              </div>
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge className="bg-white/10 backdrop-blur-md border border-white/10 text-white text-sm font-medium px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                    <Briefcase className="w-4 h-4 mr-1.5 opacity-80" />
+                    {isJob ? "Praca & Staż" : "Mikrozlecenie"}
+                  </Badge>
+                  {isPlatformService && (
+                    <Badge className="bg-amber-500/20 backdrop-blur-md border border-amber-400/20 text-amber-100 text-sm font-medium px-4 py-1.5 rounded-full pb-1 pt-1.5">
+                      <Zap className="h-4 w-4 mr-1" />
+                      Systemowe
+                    </Badge>
+                  )}
+                </div>
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-white to-white/70 tracking-tight leading-tight">
+                  {offer.tytul}
+                </h1>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-slate-300 font-medium text-sm md:text-base mt-4">
+                  <span className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 opacity-70" />
+                    <Link href={`/app/companies/${offer.company_id}`} className="hover:text-white transition-colors border-b border-transparent hover:border-white/50 pb-0.5">
+                      {companyName}
+                    </Link>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 opacity-70" />
+                    {offer.is_remote ? (offer.location ? `Remote • ${offer.location}` : "Praca zdalna") : offer.location}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 opacity-70" />
+                    Dodano: {new Date(offer.created_at).toLocaleDateString("pl-PL")}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-4 relative z-20 mt-4 lg:mt-0">
+              {isEditable && (
+                <Button asChild variant="outline" className="rounded-2xl border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold h-12 px-6">
+                  <Link href={`/app/company/offers/${offer.id}/edit`}>Edytuj ofertę</Link>
+                </Button>
+              )}
+              {role === "student" && !isOwner && !myApplication && (
+                <form action={askQuestionAction}>
+                  <Button variant="secondary" className="h-12 px-6 rounded-2xl bg-white text-slate-900 hover:bg-slate-100 font-bold shadow-xl">
+                    <HelpCircle className="mr-2 h-4 w-4 text-indigo-500" /> Dopytaj o ofertę
+                  </Button>
+                </form>
+              )}
+              {role === "student" && (
+                <SaveButton offerId={offer.id} isSaved={isSaved} />
+              )}
+            </div>
+          </div>
+        </PageContainer>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-        {/* LEFT COLUMN - MAIN CONTENT */}
-        <div className="lg:col-span-2 space-y-12">
+      {/* ═══ MAIN CONTENT GRID ═══ */}
+      <PageContainer className="-mt-16 relative z-20">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
 
-          {/* Description - General */}
-          <section className="bg-white rounded-[2rem] p-8 md:p-12 shadow-xl shadow-slate-200/50 border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
-              <span className="w-8 h-1 bg-indigo-500 rounded-full"></span>
-              Opis oferty
-            </h3>
-            <div className="prose prose-slate max-w-none leading-relaxed text-slate-600 text-lg whitespace-pre-line font-medium">
-              {descriptionMain}
-            </div>
-          </section>
-
-          {/* Custom Details for System Offers */}
-          {customDetails.length > 0 && (
-            <section className="bg-white rounded-[2rem] p-8 md:p-12 shadow-xl shadow-slate-200/50 border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
-                <span className="w-8 h-1 bg-purple-500 rounded-full"></span>
-                Szczegóły zlecenia
-              </h3>
-              <div className="grid sm:grid-cols-2 gap-6">
-                {customDetails.map((detail, idx) => (
-                  <div key={idx} className="bg-slate-50/50 p-6 rounded-3xl border border-slate-100 hover:border-purple-200 transition-colors group">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-purple-500 transition-colors">
-                      {detail.label.replace(/[\u{1F300}-\u{1F9FF}]/gu, '')}
-                    </p>
-                    <p className="font-bold text-slate-900 text-lg">{detail.value}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Technologies / Skills */}
-          {offer.technologies && offer.technologies.length > 0 && (
-            <section className="bg-white rounded-[2rem] p-8 md:p-12 shadow-xl shadow-slate-200/50 border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
+          <div className="lg:col-span-8 space-y-8">
+            {/* Description - General */}
+            <section className="bg-white rounded-[2rem] p-8 md:p-12 shadow-xl shadow-slate-200/50 border border-slate-100">
               <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
-                <span className="w-8 h-1 bg-emerald-500 rounded-full"></span>
-                Wymagane umiejętności
+                <span className="w-8 h-1 bg-indigo-500 rounded-full"></span>
+                Opis oferty
               </h3>
-              <div className="flex flex-wrap gap-3">
-                {offer.technologies.map((tech: string) => (
-                  <div key={tech} className="px-5 py-3 bg-white border border-slate-100 rounded-[1rem] text-slate-700 font-bold text-sm flex items-center gap-3 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all cursor-default">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></div>
-                    {tech}
-                  </div>
-                ))}
+              <div className="prose prose-slate max-w-none leading-relaxed text-slate-600 text-lg whitespace-pre-line font-medium">
+                {descriptionMain}
               </div>
             </section>
-          )}
 
-          {/* Additional Requirements & Time */}
-          {isPlatformService ? (
-            <section className="bg-indigo-900 rounded-[2.5rem] p-8 md:p-12 shadow-2xl text-white relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] -mr-32 -mt-32"></div>
-              <h3 className="relative z-10 text-sm font-black text-indigo-300 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
-                <span className="w-8 h-1 bg-amber-400 rounded-full"></span>
-                Zakres Obowiązków
-              </h3>
-
-              <div className="relative z-10 space-y-6">
-                {((offer as any).obligations || offer.wymagania) ? (
-                  <div className="grid gap-4">
-                    {((offer as any).obligations || offer.wymagania)
-                      .split(/\n|- |• /)
-                      .map((line: string) => line.trim())
-                      .filter((line: string) => line.length > 1 && line !== "()")
-                      .map((line: string, i: number) => (
-                        <div key={i} className="flex items-start gap-4 p-5 bg-white/5 rounded-3xl border border-white/10 hover:bg-white/10 transition-colors">
-                          <div className="w-6 h-6 rounded-full bg-amber-400/20 flex items-center justify-center shrink-0 mt-0.5 border border-amber-400/30">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-amber-400" />
-                          </div>
-                          <span className="text-lg font-medium text-indigo-50">{line}</span>
-                        </div>
-                      ))
-                    }
-                  </div>
-                ) : (
-                  <p className="text-indigo-300 italic font-medium">Brak szczegółowych wytycznych.</p>
-                )}
-              </div>
-            </section>
-          ) : (
-            (offer.wymagania || offer.czas) && (
-              <section className="bg-white rounded-[2rem] p-8 md:p-12 shadow-xl shadow-slate-200/50 border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
+            {/* Custom Details for System Offers */}
+            {customDetails.length > 0 && (
+              <section className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
-                  <span className="w-8 h-1 bg-amber-500 rounded-full"></span>
-                  Szczegóły współpracy
+                  <span className="w-8 h-1 bg-purple-500 rounded-full"></span>
+                  Szczegóły zlecenia
                 </h3>
-                <div className="grid md:grid-cols-2 gap-10">
-                  {offer.wymagania && offer.wymagania !== "()" && (
-                    <div className="space-y-3">
-                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Dodatkowe wymagania</p>
-                      <p className="text-slate-700 font-bold text-lg leading-relaxed">{offer.wymagania}</p>
+                <div className="grid sm:grid-cols-2 gap-6">
+                  {customDetails.map((detail, idx) => (
+                    <div key={idx} className="bg-slate-50/50 p-6 rounded-3xl border border-slate-100 hover:border-purple-200 transition-colors group">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-purple-500 transition-colors">
+                        {detail.label.replace(/[\u{1F300}-\u{1F9FF}]/gu, '')}
+                      </p>
+                      <p className="font-bold text-slate-900 text-lg">{detail.value}</p>
                     </div>
-                  )}
-                  {offer.czas && (
-                    <div className="space-y-3 p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Wymiar czasu / Czas trwania</p>
-                      <p className="text-indigo-900 font-black text-xl">{offer.czas}</p>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Technologies / Skills */}
+            {offer.technologies && offer.technologies.length > 0 && (
+              <section className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
+                  <span className="w-8 h-1 bg-emerald-500 rounded-full"></span>
+                  Wymagane umiejętności
+                </h3>
+                <div className="flex flex-wrap gap-3">
+                  {offer.technologies.map((tech: string) => (
+                    <div key={tech} className="px-5 py-3 bg-white border border-slate-100 rounded-[1rem] text-slate-700 font-bold text-sm flex items-center gap-3 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all cursor-default">
+                      <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></div>
+                      {tech}
                     </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Additional Requirements & Time */}
+            {isPlatformService ? (
+              <section className="bg-indigo-900 rounded-[2.5rem] p-8 md:p-12 shadow-2xl text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] -mr-32 -mt-32"></div>
+                <h3 className="relative z-10 text-sm font-black text-indigo-300 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
+                  <span className="w-8 h-1 bg-amber-400 rounded-full"></span>
+                  Zakres Obowiązków
+                </h3>
+                <div className="relative z-10 space-y-6">
+                  {((offer as any).obligations || offer.wymagania) ? (
+                    <div className="grid gap-4">
+                      {((offer as any).obligations || offer.wymagania)
+                        .split(/\n|- |• /)
+                        .map((line: string) => line.trim())
+                        .filter((line: string) => line.length > 1 && line !== "()")
+                        .map((line: string, i: number) => (
+                          <div key={i} className="flex items-start gap-4 p-5 bg-white/5 rounded-3xl border border-white/10 hover:bg-white/10 transition-colors">
+                            <div className="w-6 h-6 rounded-full bg-amber-400/20 flex items-center justify-center shrink-0 mt-0.5 border border-amber-400/30">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-amber-400" />
+                            </div>
+                            <span className="text-lg font-medium text-indigo-50">{line}</span>
+                          </div>
+                        ))
+                      }
+                    </div>
+                  ) : (
+                    <p className="text-indigo-300 italic font-medium">Brak szczegółowych wytycznych.</p>
                   )}
                 </div>
               </section>
-            )
-          )}
-
-          {/* LOCKED CONTENT SECTION - Only for Platform Services */}
-          {(offer as any).is_platform_service && (
-            <section className="bg-slate-900 rounded-[2.5rem] p-8 md:p-12 shadow-2xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-700">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 via-amber-600 to-amber-400"></div>
-              <h3 className="text-sm font-black text-amber-500/50 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
-                <Lock className="h-4 w-4" /> Materiały Projektowe
-              </h3>
-
-              {myApplication || isOwner ? (
-                <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 md:p-10 text-center relative z-10">
-                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/30">
-                    <CheckCircle2 className="h-10 w-10 text-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.3)]" />
-                  </div>
-                  <h4 className="text-white font-black text-2xl mb-2">
-                    {isOwner ? "Twoje Materiały" : "Dostęp Odblokowany!"}
-                  </h4>
-                  <p className="text-slate-400 font-medium mb-8">
-                    {isOwner ? "Jako właściciel masz pełny dostęp do podglądu materiałów." : "Twoja aplikacja dała Ci dostęp do szczegółowych wytycznych."}
-                  </p>
-
-                  {(offer as any).obligations && (
-                    <div className="text-left bg-slate-950/50 p-6 rounded-2xl border border-white/5 text-sm font-mono text-indigo-300 break-all mb-8">
-                      <p className="font-black text-white uppercase tracking-widest text-[10px] mb-3 opacity-50">LINKI I INSTRUKCJE:</p>
-                      {(offer as any).obligations}
-                    </div>
-                  )}
-
-                  <Button className="gradient-primary text-white font-bold h-14 px-10 rounded-2xl shadow-xl shadow-indigo-500/20">
-                    Pobierz Paczkę Projektową (.zip)
-                  </Button>
-                </div>
-              ) : (
-                <div className="relative group">
-                  <div className="filter blur-md select-none opacity-30 space-y-6 pointer-events-none">
-                    <p className="text-white text-lg font-medium">Tutaj znajdują się pliki niezbędne do realizacji zlecenia, takie jak:</p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="h-12 bg-white/10 rounded-xl"></div>
-                      <div className="h-12 bg-white/10 rounded-xl"></div>
-                      <div className="h-12 bg-white/10 rounded-xl"></div>
-                      <div className="h-12 bg-white/10 rounded-xl"></div>
-                    </div>
-                    <div className="h-32 bg-white/5 rounded-3xl border border-white/5"></div>
-                  </div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="bg-white/10 backdrop-blur-2xl p-8 md:p-10 rounded-[2rem] shadow-2xl text-center border border-white/10 max-w-sm transform group-hover:scale-105 transition-transform duration-500">
-                      <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-white/20">
-                        <Lock className="h-8 w-8 text-amber-400" />
+            ) : (
+              (offer.wymagania || offer.czas) && (
+                <section className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
+                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
+                    <span className="w-8 h-1 bg-amber-500 rounded-full"></span>
+                    Szczegóły współpracy
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-10">
+                    {offer.wymagania && offer.wymagania !== "()" && (
+                      <div className="space-y-3">
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Dodatkowe wymagania</p>
+                        <p className="text-slate-700 font-bold text-lg leading-relaxed">{offer.wymagania}</p>
                       </div>
-                      <p className="font-black text-white text-xl mb-3">Dostęp zastrzeżony</p>
-                      <p className="text-sm text-slate-400 font-medium leading-relaxed">
-                        Materiały są dostępne wyłącznie dla wykonawców, których aplikacja została przyjęta.
-                      </p>
-                    </div>
+                    )}
+                    {offer.czas && (
+                      <div className="space-y-3 p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Wymiar czasu / Czas trwania</p>
+                        <p className="text-indigo-900 font-black text-xl">{offer.czas}</p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </section>
-          )}
-        </div>
+                </section>
+              )
+            )}
+          </div>
 
-        {/* RIGHT COLUMN - SIDEBAR */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-10 space-y-8 animate-in fade-in slide-in-from-right-4 duration-700">
-
+          {/* RIGHT COLUMN - SIDEBAR */}
+          <div className="lg:col-span-4 space-y-8">
             {/* Application Section */}
             <div className="space-y-8">
               {canApply ? (
@@ -418,7 +360,7 @@ export default async function OfferDetailsPage({
                               <div className="flex justify-center gap-1 mb-2">
                                 {[1, 2, 3, 4, 5].map((star) => (
                                   <Star key={star} className={`w-6 h-6 ${star <= myReview.rating ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} />
-                                ))}
+                                  ))}
                               </div>
                               <div className="font-bold text-slate-900">Ocena Klienta: {myReview.rating}/5</div>
                             </div>
@@ -502,8 +444,9 @@ export default async function OfferDetailsPage({
             </div>
 
             {/* Quick Summary Card */}
-            <Card className="border-none rounded-[2.5rem] overflow-hidden shadow-xl bg-white ring-1 ring-slate-100">
-              <CardHeader className="p-8 pb-0">
+            <Card className="border border-white bg-white/90 backdrop-blur-2xl rounded-[2.5rem] overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.06)] relative">
+              <div className={`absolute top-0 inset-x-0 h-2 bg-gradient-to-r ${gradient}`} />
+              <CardHeader className="p-8 pb-0 relative z-10">
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-2 h-2 rounded-full bg-indigo-500" />
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Szybkie informacje</span>
@@ -551,10 +494,9 @@ export default async function OfferDetailsPage({
                 </ul>
               </CardContent>
             </Card>
-
           </div>
         </div>
-      </div>
-    </div>
+      </PageContainer>
+    </main>
   );
 }

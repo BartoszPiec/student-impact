@@ -7,7 +7,7 @@ import { Trash2, RotateCcw, AlertOctagon, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { MilestoneItem, DraftRole } from "./types";
-import { generateContract } from "../../../_actions";
+import { generateContractDocuments } from "../../../_actions";
 
 interface Props {
     applicationId: string;
@@ -81,14 +81,14 @@ export function DraftViewer({ applicationId, contractId, milestones, diffBase, i
 
             if (error) throw error;
 
-            console.log("Generating contract...");
-            // Generate Contract File
+            console.log("Generating contract documents...");
+            // Generate Contract PDF Files (Umowa A & Umowa B)
             try {
-                await generateContract(contractId, applicationId);
-                toast.success("Zatwierdzono warunki i wygenerowano umowę!");
+                await generateContractDocuments(contractId, applicationId);
+                toast.success("Zatwierdzono warunki i wygenerowano dokumenty umowy!");
             } catch (err) {
-                console.error("Generate Contract Error:", err);
-                toast.warning("Warunki zatwierdzone, ale wystąpił błąd przy generowaniu pliku umowy.");
+                console.error("Generate Contract Documents Error:", err);
+                toast.warning("Warunki zatwierdzone, ale wystąpił błąd przy generowaniu dokumentów umowy.");
             }
 
             console.log("Refreshing view...");

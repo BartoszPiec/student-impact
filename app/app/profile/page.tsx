@@ -15,6 +15,7 @@ import ReviewsSection from "./reviews-section";
 import EducationSection from "./education-section";
 import SkillsInput from "./skills-input";
 import { Progress } from "@/components/ui/progress";
+import TaxDataSection from "./tax-data-section";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +73,7 @@ export default async function ProfilePage() {
       ? (
         await supabase
           .from("student_profiles")
-          .select("public_name, kierunek, rok, sciezka, kompetencje, linki, bio, doswiadczenie, linkedin_url, portfolio_url")
+          .select("public_name, kierunek, rok, sciezka, kompetencje, linki, bio, doswiadczenie, linkedin_url, portfolio_url, tax_residence_pl, birth_date, pesel")
           .eq("user_id", user.id)
           .maybeSingle()
       ).data
@@ -195,7 +196,7 @@ export default async function ProfilePage() {
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/20 rounded-full blur-[100px]" />
         <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-purple-500/20 rounded-full blur-[80px]" />
 
-        <div className="container max-w-7xl mx-auto px-4 sm:px-6 relative z-10 text-white">
+        <div className="w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 relative z-10 text-white">
           <div className="flex flex-col md:flex-row items-center md:items-end gap-8">
             {/* Avatar */}
             <div className="h-32 w-32 md:h-40 md:w-40 rounded-[2.5rem] bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-2 shadow-2xl ring-1 ring-white/20">
@@ -230,7 +231,7 @@ export default async function ProfilePage() {
         </div>
       </div>
 
-      <div className="container max-w-7xl mx-auto px-4 sm:px-6 -mt-12 relative z-10 pb-12">
+      <div className="w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 -mt-12 relative z-10 pb-12">
         {/* Mobile Progress Bar (visible only on small screens) */}
         <div className="md:hidden mb-8 bg-white p-5 rounded-3xl shadow-lg shadow-indigo-500/10 border border-indigo-50">
           <div className="flex justify-between items-center mb-2">
@@ -439,6 +440,15 @@ export default async function ProfilePage() {
                     </form>
                   </CardContent>
                 </Card>
+
+                {/* DANE PODATKOWE */}
+                <TaxDataSection
+                  initialData={{
+                    tax_residence_pl: (student as any)?.tax_residence_pl ?? null,
+                    birth_date: (student as any)?.birth_date ?? null,
+                    pesel: (student as any)?.pesel ?? null,
+                  }}
+                />
 
                 <div id="reviews" className="scroll-mt-24">
                   <ReviewsSection />

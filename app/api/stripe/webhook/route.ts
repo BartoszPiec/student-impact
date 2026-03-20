@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { generateCompanyInvoice } from "@/lib/pdf/generate-invoice";
 import Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -203,6 +204,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       } catch (e) {
         console.error("Failed to send notification:", e);
       }
+    }
+
+    // Generate company invoice (non-blocking, don't fail if it doesn't work)
+    try {
+      const amountPLN = session.amount_total ? session.amount_total / 100 : 0;
+      const feePLN = session.metadata?.platform_fee
+        ? Number(session.metadata.platform_fee) / 100
+        : amountPLN * 0.05;
+      await generateCompanyInvoice(contractId, amountPLN, feePLN, "Stripe");
+      console.log(`📄 Company invoice generated for contract ${contractId}`);
+    } catch (invoiceErr) {
+      console.error("Failed to generate company invoice (non-critical):", invoiceErr);
     }
 
     console.log(`✅ Successfully processed payment for contract ${contractId}`);
