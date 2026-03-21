@@ -215,7 +215,7 @@ export async function acceptApplication(applicationId: string) {
   revalidatePath("/app/notifications");
 
 
-  redirect("/app/company/offers");
+  redirect("/app/company/applications");
 }
 
 export async function rejectApplication(applicationId: string) {

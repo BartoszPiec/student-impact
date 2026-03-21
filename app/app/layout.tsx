@@ -26,7 +26,7 @@ export default async function AppLayout({
       .from("profiles")
       .select("role")
       .eq("user_id", user.id)
-      .single()
+      .maybeSingle()
     : { data: null };
 
   const role = profile?.role ?? null;
@@ -34,10 +34,10 @@ export default async function AppLayout({
   // Pobieramy dodatkowe dane do sprawdzenia onboardingu
   let hasDetails = false;
   if (user && role === "student") {
-    const { data: sp } = await supabase.from("student_profiles").select("kierunek").eq("user_id", user.id).single();
+    const { data: sp } = await supabase.from("student_profiles").select("kierunek").eq("user_id", user.id).maybeSingle();
     if (sp?.kierunek) hasDetails = true;
   } else if (user && role === "company") {
-    const { data: cp } = await supabase.from("company_profiles").select("nazwa").eq("user_id", user.id).single();
+    const { data: cp } = await supabase.from("company_profiles").select("nazwa").eq("user_id", user.id).maybeSingle();
     // Sprawdzamy czy nazwa istnieje i nie jest domyślna
     if (cp?.nazwa && cp.nazwa !== "Firma Bez Nazwy") hasDetails = true;
   }

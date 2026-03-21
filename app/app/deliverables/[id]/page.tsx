@@ -164,8 +164,6 @@ export default async function RealizationWorkspace({
         const orderTime = new Date((appRow as any).created_at).getTime();
         const pkgId = (appRow as any).package_id;
 
-        console.log("DEBUG: Temporal Matching Start", { orderId: applicationId, orderTime, pkgId });
-
         if (pkgId) {
             const { data: candidates } = await supabase
                 .from("conversations")
@@ -173,40 +171,29 @@ export default async function RealizationWorkspace({
                 .eq("company_id", companyId)
                 .eq("student_id", studentId)
                 .eq("package_id", pkgId)
-                .order("created_at", { ascending: true }); // Get all history
-
-            console.log("DEBUG: Candidates found:", candidates?.length, candidates);
+                .order("created_at", { ascending: true });
 
             if (candidates && candidates.length > 0) {
-                // Find candidate with min time difference
                 let best = candidates[0];
                 let minDiff = Infinity;
 
                 for (const c of candidates) {
                     const cTime = new Date(c.created_at).getTime();
                     const diff = Math.abs(cTime - orderTime);
-                    console.log(`DEBUG: Checking candidate ${c.id}: time=${cTime}, diff=${diff}`);
                     if (diff < minDiff) {
                         minDiff = diff;
                         best = c;
                     }
                 }
 
-
-                console.log("DEBUG: Selected Best Match:", best.id, "diff:", minDiff);
                 conversation = best;
-            } else {
-                console.log("DEBUG: No candidates found.");
             }
-        } else {
-            console.log("DEBUG: Missing Package ID.");
         }
     }
 
-    // FALLBACK: If temporal matching failed (e.g. no package_id or no exact match), 
+    // FALLBACK: If temporal matching failed (e.g. no package_id or no exact match),
     // try to find ANY conversation for these users to avoid empty state.
     if (!conversation && studentId && companyId) {
-        console.log("DEBUG: Fallback to latest conversation.");
         const { data: latestConv } = await supabase
             .from("conversations")
             .select("id")

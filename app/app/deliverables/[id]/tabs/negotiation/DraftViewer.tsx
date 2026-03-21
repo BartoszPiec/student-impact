@@ -67,21 +67,11 @@ export function DraftViewer({ applicationId, contractId, milestones, diffBase, i
 
     // Actions
     const handleApprove = async () => {
-        console.log("handleApprove CLICKED");
-        if (!confirm("Czy na pewno chcesz zatwierdzić te warunki? To zaktualizuje umowę i rozpocznie proces płatności.")) {
-            console.log("handleApprove CANCELLED by user");
-            return;
-        }
-        console.log("handleApprove CONFIRMED. ContractID:", contractId);
         setLoading(true);
         try {
-            console.log("Calling rpc draft_approve...");
-            const { data, error } = await supabase.rpc('draft_approve', { p_contract_id: contractId });
-            console.log("RPC Result:", { data, error });
-
+            const { error } = await supabase.rpc('draft_approve', { p_contract_id: contractId });
             if (error) throw error;
 
-            console.log("Generating contract documents...");
             // Generate Contract PDF Files (Umowa A & Umowa B)
             try {
                 await generateContractDocuments(contractId, applicationId);
@@ -91,10 +81,8 @@ export function DraftViewer({ applicationId, contractId, milestones, diffBase, i
                 toast.warning("Warunki zatwierdzone, ale wystąpił błąd przy generowaniu dokumentów umowy.");
             }
 
-            console.log("Refreshing view...");
             onRefresh();
         } catch (e: any) {
-            console.error("handleApprove EXCEPTION:", JSON.stringify(e, null, 2));
             toast.error("Błąd: " + (e?.message || JSON.stringify(e)));
         } finally {
             setLoading(false);

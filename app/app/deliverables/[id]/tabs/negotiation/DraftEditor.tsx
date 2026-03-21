@@ -75,11 +75,9 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
 
 
     const handleAccept = (item: MilestoneItem) => {
-        console.log("DraftEditor: handleAccept called for", item.client_id);
         setAcceptedDiffs(prev => {
             const next = new Set(prev);
             next.add(item.client_id);
-            console.log("DraftEditor: New Accepted Set:", Array.from(next));
             return next;
         });
         toast.success("Zmiana zaakceptowana - odśwież widok");
@@ -225,15 +223,11 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
                 position: idx
             }));
 
-            console.log("Saving payload:", JSON.stringify(payload, null, 2)); // DEBUG payload
-
             const { data, error } = await supabase.rpc('draft_save_version', {
                 p_contract_id: contractId,
                 p_base_version_id: null,
                 p_items: payload
             });
-
-            console.log("Save response:", { data, error }); // DEBUG response
 
             if (error) throw error;
 
@@ -270,21 +264,16 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
         setLoading(true);
         try {
             const endpoint = role === 'STUDENT' ? 'draft_submit' : 'draft_send_changes';
-            console.log(`Submitting to ${endpoint} with contractId: ${contractId}`); // DEBUG
 
             const { data, error } = await supabase.rpc(endpoint, {
                 p_contract_id: contractId
             });
 
-            if (error) {
-                console.error("RPC Error Object:", error);
-                throw error;
-            }
+            if (error) throw error;
 
             // Check Application-Level Validation (JSON)
             if (data && data.status && data.status !== 'OK') {
-                console.warn("Validation Failed:", data);
-                setLastDebugError(data); // Log validation fail
+                setLastDebugError(data);
                 if (data.status === 'UNDER') {
                     toast.error(`Błąd: Budżet niepełny. Brakuje ${(data.delta / 100).toFixed(2)} PLN`);
                 } else if (data.status === 'OVER') {
