@@ -624,8 +624,8 @@ export async function generateContractDocuments(contractId: string, applicationI
     throw new Error("Błąd wgrywania Umowy B: " + uploadErrorB.message);
   }
 
-  // 9. Insert contract_documents records
-  const { error: docInsertError } = await supabase
+  // 9. Insert contract_documents records (use admin client to bypass RLS)
+  const { error: docInsertError } = await admin
     .from("contract_documents")
     .insert([
       {
@@ -649,8 +649,8 @@ export async function generateContractDocuments(contractId: string, applicationI
     throw new Error("Błąd zapisu dokumentów: " + docInsertError.message);
   }
 
-  // 10. Update contract — mark documents as generated
-  await supabase
+  // 10. Update contract — mark documents as generated (use admin to bypass RLS)
+  await admin
     .from("contracts")
     .update({ documents_generated_at: new Date().toISOString() })
     .eq("id", contractId);

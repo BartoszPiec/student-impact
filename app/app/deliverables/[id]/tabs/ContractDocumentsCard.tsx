@@ -110,7 +110,7 @@ export function ContractDocumentsCard({
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Not generated yet — show generate button */}
-        {!documentsGeneratedAt && (
+        {!documentsGeneratedAt && documents.length === 0 && (
           <div className="text-center py-4">
             <p className="text-sm text-slate-500 mb-3">
               Po zatwierdzeniu harmonogramu należy wygenerować umowy prawne.
@@ -136,7 +136,7 @@ export function ContractDocumentsCard({
         )}
 
         {/* Documents generated — show status */}
-        {documentsGeneratedAt && (
+        {(documentsGeneratedAt || documents.length > 0) && (
           <>
             {/* Overall status */}
             {bothAccepted ? (
