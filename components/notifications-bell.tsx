@@ -15,9 +15,17 @@ import { formatDistanceToNow } from "date-fns";
 import { pl } from "date-fns/locale";
 import { getNotificationTitle } from "@/app/app/notifications/utils";
 
+interface Notification {
+  id: string;
+  typ: string;
+  read_at: string | null;
+  created_at: string;
+  payload?: Record<string, unknown>;
+}
+
 export default function NotificationsBell({ unread }: { unread: number }) {
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [cleared, setCleared] = useState(false);
 
@@ -80,7 +88,17 @@ export default function NotificationsBell({ unread }: { unread: number }) {
 
         <div className="max-h-[300px] overflow-y-auto py-1">
           {loading ? (
-            <div className="p-4 text-center text-xs text-slate-400">Ładowanie...</div>
+            <div className="p-2 space-y-1" aria-label="Ładowanie powiadomień">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex gap-3 items-start px-4 py-3 animate-pulse">
+                  <div className="h-7 w-7 rounded-full bg-slate-100 shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 bg-slate-100 rounded w-3/4" />
+                    <div className="h-2 bg-slate-100 rounded w-1/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : notifications.length === 0 ? (
             <div className="p-8 text-center">
               <Bell className="h-8 w-8 text-slate-200 mx-auto mb-2" />

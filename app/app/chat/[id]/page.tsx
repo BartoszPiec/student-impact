@@ -47,7 +47,7 @@ export default async function ChatPage({
 
   const chatTitle = offer?.tytul ?? pkg?.title ?? "Rozmowa";
 
-  let headerLink = "#";
+  let headerLink: string | null = null;
   if (offer) {
     headerLink = isCompany ? `/app/company/offers/${conv.offer_id}` : `/app/jobs/${conv.offer_id}`;
   } else if (conv.package_id) {
@@ -111,12 +111,16 @@ export default async function ChatPage({
               <ChatBackBtn />
             </div>
             <div>
-              <Link href={headerLink} className="group flex items-center gap-2">
-                <h2 className="text-xl font-black text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors line-clamp-1">{chatTitle}</h2>
-                <div className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-indigo-500">
-                  <Sparkles className="h-4 w-4" />
-                </div>
-              </Link>
+              {headerLink ? (
+                <Link href={headerLink} className="group flex items-center gap-2">
+                  <h2 className="text-xl font-black text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors line-clamp-1">{chatTitle}</h2>
+                  <div className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-indigo-500">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                </Link>
+              ) : (
+                <h2 className="text-xl font-black text-slate-800 tracking-tight line-clamp-1">{chatTitle}</h2>
+              )}
               {studentName && (
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">Rozmowa z: <span className="text-indigo-500">{studentName}</span></p>
               )}

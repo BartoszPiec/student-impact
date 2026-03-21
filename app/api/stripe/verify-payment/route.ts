@@ -44,6 +44,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid session metadata" }, { status: 400 });
     }
 
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(contractId) || !UUID_RE.test(applicationId)) {
+      return NextResponse.json({ error: "Nieprawidłowe ID w metadanych sesji" }, { status: 400 });
+    }
+
     // 4. Verify user owns this contract
     const { data: contract } = await supabase
       .from("contracts")
@@ -183,11 +188,9 @@ export async function POST(req: NextRequest) {
       message: "Payment verified and contract activated"
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Failed to verify payment";
     console.error("[verify-payment] Error:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to verify payment" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

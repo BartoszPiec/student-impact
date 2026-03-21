@@ -29,9 +29,9 @@ async function getRawBody(req: NextRequest): Promise<Buffer> {
 export async function POST(req: NextRequest) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  // If no webhook secret, allow for local development (but log warning)
   if (!webhookSecret) {
-    console.warn("⚠️ STRIPE_WEBHOOK_SECRET not set - webhook signature verification disabled");
+    console.error("❌ STRIPE_WEBHOOK_SECRET is not set — webhook processing disabled");
+    return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
   }
 
   let event: Stripe.Event;
@@ -40,15 +40,14 @@ export async function POST(req: NextRequest) {
     const rawBody = await getRawBody(req);
     const signature = req.headers.get("stripe-signature");
 
-    if (webhookSecret && signature) {
-      // Verify webhook signature
-      event = getStripe().webhooks.constructEvent(rawBody, signature, webhookSecret);
-    } else {
-      // Development mode - parse without verification
-      event = JSON.parse(rawBody.toString()) as Stripe.Event;
+    if (!signature) {
+      return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
     }
-  } catch (err: any) {
-    console.error("Webhook signature verification failed:", err.message);
+
+    event = getStripe().webhooks.constructEvent(rawBody, signature, webhookSecret);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    console.error("Webhook signature verification failed:", msg);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -79,6 +78,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ received: true });
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const supabase = createAdminClient();
 
@@ -88,6 +89,24 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   if (!contractId || !applicationId) {
     console.error("Missing metadata in checkout session:", session.id);
+    return;
+  }
+
+  // Walidacja UUID — zapobiega query injection
+  if (!UUID_RE.test(contractId) || !UUID_RE.test(applicationId)) {
+    console.error("Invalid UUID in session metadata:", { contractId, applicationId });
+    return;
+  }
+
+  // Idempotencja — sprawdź czy ta sesja była już przetworzona
+  const { data: existingPayment } = await supabase
+    .from("payments")
+    .select("status")
+    .eq("stripe_session_id", session.id)
+    .maybeSingle();
+
+  if (existingPayment?.status === "completed") {
+    console.log(`Payment for session ${session.id} already processed — skipping`);
     return;
   }
 

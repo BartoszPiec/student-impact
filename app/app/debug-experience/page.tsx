@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function DebugExperiencePage() {
+    if (process.env.NODE_ENV !== "development") notFound();
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 

@@ -4,6 +4,7 @@ import { EnsureOnboarding } from "./EnsureOnboarding";
 import { signOut } from "./_actions/auth";
 import NotificationsBell from "@/components/notifications-bell";
 import { AppNavbar } from "./app-navbar";
+import { redirect } from "next/navigation";
 
 export default async function AppLayout({
   children,
@@ -15,6 +16,9 @@ export default async function AppLayout({
   // 1) user z cookies (SSR)
   const { data } = await supabase.auth.getUser();
   const user = data.user;
+
+  // Niezalogowani użytkownicy nie mają dostępu do /app/*
+  if (!user) redirect("/auth");
 
   // 2) rola z profiles (jeśli zalogowany)
   const { data: profile } = user

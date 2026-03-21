@@ -202,12 +202,27 @@ export default async function OffersPage({
           </div>
 
           <div className="flex gap-2">
-            <Link href="?filter=all" className={`rounded-full px-4 py-1 text-sm font-medium transition ${!getStr(sp, 'filter') || getStr(sp, 'filter') === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>
-              Wszystkie
-            </Link>
-            <Link href="?filter=matched" className={`rounded-full px-4 py-1 text-sm font-medium transition ${getStr(sp, 'filter') === 'matched' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>
-              Dopasowane
-            </Link>
+            {(() => {
+              const base = new URLSearchParams();
+              if (q) base.set("q", q);
+              if (typ) base.set("typ", typ);
+              if (sub) base.set("sub", sub);
+              if (min) base.set("min", min);
+              if (max) base.set("max", max);
+              if (sort) base.set("sort", sort);
+              const allParams = new URLSearchParams(base); allParams.set("filter", "all");
+              const matchedParams = new URLSearchParams(base); matchedParams.set("filter", "matched");
+              return (
+                <>
+                  <Link href={`?${allParams.toString()}`} className={`rounded-full px-4 py-1 text-sm font-medium transition ${!getStr(sp, 'filter') || getStr(sp, 'filter') === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>
+                    Wszystkie
+                  </Link>
+                  <Link href={`?${matchedParams.toString()}`} className={`rounded-full px-4 py-1 text-sm font-medium transition ${getStr(sp, 'filter') === 'matched' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>
+                    Dopasowane
+                  </Link>
+                </>
+              );
+            })()}
           </div>
         </div>
 

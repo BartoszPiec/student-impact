@@ -8,8 +8,20 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Student2Work",
-  description: "Platforma łącząca studentów z firmami",
+  title: "Student2Work — Zlecenia dla Studentów",
+  description: "Platforma łącząca studentów z firmami. Znajdź zlecenia, buduj portfolio i zarabiaj jeszcze na studiach.",
+  openGraph: {
+    title: "Student2Work — Zlecenia dla Studentów",
+    description: "Platforma łącząca studentów z firmami. Znajdź zlecenia, buduj portfolio i zarabiaj jeszcze na studiach.",
+    type: "website",
+    locale: "pl_PL",
+    siteName: "Student2Work",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Student2Work — Zlecenia dla Studentów",
+    description: "Platforma łącząca studentów z firmami. Znajdź zlecenia, buduj portfolio i zarabiaj jeszcze na studiach.",
+  },
 };
 
 export default function RootLayout({

@@ -263,7 +263,7 @@ export default async function ProfilePage() {
                         <div className="min-w-0">
                           <div className="text-[10px] uppercase font-bold text-slate-400">Portfolio</div>
                           {(student as any)?.portfolio_url ? (
-                            <a href={(student as any).portfolio_url} target="_blank" className="text-sm font-bold text-indigo-600 hover:underline truncate block">Link do portfolio</a>
+                            <a href={(student as any).portfolio_url} rel="noopener noreferrer" target="_blank" className="text-sm font-bold text-indigo-600 hover:underline truncate block">Link do portfolio</a>
                           ) : <span className="text-sm text-slate-500 font-medium">Brak</span>}
                         </div>
                       </div>
@@ -273,7 +273,7 @@ export default async function ProfilePage() {
                         <div className="min-w-0">
                           <div className="text-[10px] uppercase font-bold text-slate-400">LinkedIn</div>
                           {(student as any)?.linkedin_url ? (
-                            <a href={(student as any).linkedin_url} target="_blank" className="text-sm font-bold text-blue-700 hover:underline truncate block">Profil LinkedIn</a>
+                            <a href={(student as any).linkedin_url} rel="noopener noreferrer" target="_blank" className="text-sm font-bold text-blue-700 hover:underline truncate block">Profil LinkedIn</a>
                           ) : <span className="text-sm text-slate-500 font-medium">Brak</span>}
                         </div>
                       </div>
@@ -316,12 +316,12 @@ export default async function ProfilePage() {
 
                     <div className="flex gap-2">
                       {(company as any)?.website && (
-                        <a href={(company as any).website} target="_blank" className="flex-1 btn bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2 rounded-xl text-center text-sm font-bold transition-colors">
+                        <a href={(company as any).website} rel="noopener noreferrer" target="_blank" className="flex-1 btn bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2 rounded-xl text-center text-sm font-bold transition-colors">
                           Strona WWW
                         </a>
                       )}
                       {(company as any)?.linkedin_url && (
-                        <a href={(company as any).linkedin_url} target="_blank" className="flex-1 btn bg-blue-50 hover:bg-blue-100 text-blue-700 py-2 rounded-xl text-center text-sm font-bold transition-colors">
+                        <a href={(company as any).linkedin_url} rel="noopener noreferrer" target="_blank" className="flex-1 btn bg-blue-50 hover:bg-blue-100 text-blue-700 py-2 rounded-xl text-center text-sm font-bold transition-colors">
                           LinkedIn
                         </a>
                       )}

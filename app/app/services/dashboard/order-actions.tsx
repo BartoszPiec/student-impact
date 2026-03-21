@@ -136,7 +136,7 @@ export default function OrderActions({ order, chatLink, companyProfile }: OrderA
                                 <div className="space-y-1">
                                     <div className="text-xs text-muted-foreground uppercase font-semibold">WWW</div>
                                     {companyProfile?.website ? (
-                                        <a href={companyProfile.website} target="_blank" className="text-sm text-indigo-600 hover:underline flex items-center gap-1">
+                                        <a href={companyProfile.website} rel="noopener noreferrer" target="_blank" className="text-sm text-indigo-600 hover:underline flex items-center gap-1">
                                             <Globe className="w-3 h-3" />
                                             Strona internetowa
                                         </a>

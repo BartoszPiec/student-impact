@@ -10,6 +10,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validateEmail(e: string) {
+  if (!e.trim()) return "Email jest wymagany.";
+  if (!EMAIL_RE.test(e)) return "Podaj prawidłowy adres email.";
+  return null;
+}
+
+function validatePassword(p: string, isRegister: boolean) {
+  if (!p) return "Hasło jest wymagane.";
+  if (isRegister && p.length < 8) return "Hasło musi mieć co najmniej 8 znaków.";
+  return null;
+}
+
 export default function AuthPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -18,6 +32,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   // RODO consent states
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -39,8 +54,26 @@ export default function AuthPage() {
     return () => clearInterval(interval);
   }, []);
 
+  async function handlePasswordReset() {
+    const emailErr = validateEmail(email);
+    if (emailErr) { setInfo(emailErr); return; }
+    setLoading(true);
+    setInfo(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/app/reset-password`,
+    });
+    setLoading(false);
+    if (error) return setInfo(error.message);
+    setResetSent(true);
+    setInfo("Link do resetowania hasła został wysłany na podany adres email.");
+  }
+
   async function signUp(e: React.FormEvent) {
     e.preventDefault();
+    const emailErr = validateEmail(email);
+    if (emailErr) { setInfo(emailErr); return; }
+    const passErr = validatePassword(password, true);
+    if (passErr) { setInfo(passErr); return; }
     if (!acceptedTerms || !acceptedPrivacy) {
       setInfo("Musisz zaakceptować regulamin oraz zgodę RODO, aby założyć konto.");
       return;
@@ -68,6 +101,10 @@ export default function AuthPage() {
 
   async function signIn(e: React.FormEvent) {
     e.preventDefault();
+    const emailErr = validateEmail(email);
+    if (emailErr) { setInfo(emailErr); return; }
+    const passErr = validatePassword(password, false);
+    if (passErr) { setInfo(passErr); return; }
     setLoading(true);
     setInfo(null);
 
@@ -164,7 +201,14 @@ export default function AuthPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-[#1a1a2e] font-semibold">Hasło</Label>
-                    <span className="text-sm text-[#667eea] cursor-pointer hover:underline font-medium">Zapomniałeś hasła?</span>
+                    <button
+                      type="button"
+                      onClick={handlePasswordReset}
+                      disabled={loading || resetSent}
+                      className="text-sm text-[#667eea] hover:underline font-medium disabled:opacity-50"
+                    >
+                      {resetSent ? "Wysłano email" : "Zapomniałeś hasła?"}
+                    </button>
                   </div>
                   <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 bg-gray-50 border-2 border-gray-200 focus:bg-white focus:border-[#667eea] transition-all rounded-xl" />
                 </div>
@@ -214,7 +258,7 @@ export default function AuthPage() {
                       className="mt-0.5 border-gray-300 data-[state=checked]:bg-[#667eea] data-[state=checked]:border-[#667eea]"
                     />
                     <label htmlFor="terms" className="text-xs text-gray-600 leading-relaxed cursor-pointer select-none">
-                      Akceptuję <a href="/regulamin" target="_blank" className="text-[#667eea] underline hover:text-[#764ba2]">regulamin</a> i <a href="/polityka-prywatnosci" target="_blank" className="text-[#667eea] underline hover:text-[#764ba2]">politykę prywatności</a> serwisu Student2Work. <span className="text-red-500">*</span>
+                      Akceptuję <a href="/regulamin" rel="noopener noreferrer" target="_blank" className="text-[#667eea] underline hover:text-[#764ba2]">regulamin</a> i <a href="/polityka-prywatnosci" rel="noopener noreferrer" target="_blank" className="text-[#667eea] underline hover:text-[#764ba2]">politykę prywatności</a> serwisu Student2Work. <span className="text-red-500">*</span>
                     </label>
                   </div>
                   <div className="flex items-start gap-3">
@@ -249,7 +293,7 @@ export default function AuthPage() {
           </Tabs>
 
           {info && (
-            <div className={`text-sm p-4 rounded-xl flex items-center gap-2 ${info.includes("konto") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+            <div className={`text-sm p-4 rounded-xl flex items-center gap-2 ${(info.startsWith("Konto") || info.startsWith("Link")) ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
               {info}
             </div>
           )}
