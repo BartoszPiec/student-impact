@@ -47,8 +47,12 @@ export async function generateCompanyInvoice(
     const offerTitle = (contract.applications as any)?.offers?.tytul || "Usługa platformowa";
 
     // Generate invoice number from sequence
-    const { data: seqResult } = await admin.rpc("nextval_invoice_number");
-    const seqNum = seqResult || Math.floor(Math.random() * 99999);
+    const { data: seqResult, error: seqError } = await admin.rpc("nextval_invoice_number");
+    if (seqError || !seqResult) {
+      console.error("[generate-invoice] Failed to get invoice sequence number:", seqError);
+      throw new Error("Nie udało się wygenerować numeru faktury — sekwencja niedostępna");
+    }
+    const seqNum = seqResult as number;
     const year = new Date().getFullYear();
     const invoiceNumber = `FV/${year}/${String(seqNum).padStart(5, "0")}`;
 
@@ -184,8 +188,12 @@ export async function generateStudentInvoice(
     const studentEmail = authUser?.user?.email || "";
 
     // Generate invoice number
-    const { data: seqResult } = await admin.rpc("nextval_invoice_number");
-    const seqNum = seqResult || Math.floor(Math.random() * 99999);
+    const { data: seqResult, error: seqError } = await admin.rpc("nextval_invoice_number");
+    if (seqError || !seqResult) {
+      console.error("[generate-invoice] Failed to get receipt sequence number:", seqError);
+      throw new Error("Nie udało się wygenerować numeru rachunku — sekwencja niedostępna");
+    }
+    const seqNum = seqResult as number;
     const year = new Date().getFullYear();
     const invoiceNumber = `RCH/${year}/${String(seqNum).padStart(5, "0")}`;
 

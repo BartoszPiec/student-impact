@@ -506,7 +506,7 @@ export default function LandingPage() {
       <footer className="py-10 px-[5%] bg-[#1a1a2e] text-white/50 border-t border-white/5">
         <div className="w-full max-w-[2000px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="text-xl font-bold text-white">🎓 Student2Work</div>
-          <div className="text-sm">© 2026 Student2Work. All rights reserved.</div>
+          <div className="text-sm">© {new Date().getFullYear()} Student2Work. All rights reserved.</div>
         </div>
       </footer>
     </div>
@@ -569,7 +569,7 @@ function TestimonialCard({ name, role, text, badge }: { name: string, role: stri
   return (
     <RevealOnScroll className="bg-white p-8 rounded-3xl shadow-lg border border-slate-100 relative group hover:-translate-y-2 transition-all">
       <div className="text-[#fbbf24] text-xl mb-4 group-hover:animate-star-bounce">★★★★★</div>
-      <p className="text-[#5a5a7a] leading-relaxed mb-6 italic italic overflow-hidden line-clamp-4">
+      <p className="text-[#5a5a7a] leading-relaxed mb-6 italic overflow-hidden line-clamp-4">
         "{text}"
       </p>
       <div className="flex items-center justify-between">
@@ -701,7 +701,7 @@ function ServiceDetailsModal({ name }: { name: string }) {
           </DialogHeader>
 
           <div className="space-y-8">
-            <p className="text-lg text-[#5a5a7a] leading-relaxed italic italic">
+            <p className="text-lg text-[#5a5a7a] leading-relaxed italic">
               "{data.description}"
             </p>
 

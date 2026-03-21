@@ -15,11 +15,26 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { contractId, applicationId, amount } = body;
 
-    if (!contractId || !applicationId || !amount) {
+    if (!contractId || !applicationId || amount === undefined) {
       return NextResponse.json(
         { error: "Missing required fields: contractId, applicationId, amount" },
         { status: 400 }
       );
+    }
+
+    // Walidacja kwoty
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return NextResponse.json({ error: "Kwota musi być liczbą dodatnią" }, { status: 400 });
+    }
+    if (parsedAmount > 500_000) {
+      return NextResponse.json({ error: "Kwota przekracza dozwolony limit (500 000 PLN)" }, { status: 400 });
+    }
+
+    // Walidacja UUID
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(contractId) || !UUID_RE.test(applicationId)) {
+      return NextResponse.json({ error: "Nieprawidłowe ID" }, { status: 400 });
     }
 
     // Verify contract exists and user is the company
@@ -56,7 +71,7 @@ export async function POST(req: NextRequest) {
     const milestoneTitles = milestones.map((m: any) => m.title).join(", ");
 
     // Amount in grosze (PLN smallest unit)
-    const amountInGrosze = Math.round(amount * 100);
+    const amountInGrosze = Math.round(parsedAmount * 100);
     const platformFee = calculatePlatformFee(amountInGrosze);
 
     // Get application info for better description
@@ -69,7 +84,11 @@ export async function POST(req: NextRequest) {
     const offerTitle = (application?.offers as any)?.tytul || "Zlecenie";
 
     // Build success and cancel URLs
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!baseUrl) {
+      console.error("NEXT_PUBLIC_APP_URL is not set");
+      return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+    }
     const successUrl = `${baseUrl}/app/deliverables/${applicationId}?payment=success&session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${baseUrl}/app/deliverables/${applicationId}?payment=cancelled`;
 
@@ -125,11 +144,9 @@ export async function POST(req: NextRequest) {
       url: session.url,
       sessionId: session.id,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Failed to create checkout session";
     console.error("Stripe checkout error:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to create checkout session" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

@@ -1,5 +1,3 @@
-import { env } from "process";
-
 export interface CeidgCompanyData {
     name: string;
     nip: string;
@@ -21,7 +19,7 @@ export class CeidgClient {
     private baseUrl = "https://dane.biznes.gov.pl/api/ceidg/v2";
 
     constructor() {
-        this.apiKey = process.env.CEIDG_API_KEY || "eyJraWQiOiJjZWlkZyIsImFsZyI6IkhTNTEyIn0.eyJnaXZlbl9uYW1lIjoiQmFydG9zeiIsInBlc2VsIjoiOTkwOTEwMDA2OTkiLCJpYXQiOjE3NjcxOTUxOTIsImZhbWlseV9uYW1lIjoiUGllYyIsImNsaWVudF9pZCI6IlVTRVItOTkwOTEwMDA2OTktQkFSVE9TWi1QSUVDIn0.B2L9-vi67GJx7foLiSJ5BxpflLiUpif8cmw_WyzEsmvghgsA3e29JS96npbZABTqZtBuGlVPxOqSgaI7_PJpwA";
+        this.apiKey = process.env.CEIDG_API_KEY;
     }
 
     async getCompanyByNip(nip: string): Promise<CeidgCompanyData | null> {

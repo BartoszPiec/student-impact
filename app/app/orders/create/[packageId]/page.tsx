@@ -119,7 +119,7 @@ export default async function CreateOrderPage({
     if (!user) redirect("/auth");
 
     // Sprawdź czy to firma i pobierz profil
-    const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
     if (profile?.role !== "company") redirect("/app");
 
     // Pobierz dane firmy do pre-fillowania (z company_profiles / auth meta)

@@ -221,8 +221,8 @@ function ListIcon({ type }: { type: string }) {
 
 function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
     return (
-        <div className="overflow-hidden rounded-[1.5rem] border border-slate-200/50 my-12 bg-white relative max-w-full animate-in slide-in-from-bottom-4 fade-in duration-700 shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
-            <div className="w-full overflow-x-auto scroller">
+        <div className="rounded-[1.5rem] border border-slate-200/50 my-12 bg-white relative max-w-full animate-in slide-in-from-bottom-4 fade-in duration-700 shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
+            <div className="w-full overflow-x-auto scroller rounded-[1.5rem]">
                 <table className="w-full text-[15.5px] sm:text-[16px] border-collapse min-w-[600px] lg:min-w-full">
                     <thead>
                         <tr>

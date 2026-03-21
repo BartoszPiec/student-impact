@@ -195,7 +195,7 @@ export default async function ServiceOrderDetailPage(props: Props) {
                                     {company?.website && (
                                         <div className="flex items-center gap-2">
                                             <Globe className="w-4 h-4 text-slate-400 shrink-0" />
-                                            <a href={company.website} target="_blank" className="text-indigo-600 hover:underline truncate">
+                                            <a href={company.website} rel="noopener noreferrer" target="_blank" className="text-indigo-600 hover:underline truncate">
                                                 {company.website.replace(/^https?:\/\//, '')}
                                             </a>
                                         </div>

@@ -29,7 +29,7 @@ export default async function StudentApplicationsPage() {
   if (!user) redirect("/auth");
 
   // Check Profile Role
-  const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
   if (profile?.role !== "student") redirect("/app");
 
   // Fetch Applications

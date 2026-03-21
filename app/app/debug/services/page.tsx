@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { notFound } from "next/navigation";
 
 export default function DebugServicesPage() {
+    if (process.env.NODE_ENV !== "development") notFound();
     const supabase = createClient();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);

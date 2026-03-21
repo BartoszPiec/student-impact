@@ -1,7 +1,8 @@
-
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function DebugBadgePage() {
+    if (process.env.NODE_ENV !== "development") notFound();
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 

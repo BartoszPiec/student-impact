@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
 import { Loader2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
@@ -34,7 +35,7 @@ export default function ImageUpload({ value = [], onChange, bucketName = "portfo
                     .upload(fileName, file);
 
                 if (error) {
-                    console.error("Upload error:", error);
+                    toast.error(`Błąd przesyłania pliku: ${file.name}`);
                     continue;
                 }
 
@@ -44,8 +45,7 @@ export default function ImageUpload({ value = [], onChange, bucketName = "portfo
 
             onChange([...value, ...newUrls]);
         } catch (err) {
-            console.error(err);
-            alert("Błąd podczas wysyłania zdjęć.");
+            toast.error("Błąd podczas wysyłania zdjęć.");
         } finally {
             setIsUploading(false);
             e.target.value = "";
@@ -63,7 +63,7 @@ export default function ImageUpload({ value = [], onChange, bucketName = "portfo
                     <div key={url} className="relative aspect-video rounded-lg overflow-hidden border bg-slate-100 group">
                         <Image
                             src={url}
-                            alt="Portfolio item"
+                            alt={`Zdjęcie portfolio ${index + 1}`}
                             fill
                             className="object-cover"
                         />

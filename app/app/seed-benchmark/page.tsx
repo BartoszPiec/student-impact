@@ -1,3 +1,5 @@
+import { notFound } from 'next/navigation';
+if (process.env.NODE_ENV !== "development") notFound();
 
 const { createClient } = require('@supabase/supabase-js');
 

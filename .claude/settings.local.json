@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/Bartosz i Natalia/Desktop/ui-ux-pro-max/**)",
+      "Bash(grep -rn target=\"\"_blank\"\" 'C:\\\\Users\\\\Bartosz i Natalia\\\\Desktop\\\\Student-impact-antygraviti\\\\.claude\\\\worktrees\\\\beautiful-pascal\\\\app' --include=*.tsx)"
+    ]
+  }
+}
