@@ -81,7 +81,7 @@ export default function AuthPage() {
     setLoading(true);
     setInfo(null);
 
-    const { error } = await supabase.auth.signUp({
+    const { data: signUpData, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -96,6 +96,21 @@ export default function AuthPage() {
 
     setLoading(false);
     if (error) return setInfo(error.message);
+
+    // Zapisz timestamps RODO do tabeli profiles (trigger DB tworzy wiersz synchronicznie)
+    if (signUpData.user?.id) {
+      const now = new Date().toISOString();
+      await supabase
+        .from("profiles")
+        .update({
+          accepted_terms_at: now,
+          accepted_privacy_at: now,
+          accepted_marketing: acceptedMarketing,
+        })
+        .eq("user_id", signUpData.user.id);
+      // Jeśli update nie trafi (profile jeszcze nie istnieje) — dane są już w user_metadata powyżej
+    }
+
     setInfo("Konto utworzone. Zaloguj się (lub potwierdź email, jeśli masz włączone).");
   }
 
