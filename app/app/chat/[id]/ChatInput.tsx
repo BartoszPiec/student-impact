@@ -81,7 +81,11 @@ export function ChatInput({
     const submitRate = async () => {
         if (!rateValue) return;
         const rate = parseFloat(rateValue);
-        await sendEventMessage(conversationId, "rate.proposed", { proposed_stawka: rate }, "");
+        if (isNaN(rate)) {
+            alert("Proszę podać prawidłowa kwotę.");
+            return;
+        }
+        await sendEventMessage(conversationId, "rate.proposed", { proposed_stawka: rate }, `Proponuję stawkę: ${rate} zł`);
         setRateOpen(false);
         setRateValue("");
     };
@@ -165,10 +169,10 @@ export function ChatInput({
                     <Button
                         onClick={handleSend}
                         size="icon"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-transform active:scale-95"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200/50 transition-all hover:scale-105 active:scale-95 z-10"
                         disabled={isUploading || (!message.trim() && !attachment)}
                     >
-                        <Send className="w-4 h-4 ml-0.5" />
+                        <Send className="w-5 h-5 ml-0.5" />
                     </Button>
                 </div>
             </div>
@@ -189,8 +193,8 @@ export function ChatInput({
                         />
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setRateOpen(false)}>Anuluj</Button>
-                        <Button onClick={submitRate}>Wyślij propozycję</Button>
+                        <Button variant="outline" onClick={() => setRateOpen(false)} className="rounded-xl border-slate-200">Anuluj</Button>
+                        <Button onClick={submitRate} className="rounded-xl gradient-primary shadow-primary hover:opacity-90 transition-opacity">Wyślij propozycję</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -210,8 +214,8 @@ export function ChatInput({
                         />
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setDeadlineOpen(false)}>Anuluj</Button>
-                        <Button onClick={submitDeadline}>Wyślij propozycję</Button>
+                        <Button variant="outline" onClick={() => setDeadlineOpen(false)} className="rounded-xl border-slate-200">Anuluj</Button>
+                        <Button onClick={submitDeadline} className="rounded-xl gradient-primary shadow-primary hover:opacity-90 transition-opacity">Wyślij propozycję</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

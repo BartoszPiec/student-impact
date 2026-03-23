@@ -26,7 +26,7 @@ export function PremiumPageHeader({
     return (
         <div className={cn(
             "relative bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 pt-10 pb-12 text-white shadow-xl overflow-hidden mb-8",
-            "rounded-b-3xl border-b border-white/5",
+            "border-b border-white/5",
             className
         )}>
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>

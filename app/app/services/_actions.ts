@@ -436,10 +436,15 @@ export async function acceptServiceCounterAction(orderId: string) {
     if (!order || order.student_id !== user.id) throw new Error("Nie masz uprawnień.");
 
     const { error } = await supabase.from("service_orders")
-        .update({ status: "accepted", agreed_amount: order.counter_amount })
+        .update({ status: "accepted", agreed_amount: order.counter_amount, amount: order.counter_amount })
         .eq("id", orderId);
 
     if (error) throw new Error(error.message);
+
+    // ✅ [Realization Guard] — same as acceptServiceProposalAction
+    await supabase.rpc("ensure_contract_for_service_order", {
+        p_service_order_id: orderId,
+    });
 
     const { data: conv } = await supabase.from("conversations").select("id").eq("package_id", order.package_id).eq("student_id", order.student_id).eq("company_id", order.company_id).maybeSingle();
 

@@ -1,3 +1,4 @@
+import type { Metadata, ResolvingMetadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -18,6 +19,44 @@ function AppStatusLabel(status: string) {
   if (status === "rejected") return <span className="text-red-500 font-bold">Odrzucona</span>;
   if (status === "countered") return <span className="text-amber-500 font-bold">Negocjacje</span>;
   return <span className="text-blue-500 font-bold">Wysłana</span>;
+}
+
+export async function generateMetadata(
+  { params }: { params: Promise<{ id: string }> },
+  parent: ResolvingMetadata
+): Promise<Metadata> {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: offer } = await supabase
+    .from("offers")
+    .select("tytul, opis, company_profiles(nazwa)")
+    .eq("id", id)
+    .maybeSingle();
+ 
+  if (!offer) {
+    return {
+      title: "Oferta nie znaleziona | Student2Work",
+    };
+  }
+
+  const companyName = (offer as any).company_profiles?.nazwa || "Firma";
+  const desc = offer.opis ? offer.opis.substring(0, 160).trim() + (offer.opis.length > 160 ? "..." : "") : "Sprawdź tę ofertę na platformie Student2Work!";
+ 
+  return {
+    title: `${offer.tytul} | ${companyName} - Student2Work`,
+    description: desc,
+    openGraph: {
+      title: `${offer.tytul} | ${companyName}`,
+      description: desc,
+      type: "website",
+      siteName: "Student2Work",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${offer.tytul} | ${companyName}`,
+      description: desc,
+    },
+  };
 }
 
 export default async function OfferDetailsPage({

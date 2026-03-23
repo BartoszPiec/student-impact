@@ -36,7 +36,7 @@ export default async function RealizationWorkspace({
         .from("applications")
         .select(`
             id, status, realization_status, student_id, offer_id, created_at, agreed_stawka,
-            offers ( id, tytul, company_id, stawka, typ, is_platform_service )
+            offers ( id, tytul, company_id, stawka, typ, is_platform_service, service_package_id )
         `)
         .eq("id", applicationId)
         .maybeSingle();
@@ -82,7 +82,7 @@ export default async function RealizationWorkspace({
     if (!appRow) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] text-center space-y-4">
-                <div className="bg-slate-50 p-6 rounded-full">
+                <div className="bg-slate-50 p-6 rounded-none border border-slate-200 shadow-sm">
                     <Briefcase className="w-12 h-12 text-slate-300" />
                 </div>
                 <div className="space-y-2">
@@ -104,6 +104,18 @@ export default async function RealizationWorkspace({
 
     const isStudent = user.id === studentId;
     const isCompany = user.id === companyId;
+
+    // Fetch student-only instructions (locked_content) from service_package — only for platform services
+    let studentInstructions: string | null = null;
+    const servicePackageId = (offer as any)?.service_package_id ?? null;
+    if (isStudent && servicePackageId) {
+        const { data: pkg } = await supabase
+            .from("service_packages")
+            .select("locked_content")
+            .eq("id", servicePackageId)
+            .maybeSingle();
+        studentInstructions = pkg?.locked_content ?? null;
+    }
 
     if (!isStudent && !isCompany) {
         return <div className="p-12 text-center text-red-500">Brak uprawnień do tego zlecenia (ID użytkownika nie pasuje).</div>;
@@ -274,7 +286,7 @@ export default async function RealizationWorkspace({
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                             <div className="space-y-3">
                                 <div className="flex items-center gap-3">
-                                    <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl ring-1 ring-indigo-500/50">
+                                    <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-none ring-1 ring-indigo-500/50">
                                         <Briefcase className="w-7 h-7" />
                                     </div>
                                     <div>
@@ -308,7 +320,7 @@ export default async function RealizationWorkspace({
                                     </p>
                                 </div>
                                 <div className="h-10 w-px bg-white/10 mx-2 hidden md:block" />
-                                <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-2xl">
+                                <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-none">
                                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">ID Zlecenia</p>
                                     <code className="text-xs text-indigo-400 font-mono">#{applicationId.slice(0, 8)}</code>
                                 </div>
@@ -321,19 +333,19 @@ export default async function RealizationWorkspace({
             {/* MAIN CONTENT AREA */}
             <div className="container mx-auto max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 -mt-10 relative z-20 pb-20">
                 <Tabs defaultValue="status" className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/90 backdrop-blur-xl p-4 rounded-[2.5rem] border border-white/50 shadow-2xl shadow-slate-200/40">
-                        <TabsList className="bg-slate-100/50 p-1.5 h-auto flex flex-wrap md:inline-flex w-full md:w-auto rounded-[1.5rem] gap-1.5 border-none">
-                            <TabsTrigger value="status" className="flex-1 md:flex-none py-3 px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
-                                <Clock className="w-4 h-4 mr-2" /> Status
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/90 backdrop-blur-xl p-4 rounded-none border border-slate-200 shadow-2xl shadow-slate-200/40">
+                        <TabsList className="bg-slate-100/50 p-1.5 h-auto flex flex-wrap md:inline-flex w-full md:w-auto rounded-none gap-1.5 border-none">
+                            <TabsTrigger value="status" className="flex-1 md:flex-none py-2 md:py-3 px-3 md:px-8 rounded-none font-black text-[10px] md:text-xs uppercase tracking-wider md:tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
+                                <Clock className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5" /> Status
                             </TabsTrigger>
-                            <TabsTrigger value="files" className="flex-1 md:flex-none py-3 px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
-                                <FileText className="w-4 h-4 mr-2" /> Pliki
+                            <TabsTrigger value="files" className="flex-1 md:flex-none py-2 md:py-3 px-3 md:px-8 rounded-none font-black text-[10px] md:text-xs uppercase tracking-wider md:tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
+                                <FileText className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5" /> Pliki
                             </TabsTrigger>
-                            <TabsTrigger value="secrets" className="flex-1 md:flex-none py-3 px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
-                                <Lock className="w-4 h-4 mr-2" /> Dostępy
+                            <TabsTrigger value="secrets" className="flex-1 md:flex-none py-2 md:py-3 px-3 md:px-8 rounded-none font-black text-[10px] md:text-xs uppercase tracking-wider md:tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
+                                <Lock className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5" /> Dostępy
                             </TabsTrigger>
-                            <TabsTrigger value="chat" className="flex-1 md:flex-none py-3 px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
-                                <MessageSquare className="w-4 h-4 mr-2" /> Wiadomości
+                            <TabsTrigger value="chat" className="flex-1 md:flex-none py-2 md:py-3 px-3 md:px-8 rounded-none font-black text-[10px] md:text-xs uppercase tracking-wider md:tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
+                                <MessageSquare className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5" /> Wiadomości
                             </TabsTrigger>
                         </TabsList>
 
@@ -359,6 +371,8 @@ export default async function RealizationWorkspace({
                                 contract={contract}
                                 totalAmount={Number(appRow?.agreed_stawka || offer?.stawka || 0)}
                                 enableNegotiation={!offer?.is_platform_service && offer?.typ !== 'job_offer'}
+                                isPlatformService={offer?.is_platform_service ?? false}
+                                studentInstructions={studentInstructions}
                                 contractDocuments={contractDocuments}
                             />
                         </TabsContent>

@@ -8,6 +8,8 @@ import {
     Wallet, TrendingUp, Calendar, ArrowUpRight, Star,
     CheckCircle2, Clock, DollarSign, Medal, Sparkles
 } from "lucide-react";
+import { PremiumPageHeader } from "@/components/ui/premium-page-header";
+import { PageContainer } from "@/components/ui/page-container";
 
 export const dynamic = "force-dynamic";
 
@@ -169,28 +171,16 @@ export default async function FinancesPage() {
     const maxChartValue = Math.max(...chartData.map(d => d.total), 100); // Avoid div by zero
 
     return (
-        <div className="space-y-12 pb-20">
-            {/* PREMIUM HEADER BANNER */}
-            <div className="relative overflow-hidden rounded-[2.5rem] bg-slate-900 px-8 py-12 md:px-12 md:py-16 text-white shadow-2xl">
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
-                <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
-                <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px]" />
-                <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-purple-500/10 rounded-full blur-[80px]" />
+        <main className="pb-20">
+            <PremiumPageHeader
+                badge="Twoje Finanse"
+                title="Podsumowanie Zarobków"
+                description="Śledź przychody, analizuj sukcesy i planuj kolejne realizacje w jednym, przejrzystym widoku."
+                icon={<Wallet className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
+            />
 
-                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-                    <div className="text-center md:text-left space-y-4">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-[10px] font-black uppercase tracking-widest">
-                            <Wallet className="h-3 w-3" /> Twoje Finanse
-                        </div>
-                        <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-transparent">
-                            Podsumowanie Zarobków
-                        </h1>
-                        <p className="text-indigo-100/60 text-lg font-medium max-w-xl">
-                            Śledź przychody, analizuj sukcesy i planuj kolejne realizacje w jednym, przejrzystym widoku.
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <PageContainer className="space-y-12">
+
 
             <div className="grid gap-8 lg:grid-cols-3">
                 {/* LEFT COL: STATS & CHART */}
@@ -360,6 +350,7 @@ export default async function FinancesPage() {
                     </Card>
                 </div>
             </div>
-        </div>
+            </PageContainer>
+        </main>
     );
 }

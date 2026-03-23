@@ -189,35 +189,113 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
     if (notes) customDescription += `\n\n📝 Dodatkowe uwagi:\n${notes}`;
 
 
-    // Create Offer
+    // Platform services (systemowe) mają student_id = NULL — używamy starego flow (tylko offers)
+    if (isPlatformService || !pkg.student_id) {
+        const { data: offer, error: offerError } = await supabase
+            .from("offers")
+            .insert({
+                company_id: user.id,
+                tytul: pkg.title,
+                opis: customDescription,
+                stawka: pkg.price,
+                czas: `${pkg.delivery_time_days} dni`,
+                status: "published",
+                typ: "projekt",
+                is_platform_service: true,
+                service_package_id: pkg.id,
+                technologies: [],
+                contract_type: "b2b",
+                kategoria: pkg.category,
+                wymagania: pkg.features || [],
+            })
+            .select("id")
+            .single();
+
+        if (offerError) {
+            console.error("Error creating platform offer:", offerError);
+            throw new Error(offerError.message || "Unknown database error");
+        }
+
+        revalidatePath("/app/company/offers");
+        redirect(`/app/offers/${offer.id}`);
+    }
+
+    // --- Student gig flow (student_id istnieje) ---
+
+    // 1. Create Service Order (visible to student in /app/services/dashboard)
+    const { data: order, error: orderError } = await supabase
+        .from("service_orders")
+        .insert({
+            company_id: user.id,
+            student_id: pkg.student_id,
+            package_id: packageId,
+            status: "inquiry",
+            amount: pkg.price,
+            requirements: customDescription,
+            title: pkg.title,
+        })
+        .select("id")
+        .single();
+
+    if (orderError) {
+        console.error("Error creating service order:", orderError);
+        throw new Error(orderError.message || "Unknown database error");
+    }
+
+    // 2. Create private offer context (needed for conversation linking by package_id)
     const { data: offer, error: offerError } = await supabase
         .from("offers")
         .insert({
             company_id: user.id,
-            tytul: pkg.title,
-            opis: customDescription, // Using customized description
+            tytul: `Zamówienie: ${pkg.title}`,
+            opis: customDescription,
             stawka: pkg.price,
-            czas: `${pkg.delivery_time_days} dni`,
             status: "published",
-            typ: isPlatformService ? "projekt" : "zlecenie",
-            is_platform_service: isPlatformService,
+            is_private: true,
             service_package_id: pkg.id,
-            technologies: [],
-            contract_type: "b2b",
-            kategoria: pkg.category,
-            wymagania: pkg.features || [],
-            obligations: materialsLink // Store material link in obligations too for easy access
+            typ: "zlecenie",
         })
         .select("id")
         .single();
 
     if (offerError) {
-        console.error("Error creating customized offer:", offerError);
+        console.error("Error creating offer context:", offerError);
         throw new Error(offerError.message || "Unknown database error");
     }
 
+    // 3. Create conversation with package_id so service actions can find it
+    const { data: conversation } = await supabase
+        .from("conversations")
+        .insert({
+            offer_id: offer.id,
+            package_id: packageId,
+            student_id: pkg.student_id,
+            company_id: user.id,
+            type: "inquiry",
+        })
+        .select("id")
+        .single();
+
+    // 4. Notify student about new inquiry
+    await supabase.from("notifications").insert({
+        user_id: pkg.student_id,
+        typ: "application_new",
+        payload: {
+            snippet: `Otrzymałeś nowe zamówienie na usługę: ${pkg.title}`,
+            service_order_id: order.id,
+            conversation_id: conversation?.id,
+        }
+    });
+
     revalidatePath("/app/company/offers");
-    redirect(`/app/offers/${offer.id}`);
+    revalidatePath("/app/services/dashboard");
+
+    // 5. Redirect company to chat
+    if (conversation?.id) {
+        redirect(`/app/chat/${conversation.id}`);
+    } else {
+        redirect("/app/company/offers");
+    }
 }
 
 

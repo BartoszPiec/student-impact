@@ -11,6 +11,23 @@ import { ContractBDocument } from "@/lib/pdf/contract-b-template";
 import { generateStudentInvoice } from "@/lib/pdf/generate-invoice";
 import type { ContractData } from "@/lib/pdf/types";
 
+async function notifyUser(
+  supabase: any,
+  userId: string,
+  typ: string,
+  payload: Record<string, any> = {}
+) {
+  try {
+    await supabase.rpc("create_notification", {
+      p_user_id: userId,
+      p_typ: typ,
+      p_payload: payload,
+    });
+  } catch (err) {
+    console.error("notifyUser error:", err);
+  }
+}
+
 
 export async function getSignedStorageUrl(bucket: string, pathOrUrl: string, expiresInSeconds: number = 600) {
   const supabase = await createClient();
@@ -97,6 +114,36 @@ export async function submitDeliverable(applicationId: string, formData: FormDat
   });
   if (error) throw new Error(error.message);
 
+  // Powiadom firmę że student przesłał pracę
+  try {
+    let companyId: string | null = null;
+    let offerTitle: string | null = null;
+    if (sourceType === "application") {
+      const { data: appData } = await supabase
+        .from("applications")
+        .select("offers(company_id, tytul)")
+        .eq("id", applicationId)
+        .maybeSingle();
+      companyId = (appData as any)?.offers?.company_id ?? null;
+      offerTitle = (appData as any)?.offers?.tytul ?? null;
+    } else {
+      const { data: soData } = await supabase
+        .from("service_orders")
+        .select("company_id, package:service_packages(title)")
+        .eq("id", applicationId)
+        .maybeSingle();
+      companyId = (soData as any)?.company_id ?? null;
+      offerTitle = (soData as any)?.package?.title ?? null;
+    }
+    if (companyId) {
+      await notifyUser(supabase, companyId, "deliverable_submitted", {
+        application_id: applicationId,
+        offer_title: offerTitle,
+        snippet: `Student przesłał pracę do zlecenia "${offerTitle ?? "zlecenie"}". Sprawdź i zatwierdź!`,
+      });
+    }
+  } catch {}
+
   revalidatePath(`/app/deliverables/${applicationId}`);
 }
 
@@ -106,7 +153,11 @@ export async function reviewDeliverable(deliverableId: string, status: "accepted
   if (!user.user) redirect("/auth");
 
   // Need appId for revalidation
-  const { data: deliv } = await supabase.from("deliverables").select("application_id").eq("id", deliverableId).single();
+  const { data: deliv } = await supabase
+    .from("deliverables")
+    .select("application_id, applications(student_id, offers(tytul))")
+    .eq("id", deliverableId)
+    .single();
 
   // ✅ [Realization Guard]
   const { error } = await supabase.rpc("review_deliverable_and_progress", {
@@ -115,6 +166,24 @@ export async function reviewDeliverable(deliverableId: string, status: "accepted
     p_feedback: feedback ?? null,
   });
   if (error) throw new Error(error.message);
+
+  // Powiadom studenta o decyzji firmy
+  try {
+    const studentId = (deliv as any)?.applications?.student_id;
+    const offerTitle = (deliv as any)?.applications?.offers?.tytul ?? null;
+    const appId = deliv?.application_id;
+    if (studentId && appId) {
+      const notifType = status === "accepted" ? "deliverable_accepted" : "deliverable_rejected";
+      const snippet = status === "accepted"
+        ? `Twoja praca do zlecenia "${offerTitle ?? "zlecenie"}" została zaakceptowana!`
+        : `Praca do zlecenia "${offerTitle ?? "zlecenie"}" została odrzucona. Sprawdź uwagi i prześlij ponownie.`;
+      await notifyUser(supabase, studentId, notifType, {
+        application_id: appId,
+        offer_title: offerTitle,
+        snippet,
+      });
+    }
+  } catch {}
 
   if (deliv?.application_id) {
     revalidatePath(`/app/deliverables/${deliv.application_id}`);
@@ -193,6 +262,19 @@ export async function submitReview(applicationId: string, rating: number, commen
   }
 
   await supabase.from("reviews").insert(reviewPayload);
+
+  // Powiadom drugą stronę o otrzymanej ocenie
+  try {
+    const offerTitle = appRow?.offers ? (appRow.offers as any)?.tytul : null;
+    const ratingLabel = `${rating}/5 ⭐`;
+    const notifPayload = {
+      application_id: applicationId,
+      offer_title: offerTitle,
+      rating,
+      snippet: `Otrzymałeś ocenę ${ratingLabel} za zlecenie "${offerTitle ?? "zlecenie"}".`,
+    };
+    await notifyUser(supabase, revieweeId, "review_received", notifPayload);
+  } catch {}
 
   // Mark contract as COMPLETED
   // Find contract by source ID
@@ -307,6 +389,25 @@ export async function fundContractAction(contractId: string, applicationId: stri
     .eq("id", applicationId)
     .in("status", ["accepted"]);
 
+  // Powiadom studenta że środki wpłynęły i może zacząć pracę
+  try {
+    const { data: contractData } = await supabase
+      .from("contracts")
+      .select("student_id, total_amount, applications(offers(tytul))")
+      .eq("id", contractId)
+      .maybeSingle();
+    if (contractData?.student_id) {
+      const offerTitle = (contractData as any)?.applications?.offers?.tytul ?? null;
+      await notifyUser(supabase, contractData.student_id, "escrow_funded", {
+        application_id: applicationId,
+        contract_id: contractId,
+        offer_title: offerTitle,
+        amount: contractData.total_amount,
+        snippet: `Środki zostały wpłacone do depozytu. Możesz teraz rozpocząć realizację zlecenia!`,
+      });
+    }
+  } catch {}
+
   revalidatePath(`/app/deliverables/${applicationId}`);
 }
 
@@ -337,6 +438,25 @@ export async function submitMilestoneWorkAction(
   });
 
   if (error) throw new Error(error.message);
+
+  // Powiadom firmę że student przesłał pracę do oceny
+  try {
+    const { data: milestoneData } = await supabase
+      .from("milestones")
+      .select("title, contracts(company_id, application_id, applications(offers(tytul)))")
+      .eq("id", milestoneId)
+      .maybeSingle();
+    const companyId = (milestoneData as any)?.contracts?.company_id;
+    if (companyId) {
+      const offerTitle = (milestoneData as any)?.contracts?.applications?.offers?.tytul ?? null;
+      await notifyUser(supabase, companyId, "milestone_submitted", {
+        application_id: applicationId,
+        offer_title: offerTitle,
+        milestone_title: milestoneData?.title,
+        snippet: `Student przesłał pracę do etapu "${milestoneData?.title}". Sprawdź i zaakceptuj!`,
+      });
+    }
+  } catch {}
 
   revalidatePath(`/app/deliverables/${applicationId}`);
 }
@@ -403,6 +523,29 @@ export async function reviewMilestoneAction(
     }
   }
 
+  // Powiadom studenta o decyzji firmy ws. milestone'a
+  try {
+    const { data: milestoneData } = await supabase
+      .from("milestones")
+      .select("title, contracts(student_id, applications(offers(tytul)))")
+      .eq("id", milestoneId)
+      .maybeSingle();
+    const studentId = (milestoneData as any)?.contracts?.student_id;
+    if (studentId) {
+      const offerTitle = (milestoneData as any)?.contracts?.applications?.offers?.tytul ?? null;
+      const notifType = decision === "accepted" ? "milestone_accepted" : "milestone_rejected";
+      const snippet = decision === "accepted"
+        ? `Etap "${milestoneData?.title}" został zaakceptowany. Środki zostaną przekazane!`
+        : `Etap "${milestoneData?.title}" został odrzucony. Sprawdź uwagi firmy i prześlij poprawki.`;
+      await notifyUser(supabase, studentId, notifType, {
+        application_id: applicationId,
+        offer_title: offerTitle,
+        milestone_title: milestoneData?.title,
+        snippet,
+      });
+    }
+  } catch {}
+
   revalidatePath(`/app/deliverables/${applicationId}`);
 }
 
@@ -425,6 +568,26 @@ export async function fundMilestoneAction(milestoneId: string, applicationId: st
     .update({ status: "in_progress" })
     .eq("id", applicationId)
     .in("status", ["accepted"]);
+
+  // Powiadom studenta że środki wpłynęły
+  try {
+    const { data: milestoneData } = await supabase
+      .from("milestones")
+      .select("title, amount, contracts(student_id, application_id, applications(offers(tytul)))")
+      .eq("id", milestoneId)
+      .maybeSingle();
+    const studentId = (milestoneData as any)?.contracts?.student_id;
+    if (studentId) {
+      const offerTitle = (milestoneData as any)?.contracts?.applications?.offers?.tytul ?? null;
+      await notifyUser(supabase, studentId, "escrow_funded", {
+        application_id: applicationId,
+        offer_title: offerTitle,
+        milestone_title: milestoneData?.title,
+        amount: milestoneData?.amount,
+        snippet: `Środki dla etapu "${milestoneData?.title}" zostały wpłacone. Możesz zacząć pracę!`,
+      });
+    }
+  } catch {}
 
   revalidatePath(`/app/deliverables/${applicationId}`);
 }
@@ -689,26 +852,27 @@ export async function acceptContractDocument(
   }
 
   const now = new Date().toISOString();
+  const admin = createAdminClient();
 
-  // 2. Update contract_documents
+  // 2. Update contract_documents (use admin to bypass RLS)
   if (isCompany) {
-    await supabase
+    await admin
       .from("contract_documents")
       .update({ company_accepted_at: now })
       .eq("id", contractDocumentId);
 
     // Also update the contract-level timestamp
-    await supabase
+    await admin
       .from("contracts")
       .update({ company_contract_accepted_at: now })
       .eq("id", contractId);
   } else {
-    await supabase
+    await admin
       .from("contract_documents")
       .update({ student_accepted_at: now })
       .eq("id", contractDocumentId);
 
-    await supabase
+    await admin
       .from("contracts")
       .update({ student_contract_accepted_at: now })
       .eq("id", contractId);

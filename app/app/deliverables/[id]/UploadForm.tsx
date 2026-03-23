@@ -19,6 +19,7 @@ export function UploadForm({
 }) {
     const [isUploading, setIsUploading] = useState(false);
     const [uploadedFiles, setUploadedFiles] = useState<{ name: string, bucket: string, path: string, size: number, url?: string }[]>([]);
+    const [description, setDescription] = useState("");
 
     // Wrapper for action to include files
     async function handleSubmit(formData: FormData) {
@@ -70,9 +71,9 @@ export function UploadForm({
                     <p className="text-sm text-slate-500 mb-3">Wgraj gotowe pliki dla klienta (np. logo, raport, kod).</p>
 
                     <Label htmlFor="file-upload" className="cursor-pointer group block">
-                        <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/30 hover:bg-indigo-50 hover:border-indigo-400 transition-all duration-300 group-hover:shadow-md">
+                        <div className="flex flex-col items-center justify-center p-4 md:p-8 border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/30 hover:bg-indigo-50 hover:border-indigo-400 transition-all duration-300 group-hover:shadow-md">
                             <div className="p-4 bg-white rounded-full shadow-sm mb-3 group-hover:scale-110 transition-transform">
-                                <UploadCloud className="w-8 h-8 text-indigo-600" />
+                                <UploadCloud className="w-6 h-6 md:w-8 md:h-8 text-indigo-600" />
                             </div>
                             <span className="font-bold text-indigo-700 text-lg">Kliknij, aby wybrać pliki</span>
                             <span className="text-sm text-slate-500 mt-1">lub przeciągnij je tutaj</span>
@@ -124,18 +125,20 @@ export function UploadForm({
                     name="description"
                     placeholder="Napisz krótko co zostało zrobione, dodaj linki zewnętrzne itp."
                     className="min-h-[100px] border-slate-200 focus:border-indigo-300 rounded-xl resize-none"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
                 />
             </div>
 
             <Button
                 type="submit"
                 size="lg"
-                className={`w-full font-bold text-lg rounded-xl py-6 shadow-[0_4px_14px_0_rgba(79,70,229,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98]
-                    ${uploadedFiles.length > 0
+                className={`w-full font-bold text-lg rounded-xl py-3 md:py-6 shadow-[0_4px_14px_0_rgba(79,70,229,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98]
+                    ${(uploadedFiles.length > 0 || description.trim().length > 0)
                         ? "bg-[#4F46E5] hover:bg-[#4338ca] text-white"
                         : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"}
                 `}
-                disabled={isUploading || uploadedFiles.length === 0}
+                disabled={isUploading || (uploadedFiles.length === 0 && description.trim().length === 0)}
             >
                 <Send className="w-5 h-5 mr-2" />
                 Wyślij do akceptacji

@@ -210,7 +210,7 @@ export default async function ProfilePage() {
                 {role === "student" ? <GraduationCap className="w-3 h-3" /> : <Building className="w-3 h-3" />}
                 {role === "student" ? "Twój Profil Studenta" : "Profil Firmowy"}
               </div>
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight">{displayName}</h1>
+              <h1 className="text-4xl md:text-5xl font-black tracking-tight break-all">{displayName}</h1>
               <p className="text-lg text-indigo-200/80 font-medium max-w-2xl">
                 {role === "student" ? ((student as any)?.sciezka || "Nie zdefiniowano ścieżki kariery") : ((company as any)?.branza || "Branża nieznana")}
               </p>
@@ -433,7 +433,7 @@ export default async function ProfilePage() {
                         </div>
                       </div>
                       <div className="flex justify-end pt-4 border-t border-slate-100">
-                        <Button type="submit" size="lg" className="px-8 h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20 transition-all hover:-translate-y-0.5">
+                        <Button type="submit" size="lg" className="px-8 h-12 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold shadow-lg shadow-indigo-200/50 border border-indigo-500/30 transition-all duration-300 hover:-translate-y-0.5">
                           Zapisz Zmiany
                         </Button>
                       </div>
@@ -514,7 +514,7 @@ export default async function ProfilePage() {
                       </div>
                     </div>
                     <div className="flex justify-end pt-6 border-t border-slate-100">
-                      <Button type="submit" size="lg" className="px-8 h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20">Zapisz Zmiany</Button>
+                      <Button type="submit" size="lg" className="px-8 h-12 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold shadow-lg shadow-indigo-200/50 border border-indigo-500/30 transition-all duration-300 hover:-translate-y-0.5">Zapisz Zmiany</Button>
                     </div>
                   </form>
                 </CardContent>

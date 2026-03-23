@@ -131,9 +131,15 @@ export function ChatList({
 
                             {msg.event === "rate.proposed" && (() => {
                                 // Extract rate from payload with multiple fallbacks
-                                const rateValue = msg.payload?.proposed_stawka
+                                let rateValue = msg.payload?.proposed_stawka
                                     ?? msg.payload?.amount
                                     ?? (msg.content ? parseFloat(msg.content.replace(/[^\d.]/g, '')) : undefined);
+                                
+                                // Defensive check
+                                if (typeof rateValue === 'number' && isNaN(rateValue)) {
+                                    rateValue = 0;
+                                }
+
                                 return (
                                     <RateCard
                                         rate={rateValue}

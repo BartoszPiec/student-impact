@@ -101,7 +101,7 @@ export function ContractDocumentsCard({
   };
 
   return (
-    <Card className="border-indigo-200 bg-indigo-50/30">
+    <Card className="rounded-2xl border-slate-200/60 bg-white shadow-lg shadow-slate-200/30 overflow-hidden">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <ShieldCheck className="w-5 h-5 text-indigo-600" />
@@ -118,16 +118,16 @@ export function ContractDocumentsCard({
             <Button
               onClick={handleGenerate}
               disabled={isGenerating}
-              className="bg-indigo-600 hover:bg-indigo-700"
+              className="rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold h-12 px-8 shadow-lg shadow-indigo-200/50 border border-indigo-500/30 transition-all duration-300"
             >
               {isGenerating ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                   Generowanie umów...
                 </>
               ) : (
                 <>
-                  <FileText className="w-4 h-4 mr-2" />
+                  <FileText className="w-5 h-5 mr-2" />
                   Wygeneruj umowy
                 </>
               )}
@@ -193,16 +193,16 @@ export function ContractDocumentsCard({
                 <Button
                   onClick={handleAccept}
                   disabled={isAccepting}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700"
+                  className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white font-bold h-12 shadow-lg shadow-emerald-200/50 border border-emerald-400/30 transition-all duration-300"
                 >
                   {isAccepting ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                       Akceptowanie...
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      <CheckCircle2 className="w-5 h-5 mr-2" />
                       Akceptuję warunki umowy
                     </>
                   )}
@@ -241,15 +241,15 @@ function DocumentRow({
   isDownloading: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 bg-slate-50/50 rounded-xl border border-slate-200/80 shadow-sm hover:border-indigo-100 transition-colors gap-3">
+      <div className="flex items-center gap-3 w-full sm:w-auto">
         <FileText className="w-5 h-5 text-indigo-500 shrink-0" />
-        <div>
-          <div className="text-sm font-medium">{label}</div>
-          <div className="text-xs text-slate-400">{sublabel}</div>
+        <div className="min-w-0">
+          <div className="text-sm font-medium truncate">{label}</div>
+          <div className="text-xs text-slate-400 truncate">{sublabel}</div>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
         {accepted ? (
           <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
             <CheckCircle2 className="w-3 h-3 mr-1" />

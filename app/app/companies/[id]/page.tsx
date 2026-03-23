@@ -73,13 +73,14 @@ export default async function CompanyProfilePage({
 
     return (
         <main className="min-h-screen bg-slate-50/50 pb-20">
-            {/* Header Banner */}
             <div className="h-48 w-full bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 relative">
                 <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-20"></div>
-                <div className="absolute top-6 left-6 z-10">
-                    <Button asChild variant="secondary" size="sm" className="bg-white/10 text-white hover:bg-white/20 border-none backdrop-blur-sm">
-                        <Link href="/app/jobs">← Wróć do ofert</Link>
-                    </Button>
+                <div className="container mx-auto max-w-6xl px-4 sm:px-6 relative h-full">
+                    <div className="absolute top-6 left-4 sm:left-6 z-10">
+                        <Button asChild variant="secondary" size="sm" className="bg-white/10 text-white hover:bg-white/20 border-none backdrop-blur-sm">
+                            <Link href="/app/jobs">← Wróć do ofert</Link>
+                        </Button>
+                    </div>
                 </div>
             </div>
 

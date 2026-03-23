@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { proposeServicePriceAction, rejectOrderAction } from "../_actions";
-import { Loader2, MessageSquare, Banknote, Trash2 } from "lucide-react";
+import { proposeServicePriceAction, rejectOrderAction, acceptServiceCounterAction } from "../_actions";
+import { Loader2, MessageSquare, Banknote, Trash2, CheckCircle2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -22,6 +22,7 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
     const [message, setMessage] = useState("");
     const [loading, setLoading] = useState(false);
     const [rejectLoading, setRejectLoading] = useState(false);
+    const [counterLoading, setCounterLoading] = useState(false);
     const [openProposal, setOpenProposal] = useState(false);
 
     const handlePropose = async () => {
@@ -42,6 +43,19 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
             toast.error(e.message || "Wystąpił błąd.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAcceptCounter = async () => {
+        try {
+            setCounterLoading(true);
+            await acceptServiceCounterAction(order.id);
+            toast.success("Zaakceptowałeś kontrofertę! Zlecenie przechodzi do realizacji.");
+            router.refresh();
+        } catch (e: any) {
+            toast.error(e.message || "Wystąpił błąd.");
+        } finally {
+            setCounterLoading(false);
         }
     };
 
@@ -129,6 +143,23 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
                 <Button disabled variant="secondary" className="flex-1 sm:flex-none opacity-80 cursor-not-allowed">
                     Oferta Wysłana
                 </Button>
+            )}
+
+            {order.status === 'countered' && (
+                <div className="flex flex-wrap gap-2 flex-1 sm:flex-none items-center">
+                    <div className="flex items-center gap-1.5 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg">
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Kontroferta: <span className="font-bold">{order.counter_amount} PLN</span>
+                    </div>
+                    <Button
+                        onClick={handleAcceptCounter}
+                        disabled={counterLoading}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white flex-1 sm:flex-none"
+                    >
+                        {counterLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                        Akceptuj {order.counter_amount} PLN
+                    </Button>
+                </div>
             )}
 
             <Button

@@ -151,9 +151,14 @@ export default function ServicesTab({ systemServices, studentServices, statsMap 
                                             <Badge variant="outline" className={
                                                 ['in_progress', 'accepted'].includes(order.status) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
                                                     order.status === 'proposal_sent' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' :
-                                                        'border-slate-200 bg-slate-50 text-slate-600'
+                                                        order.status === 'countered' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                                                            'border-slate-200 bg-slate-50 text-slate-600'
                                             }>
-                                                {order.status === 'in_progress' ? 'W trakcie' : (order.status === 'accepted' ? 'Zaakceptowano' : (order.status === 'proposal_sent' ? 'Negocjacje' : 'Czeka na akceptację'))}
+                                                {order.status === 'in_progress' ? 'W trakcie' :
+                                                    order.status === 'accepted' ? 'Zaakceptowano' :
+                                                        order.status === 'proposal_sent' ? 'Negocjacje' :
+                                                            order.status === 'countered' ? `Kontroferta: ${order.counter_amount} PLN` :
+                                                                'Czeka na akceptację'}
                                             </Badge>
                                         </div>
                                     </div>

@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText } from "lucide-react";
 import { ApplicationList, SavedList } from "./ApplicationList";
+import { PremiumPageHeader } from "@/components/ui/premium-page-header";
+import { PageContainer } from "@/components/ui/page-container";
 
 export const dynamic = "force-dynamic";
 
@@ -110,55 +112,17 @@ export default async function StudentApplicationsPage() {
           "archive";
 
   return (
-    <main className="container max-w-5xl mx-auto py-8 space-y-8">
+    <main className="pb-20">
+      <PremiumPageHeader
+        badge="Panel Studenta"
+        title="Moje Aplikacje"
+        description="Śledź swoje zgłoszenia, zarządzaj realizacjami i przeglądaj zapisane okazje."
+        icon={<FileText className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
+      />
+
+      <PageContainer className="space-y-8">
 
 
-      {/* Premium Header */}
-      <div className="relative rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 px-8 py-12 text-white shadow-xl overflow-hidden mb-8">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
-
-        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
-            <div className="h-20 w-20 bg-white/10 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 shadow-2xl group hover:scale-105 transition-transform duration-500">
-              <FileText className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />
-            </div>
-            <div>
-              <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-md">
-                  Panel Studenta
-                </span>
-                <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-md">
-                  {applications.length} aktywności
-                </span>
-              </div>
-              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-transparent">
-                Moje Aplikacje
-              </h1>
-              <p className="text-indigo-100/70 mt-2 max-w-xl text-lg font-medium leading-relaxed">
-                Śledź swoje zgłoszenia, zarządzaj realizacjami i przeglądaj zapisane okazje.
-              </p>
-            </div>
-          </div>
-
-          <div className="hidden lg:block relative shrink-0">
-            <div className="absolute inset-0 bg-indigo-500/20 blur-[40px] rounded-full"></div>
-            <div className="relative bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-2xl">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-white">
-                  {applications.filter(a => a.stage === 'in_progress').length}
-                </div>
-                <div className="text-xs">
-                  <p className="font-bold text-white">Zlecenia w toku</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Decorative elements */}
-        <div className="absolute right-0 top-0 -mt-20 -mr-20 h-80 w-80 rounded-full bg-indigo-500/10 blur-[100px] pointer-events-none"></div>
-        <div className="absolute left-1/4 bottom-0 -mb-20 h-60 w-60 rounded-full bg-violet-500/10 blur-[80px] pointer-events-none"></div>
-      </div>
 
       <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -198,6 +162,7 @@ export default async function StudentApplicationsPage() {
         </TabsContent>
       </Tabs>
 
+      </PageContainer>
     </main>
   );
 }

@@ -90,6 +90,34 @@ export async function cancelCooperation(applicationId: string, formData: FormDat
     // ignorujemy – anulowanie ma działać nawet jeśli log czatu się nie uda
   }
 
+  // Powiadom drugą stronę o anulowaniu
+  try {
+    const { data: appRow2 } = await supabase
+      .from("applications")
+      .select("student_id, offer_id, offers(company_id, tytul)")
+      .eq("id", applicationId)
+      .maybeSingle();
+    if (appRow2) {
+      const companyId = (appRow2 as any)?.offers?.company_id;
+      const studentId = appRow2.student_id;
+      const offerTitle = (appRow2 as any)?.offers?.tytul ?? null;
+      const recipientId = user.id === companyId ? studentId : companyId;
+      const cancelledBy = user.id === companyId ? "firma" : "student";
+      if (recipientId) {
+        await supabase.rpc("create_notification", {
+          p_user_id: recipientId,
+          p_typ: "cooperation_cancelled",
+          p_payload: {
+            application_id: applicationId,
+            offer_title: offerTitle,
+            cancelled_by: cancelledBy,
+            snippet: `Zlecenie "${offerTitle ?? "zlecenie"}" zostało anulowane przez ${cancelledBy}.`,
+          },
+        });
+      }
+    }
+  } catch {}
+
   // revalidate
   revalidatePath(`/app/deliverables/${applicationId}`);
   revalidatePath(`/app/chat`);

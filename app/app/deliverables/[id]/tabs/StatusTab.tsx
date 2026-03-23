@@ -45,6 +45,8 @@ export function StatusTab({
     contract,
     totalAmount,
     enableNegotiation = false,
+    isPlatformService = false,
+    studentInstructions = null,
     contractDocuments = [],
 }: any) {
     // State for Payment Modal
@@ -175,7 +177,7 @@ export function StatusTab({
             )}
 
             {/* HEADER CARD */}
-            <Card className="overflow-hidden border-0 shadow-xl bg-white/80 backdrop-blur-xl ring-1 ring-slate-200/50">
+            <Card className="rounded-none overflow-hidden border border-slate-200 shadow-xl bg-white/80 backdrop-blur-xl">
                 <div className="p-6 md:p-8">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                         <div>
@@ -226,7 +228,7 @@ export function StatusTab({
                                     <div key={step.id} className="relative z-10 flex flex-col items-center group">
                                         <div
                                             className={`
-                                                w-12 h-12 rounded-full flex items-center justify-center border-[3px] transition-all duration-500 shadow-sm
+                                                w-9 h-9 md:w-12 md:h-12 rounded-full flex items-center justify-center border-[3px] transition-all duration-500 shadow-sm
                                                 ${isCompleted
                                                     ? 'bg-emerald-500 border-emerald-500 text-white shadow-emerald-200'
                                                     : isActive
@@ -234,11 +236,11 @@ export function StatusTab({
                                                         : 'bg-white border-slate-200 text-slate-300'}
                                             `}
                                         >
-                                            {isCompleted ? <CheckCircle2 className="w-6 h-6" /> : <span className="text-sm font-extrabold">{step.id}</span>}
+                                            {isCompleted ? <CheckCircle2 className="w-4 h-4 md:w-6 md:h-6" /> : <span className="text-xs md:text-sm font-extrabold">{step.id}</span>}
                                         </div>
                                         <span className={`
-                                            absolute -bottom-10 text-xs font-bold uppercase tracking-wider transition-colors duration-300
-                                            ${isActive ? 'text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full' : (isCompleted ? 'text-emerald-600' : 'text-slate-400')}
+                                            absolute -bottom-8 md:-bottom-10 text-[8px] md:text-xs font-bold uppercase tracking-wide md:tracking-wider transition-colors duration-300
+                                            ${isActive ? 'text-indigo-600 bg-indigo-50 px-1.5 md:px-2 py-0.5 md:py-1 rounded-full' : (isCompleted ? 'text-emerald-600' : 'text-slate-400')}
                                         `}>
                                             {step.label}
                                         </span>
@@ -249,7 +251,7 @@ export function StatusTab({
                     </div>
 
                     {/* Step Actions */}
-                    <div className="bg-gradient-to-r from-slate-50 to-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mt-8 relative overflow-hidden">
+                    <div className="bg-gradient-to-r from-slate-50 to-white rounded-none p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mt-8 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
 
                         <div className="text-center md:text-left relative z-10">
@@ -265,20 +267,20 @@ export function StatusTab({
                             </p>
                         </div>
 
-                        {/* Payment Button — requires both contract acceptances */}
-                        {isCompany && !isEscrowReady && contract?.terms_status === 'agreed' && contract?.company_contract_accepted_at && contract?.student_contract_accepted_at && (
+                        {/* Payment Button — platform services skip contract signing, standard flow requires both acceptances */}
+                        {isCompany && !isEscrowReady && contract?.terms_status === 'agreed' && (isPlatformService || (contract?.company_contract_accepted_at && contract?.student_contract_accepted_at)) && (
                             <Button
                                 size="lg"
                                 onClick={() => setIsPaymentModalOpen(true)}
-                                className="relative z-10 w-full md:w-auto bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-600 text-white shadow-lg shadow-indigo-200 font-bold px-8 h-12 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                className="relative z-10 w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-white shadow-xl font-bold px-8 h-14 rounded-none transition-all active:scale-[0.98]"
                             >
                                 <CircleDollarSign className="w-5 h-5 mr-2" />
                                 Zasil Depozyt ({fundingMode === "full" ? (contractBudget > 0 ? contractBudget : totalAmount) : Number(nextToFund?.amount ?? 0)} PLN)
                             </Button>
                         )}
 
-                        {isStudent && !isEscrowReady && contract?.terms_status === 'agreed' && contract?.company_contract_accepted_at && contract?.student_contract_accepted_at && (
-                            <div className="relative z-10 px-5 py-3 bg-white border border-slate-200 rounded-xl text-slate-500 text-sm font-medium flex items-center gap-3 shadow-sm">
+                        {isStudent && !isEscrowReady && contract?.terms_status === 'agreed' && (isPlatformService || (contract?.company_contract_accepted_at && contract?.student_contract_accepted_at)) && (
+                            <div className="relative z-10 px-5 py-3 bg-white border border-slate-200 rounded-none text-slate-500 text-sm font-medium flex items-center gap-3 shadow-sm">
                                 <div className="p-1.5 bg-amber-50 rounded-full">
                                     <Clock className="w-4 h-4 text-amber-500" />
                                 </div>
@@ -301,8 +303,8 @@ export function StatusTab({
                 />
             )}
 
-            {/* CONTRACT DOCUMENTS (after negotiation, before payment) */}
-            {contract && contract?.terms_status === 'agreed' && (
+            {/* CONTRACT DOCUMENTS (after negotiation, before payment) — hidden for platform services */}
+            {contract && contract?.terms_status === 'agreed' && !isPlatformService && (
                 <ContractDocumentsCard
                     contractId={contract.id}
                     applicationId={applicationId}
@@ -314,6 +316,23 @@ export function StatusTab({
                     studentAcceptedAt={contract.student_contract_accepted_at}
                     termsAgreed={contract.terms_status === 'agreed'}
                 />
+            )}
+
+            {/* STUDENT INSTRUCTIONS (platform service only, hidden from company) */}
+            {isStudent && isPlatformService && studentInstructions && (
+                <Card className="rounded-none border-amber-200 bg-amber-50 shadow-sm overflow-hidden">
+                    <CardHeader className="pb-3 border-b border-amber-200">
+                        <CardTitle className="flex items-center gap-2 text-base text-amber-900">
+                            <Lock className="w-4 h-4 text-amber-600" />
+                            Instrukcje realizacji (widoczne tylko dla Ciebie)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4">
+                        <pre className="whitespace-pre-wrap text-sm text-amber-900 font-sans leading-relaxed">
+                            {studentInstructions}
+                        </pre>
+                    </CardContent>
+                </Card>
             )}
 
             {/* MILESTONE LIST (Step 3+) */}
@@ -336,7 +355,7 @@ export function StatusTab({
             )}
             {/* REVIEW SECTION (Completed Only) */}
             {contract?.status === 'completed' && (
-                <Card className="border-indigo-100 shadow-sm bg-gradient-to-br from-indigo-50/50 to-white overflow-hidden">
+                <Card className="rounded-none border-slate-200 shadow-sm bg-gradient-to-br from-indigo-50/50 to-white overflow-hidden">
                     <CardHeader className="border-b border-indigo-50 bg-white/50">
                         <CardTitle className="flex items-center gap-2 text-indigo-900">
                             <Star className="w-5 h-5 fill-indigo-500 text-indigo-500" />
@@ -350,7 +369,7 @@ export function StatusTab({
                         {isCompany ? (
                             <>
                                 {myReview ? (
-                                    <div className="bg-white p-6 rounded-xl border shadow-sm">
+                                    <div className="bg-white p-6 rounded-none border shadow-sm">
                                         <div className="flex items-center gap-2 mb-4">
                                             <div className="flex gap-1">
                                                 {[1, 2, 3, 4, 5].map(star => (
@@ -387,7 +406,7 @@ export function StatusTab({
                             <>
                                 {/* Student View - Seeing Company's Review */}
                                 {theirReview ? (
-                                    <div className="bg-white p-6 rounded-xl border shadow-sm relative overflow-hidden">
+                                    <div className="bg-white p-6 rounded-none border shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 right-0 p-4 opacity-10">
                                             <Medal className="w-24 h-24 text-indigo-500" />
                                         </div>
@@ -406,7 +425,7 @@ export function StatusTab({
                                         <p className="text-slate-700 text-lg relative z-10">"{theirReview.comment}"</p>
                                     </div>
                                 ) : (
-                                    <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed">
+                                    <div className="text-center py-12 bg-slate-50 rounded-none border border-dashed">
                                         <Clock className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                                         <h4 className="text-slate-600 font-medium">Oczekiwanie na opinię</h4>
                                         <p className="text-slate-400 text-sm">Klient jeszcze nie wystawił oceny za to zlecenie.</p>
@@ -472,7 +491,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
     }[milestone.status as string] || { label: milestone.status, color: 'bg-gray-100' };
 
     return (
-        <Card className={`border shadow-sm transition-all overflow-hidden ${milestone.status === 'completed' ? 'opacity-75 hover:opacity-100' : 'border-indigo-100 shadow-md'}`}>
+        <Card className={`rounded-none border shadow-sm transition-all overflow-hidden ${milestone.status === 'completed' ? 'opacity-75 hover:opacity-100' : 'border-indigo-100 shadow-md'}`}>
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="p-6 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-white relative z-10">
                     <div className="flex items-start gap-4 flex-1">
@@ -513,7 +532,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
 
                         {/* STUDENT ACTIONS */}
                         {isStudent && ['funded', 'in_progress', 'rejected'].includes(milestone.status) && (
-                            <div className="bg-white p-6 rounded-2xl border border-indigo-100 shadow-sm">
+                            <div className="bg-white p-6 rounded-none border border-slate-200 shadow-sm">
                                 <h5 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
                                     <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg">
                                         <FileText className="w-4 h-4" />
@@ -529,7 +548,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                 />
                                 {/* Display latest feedback if available */}
                                 {latestDeliverable && latestDeliverable.company_feedback && (
-                                    <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-xl flex gap-3 text-red-800 animate-in fade-in slide-in-from-top-2">
+                                    <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-none flex gap-3 text-red-800 animate-in fade-in slide-in-from-top-2">
                                         <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                                         <div>
                                             <div className="font-bold mb-1 text-sm uppercase tracking-wide opacity-80">Uwagi od firmy</div>
@@ -542,7 +561,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
 
                         {/* COMPANY ACTIONS (REVIEW) */}
                         {isCompany && milestone.status === 'delivered' && latestDeliverable && (
-                            <div className="bg-white rounded-2xl border border-indigo-100 shadow-lg shadow-indigo-50/50 overflow-hidden">
+                            <div className="bg-white rounded-none border border-slate-200 shadow-lg overflow-hidden">
                                 <div className="bg-gradient-to-r from-indigo-50 to-white px-6 py-4 border-b border-indigo-100 flex items-center gap-3">
                                     <div className="p-2 bg-white rounded-lg border border-indigo-100 shadow-sm text-indigo-600">
                                         <ShieldCheck className="w-5 h-5" />
@@ -614,7 +633,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                                 ${deliv.status === 'accepted' ? 'border-emerald-500' : deliv.status === 'rejected' ? 'border-red-400' : 'border-slate-300'}
                                             `} />
 
-                                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 group hover:border-indigo-200 transition-colors">
+                                            <div className="bg-white p-4 rounded-none border border-slate-200 shadow-sm flex flex-col gap-3 group hover:border-indigo-200 transition-colors">
                                                 <div className="flex justify-between items-start gap-4">
                                                     <div>
                                                         <div className="flex items-center gap-2 mb-1">

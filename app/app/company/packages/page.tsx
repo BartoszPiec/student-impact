@@ -271,7 +271,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
         <div className="absolute bottom-1/4 left-1/3 w-[400px] h-[400px] bg-blue-500/5 rounded-full blur-[100px]" />
       </div>
       {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#667eea] via-[#764ba2] to-[#667eea] rounded-b-[2.5rem] border-b border-white/10 mb-10 shadow-[0_20px_50px_-15px_rgba(118,75,162,0.3)]">
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#667eea] via-[#764ba2] to-[#667eea] border-b border-white/10 mb-10 shadow-[0_20px_50px_-15px_rgba(118,75,162,0.3)]">
         {/* Animated Background Elements */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute -top-40 -right-40 w-96 h-96 bg-white/10 rounded-full blur-[100px] animate-pulse"></div>

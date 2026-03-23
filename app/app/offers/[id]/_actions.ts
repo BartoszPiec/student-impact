@@ -174,7 +174,7 @@ export async function applyToOffer(
         .from("applications")
         .select("id, offers!inner(is_platform_service)", { count: "exact", head: true })
         .eq("student_id", user.id)
-        .eq("status", "in_progress")
+        .in("status", ["accepted", "in_progress"])
         .eq("offers.is_platform_service", true);
 
       logs.push(`Platform Count: ${count}`);
@@ -195,7 +195,7 @@ export async function applyToOffer(
           offer_id: offerId,
           student_id: user.id,
           message_to_company: (message ?? "").trim() || null,
-          status: autoAccepted ? "in_progress" : "sent", // AUTO ACCEPT
+          status: autoAccepted ? "accepted" : "sent", // AUTO ACCEPT
           proposed_stawka: proposed,
           cv_url: cvUrl || null
         })
@@ -216,6 +216,17 @@ export async function applyToOffer(
         // Więc NIE ZMIENIAMY statusu oferty na in_progress/closed. Pozostaje otwarta dla innych.
         /* await supabase.from("offers").update({ status: "in_progress" }).eq("id", offerId); */
         logs.push("Offer status update SKIPPED (Allow multi-candidate)");
+
+        // ✅ Automatycznie utwórz kontrakt + milestone dla platform service
+        const { error: contractErr } = await supabase.rpc("ensure_contract_for_application", {
+          p_application_id: applicationId,
+        });
+        if (contractErr) {
+          logs.push(`Contract creation warning: ${contractErr.message}`);
+          // Nie rzucamy błędu — aplikacja już istnieje, kontrakt można stworzyć później
+        } else {
+          logs.push("Contract auto-created for platform service");
+        }
       }
     }
 

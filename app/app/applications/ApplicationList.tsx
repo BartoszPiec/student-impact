@@ -118,7 +118,7 @@ function ApplicationCard({ app }: { app: any }) {
                             <div className="flex items-center gap-2 w-full md:w-auto mt-2">
                                 {isInProgress ? (
                                     <>
-                                        <Button asChild className="h-10 rounded-xl bg-slate-900 hover:bg-black text-white px-5 font-bold shadow-lg shadow-slate-200">
+                                        <Button asChild className="h-10 rounded-xl bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 text-white px-5 font-bold shadow-lg shadow-slate-200 border border-slate-700/50 transition-all duration-300">
                                             <Link href={`/app/deliverables/${app.id}`}>Zarządzaj</Link>
                                         </Button>
                                         <form action={openChatForApplication.bind(null, app.id)}>
@@ -131,12 +131,12 @@ function ApplicationCard({ app }: { app: any }) {
                                     <div className="flex flex-col md:items-end gap-2.5 w-full md:w-auto">
                                         <div className="flex items-center gap-2">
                                             <form action={acceptCounterAsStudent.bind(null, app.id)}>
-                                                <Button className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 font-bold shadow-lg shadow-emerald-100">
+                                                <Button className="h-10 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white px-5 font-bold shadow-lg shadow-emerald-200/50 border border-emerald-400/30 transition-all duration-300">
                                                     Akceptuj
                                                 </Button>
                                             </form>
                                             <form action={rejectCounterAsStudent.bind(null, app.id)}>
-                                                <Button variant="ghost" className="h-10 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50/50 px-4 font-medium">
+                                                <Button variant="ghost" className="h-10 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50/50 px-4 font-bold transition-all duration-300">
                                                     Odrzuć
                                                 </Button>
                                             </form>
@@ -153,7 +153,7 @@ function ApplicationCard({ app }: { app: any }) {
                                                 placeholder="Kwota..."
                                                 className="h-8 w-24 rounded-lg border-none bg-white shadow-sm text-sm placeholder:text-slate-300 focus-visible:ring-indigo-200"
                                             />
-                                            <Button variant="ghost" type="submit" size="sm" className="h-8 rounded-lg text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-semibold text-xs px-3">
+                                            <Button variant="ghost" type="submit" size="sm" className="h-8 rounded-lg bg-gradient-to-r from-indigo-50 to-indigo-100/50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 font-bold text-xs px-3 shadow-sm shadow-indigo-100 border border-indigo-200/50 transition-all duration-300">
                                                 Zaproponuj
                                             </Button>
                                         </form>
@@ -161,7 +161,7 @@ function ApplicationCard({ app }: { app: any }) {
                                     </div>
                                 ) : stage === "sent" ? (
                                     <>
-                                        <Button asChild variant="outline" className="h-10 rounded-xl border-indigo-100 text-indigo-700 font-bold hover:bg-indigo-50/50 hover:border-indigo-200 transition-all px-6">
+                                        <Button asChild variant="outline" className="h-10 rounded-xl border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 font-bold shadow-sm shadow-indigo-100 transition-all duration-300 px-6">
                                             <Link href={`/app/offers/${offer?.id}`}>Szczegóły</Link>
                                         </Button>
                                         <form action={openChatForApplication.bind(null, app.id)}>
@@ -171,7 +171,7 @@ function ApplicationCard({ app }: { app: any }) {
                                         </form>
                                     </>
                                 ) : (
-                                    <Button asChild variant="outline" className="h-10 rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-slate-50 px-6">
+                                    <Button asChild variant="outline" className="h-10 rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold shadow-sm transition-all duration-300 px-6">
                                         <Link href={`/app/offers/${offer?.id}`}>Szczegóły</Link>
                                     </Button>
                                 )}

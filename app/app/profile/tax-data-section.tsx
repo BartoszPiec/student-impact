@@ -134,7 +134,7 @@ export default function TaxDataSection({ initialData }: TaxDataSectionProps) {
               type="submit"
               size="lg"
               disabled={isPending}
-              className="px-8 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-500/20 transition-all hover:-translate-y-0.5"
+              className="px-8 h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white font-bold shadow-lg shadow-emerald-200/50 border border-emerald-400/30 transition-all duration-300 hover:-translate-y-0.5"
             >
               {isPending ? (
                 "Zapisywanie..."

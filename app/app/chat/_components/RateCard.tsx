@@ -56,8 +56,13 @@ export function RateCard({
 
     const handleCounter = async () => {
         if (!counterValue) return;
+        const val = parseFloat(counterValue);
+        if (isNaN(val)) {
+            alert("Proszę podać prawidłową kwotę.");
+            return;
+        }
         try {
-            await sendEventMessage(conversationId, "rate.proposed", { proposed_stawka: parseFloat(counterValue) }, `Proponuję inną stawkę: ${counterValue} zł`);
+            await sendEventMessage(conversationId, "rate.proposed", { proposed_stawka: val }, `Proponuję inną stawkę: ${counterValue} zł`);
             setCounterOpen(false);
             setCounterValue("");
         } catch (e) {
@@ -144,8 +149,8 @@ export function RateCard({
                                 />
                             </div>
                             <DialogFooter>
-                                <Button variant="outline" onClick={() => setCounterOpen(false)}>Anuluj</Button>
-                                <Button onClick={handleCounter}>Wyślij propozycję</Button>
+                                <Button variant="outline" onClick={() => setCounterOpen(false)} className="rounded-xl border-slate-200">Anuluj</Button>
+                                <Button onClick={handleCounter} className="rounded-xl gradient-primary shadow-primary hover:opacity-90 transition-opacity">Wyślij propozycję</Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>

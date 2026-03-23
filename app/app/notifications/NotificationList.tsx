@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { pl } from "date-fns/locale";
-import { Bell, MessageSquare, Briefcase, FileText, Inbox, Sparkles, Filter } from "lucide-react";
+import { Bell, MessageSquare, Briefcase, FileText, Inbox, Sparkles, Filter, CircleDollarSign, CheckCircle2, XCircle, Star, Ban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getNotificationTitle } from "./utils";
@@ -15,24 +15,84 @@ interface NotificationListProps {
 
 function NotificationIcon({ type }: { type: string }) {
     switch (type) {
+        // Wiadomości
         case "message_new":
+        case "MESSAGE":
+        case "new_message":
             return (
                 <div className="bg-indigo-100 text-indigo-600 p-2.5 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
                     <MessageSquare className="w-5 h-5" />
                 </div>
             );
+        // Zgłoszenia / aplikacje
         case "application_status_change":
         case "application_new":
+        case "application_sent":
+        case "application_accepted":
+        case "application_accepted_auto":
+        case "application_countered":
+        case "counter_offer":
+        case "application_withdrawn":
+        case "offer_closed":
+        case "negotiation_proposed":
+        case "counter_accepted":
+        case "counter_rejected":
+        case "terms_proposed":
+        case "terms_updated":
+        case "terms_agreed":
             return (
                 <div className="bg-amber-100 text-amber-600 p-2.5 rounded-xl group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
                     <Briefcase className="w-5 h-5" />
                 </div>
             );
-        case "deliverable_new":
-        case "deliverable_accepted":
+        // Finansowanie escrow
+        case "escrow_funded":
+        case "contract_funded":
             return (
                 <div className="bg-emerald-100 text-emerald-600 p-2.5 rounded-xl group-hover:bg-emerald-500 group-hover:text-white transition-colors duration-300">
+                    <CircleDollarSign className="w-5 h-5" />
+                </div>
+            );
+        // Przesłanie pracy
+        case "deliverable_new":
+        case "deliverable_submitted":
+        case "milestone_submitted":
+        case "milestone_delivered":
+            return (
+                <div className="bg-blue-100 text-blue-600 p-2.5 rounded-xl group-hover:bg-blue-500 group-hover:text-white transition-colors duration-300">
                     <FileText className="w-5 h-5" />
+                </div>
+            );
+        // Zaakceptowanie
+        case "deliverable_accepted":
+        case "milestone_accepted":
+        case "job_approved":
+            return (
+                <div className="bg-emerald-100 text-emerald-600 p-2.5 rounded-xl group-hover:bg-emerald-500 group-hover:text-white transition-colors duration-300">
+                    <CheckCircle2 className="w-5 h-5" />
+                </div>
+            );
+        // Odrzucenie
+        case "deliverable_rejected":
+        case "milestone_rejected":
+            return (
+                <div className="bg-red-100 text-red-600 p-2.5 rounded-xl group-hover:bg-red-500 group-hover:text-white transition-colors duration-300">
+                    <XCircle className="w-5 h-5" />
+                </div>
+            );
+        // Oceny
+        case "review_received":
+        case "review_submitted":
+            return (
+                <div className="bg-purple-100 text-purple-600 p-2.5 rounded-xl group-hover:bg-purple-500 group-hover:text-white transition-colors duration-300">
+                    <Star className="w-5 h-5" />
+                </div>
+            );
+        // Anulowanie
+        case "cooperation_cancelled":
+            return (
+                <div className="bg-red-100 text-red-500 p-2.5 rounded-xl group-hover:bg-red-500 group-hover:text-white transition-colors duration-300">
+                    <Ban className="w-5 h-5" />
                 </div>
             );
         default:
@@ -51,16 +111,29 @@ function formatDateRelative(date: Date) {
 export default function NotificationList({ notifications }: NotificationListProps) {
     const [filter, setFilter] = useState<"all" | "unread" | "messages" | "orders">("all");
 
+    const MESSAGE_TYPES = ["message_new", "MESSAGE", "new_message"];
+    const ORDER_TYPES = [
+        "application_status_change", "application_new", "application_sent",
+        "application_accepted", "application_accepted_auto", "application_rejected",
+        "application_countered", "application_withdrawn", "counter_offer",
+        "counter_accepted", "counter_rejected", "negotiation_proposed",
+        "offer_closed", "terms_proposed", "terms_updated", "terms_agreed",
+        "escrow_funded", "contract_funded", "deliverable_new", "deliverable_submitted",
+        "deliverable_accepted", "deliverable_rejected",
+        "milestone_submitted", "milestone_delivered", "milestone_accepted", "milestone_rejected",
+        "review_received", "review_submitted", "cooperation_cancelled", "JOB_COMPLETED", "job_approved",
+    ];
+
     const filteredList = notifications.filter((n) => {
         if (filter === "unread") return !n.read_at;
-        if (filter === "messages") return n.typ === "message_new";
-        if (filter === "orders") return ["application_status_change", "application_new", "deliverable_new", "deliverable_accepted"].includes(n.typ);
+        if (filter === "messages") return MESSAGE_TYPES.includes(n.typ);
+        if (filter === "orders") return ORDER_TYPES.includes(n.typ);
         return true;
     });
 
     const unreadCount = notifications.filter(n => !n.read_at).length;
-    const messageCount = notifications.filter(n => n.typ === "message_new").length;
-    const ordersCount = notifications.filter(n => ["application_status_change", "application_new", "deliverable_new", "deliverable_accepted"].includes(n.typ)).length;
+    const messageCount = notifications.filter(n => MESSAGE_TYPES.includes(n.typ)).length;
+    const ordersCount = notifications.filter(n => ORDER_TYPES.includes(n.typ)).length;
 
     return (
         <div className="space-y-6">

@@ -56,12 +56,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Contract terms not yet agreed" }, { status: 400 });
     }
 
+    // Get application info for description + platform service check
+    const { data: application } = await supabase
+      .from("applications")
+      .select("offers(tytul, is_platform_service)")
+      .eq("id", applicationId)
+      .single();
+
+    const offerTitle = (application?.offers as any)?.tytul || "Zlecenie";
+    const isPlatformService = (application?.offers as any)?.is_platform_service === true;
+
     // Require both parties to accept contract documents before payment
-    if (!contract.company_contract_accepted_at || !contract.student_contract_accepted_at) {
+    // Exception: platform services skip the signing step (contract is auto-agreed)
+    if (!isPlatformService && (!contract.company_contract_accepted_at || !contract.student_contract_accepted_at)) {
       return NextResponse.json({ error: "Obie strony muszą zaakceptować umowę przed płatnością" }, { status: 400 });
     }
 
-    if (contract.status !== "awaiting_funding" && contract.status !== "draft") {
+    const allowedStatuses = ["awaiting_funding", "draft"];
+    if (!allowedStatuses.includes(contract.status as string)) {
       return NextResponse.json({ error: "Contract already funded or in invalid state" }, { status: 400 });
     }
 
@@ -74,19 +86,12 @@ export async function POST(req: NextRequest) {
     const amountInGrosze = Math.round(parsedAmount * 100);
     const platformFee = calculatePlatformFee(amountInGrosze);
 
-    // Get application info for better description
-    const { data: application } = await supabase
-      .from("applications")
-      .select("offers(tytul)")
-      .eq("id", applicationId)
-      .single();
-
-    const offerTitle = (application?.offers as any)?.tytul || "Zlecenie";
-
     // Build success and cancel URLs
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || `${req.nextUrl.protocol}//${req.headers.get('host')}`;
     if (!baseUrl) {
-      console.error("NEXT_PUBLIC_APP_URL is not set");
+      console.error("Could not determine base URL");
       return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
     }
     const successUrl = `${baseUrl}/app/deliverables/${applicationId}?payment=success&session_id={CHECKOUT_SESSION_ID}`;

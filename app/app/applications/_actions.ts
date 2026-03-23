@@ -472,8 +472,22 @@ export async function withdrawApplication(applicationId: string, _formData?: For
     return { error: updateError.message };
   }
 
-  // Notify company? Optional.
-  // await notifyUser...
+  // Powiadom firmę o wycofaniu zgłoszenia
+  try {
+    const { data: offerData } = await supabase
+      .from("offers")
+      .select("company_id, tytul")
+      .eq("id", appRow.offer_id)
+      .maybeSingle();
+    if (offerData?.company_id) {
+      await notifyUser(supabase as any, offerData.company_id, "application_withdrawn", {
+        application_id: applicationId,
+        offer_id: appRow.offer_id,
+        offer_title: offerData.tytul ?? null,
+        snippet: `Kandydat wycofał zgłoszenie do oferty "${offerData.tytul ?? "oferta"}".`,
+      });
+    }
+  } catch {}
 
   revalidatePath("/app");
   revalidatePath("/app/applications");

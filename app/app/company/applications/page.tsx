@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Check, X, MessageCircle, FileText, Clock, Star, ChevronRight } from "lucide-react";
+import { Check, X, MessageCircle, FileText, Clock, Star, ChevronRight, ClipboardList } from "lucide-react";
+import { PremiumPageHeader } from "@/components/ui/premium-page-header";
+import { PageContainer } from "@/components/ui/page-container";
 
 import { acceptApplication, rejectApplication, counterOffer } from "./_actions";
 import { openChatForApplication } from "@/app/app/chat/_actions";
@@ -541,80 +543,82 @@ export default async function CompanyApplicationsPage({
   };
 
   return (
-    <main className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Aplikacje do moich ofert</h1>
-          <p className="text-sm text-muted-foreground">
-            Przegląd zgłoszeń studentów, realizacji i historii.
-          </p>
-        </div>
-        <Button asChild variant="outline">
-          <Link href="/app/company/offers">Moje oferty</Link>
-        </Button>
-      </div>
+    <main className="pb-12">
+      <PremiumPageHeader
+        badge="Panel Pracodawcy"
+        title="Aplikacje do moich ofert"
+        description="Przegląd zgłoszeń studentów, realizacji i historii."
+        icon={<ClipboardList className="h-10 w-10 text-indigo-300" />}
+        actions={
+          <Button asChild variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/20">
+            <Link href="/app/company/offers">Moje oferty</Link>
+          </Button>
+        }
+      />
 
-      {error && (
-        <pre className="rounded-md border p-4 text-sm overflow-auto">
-          {JSON.stringify(error, null, 2)}
-        </pre>
-      )}
+      <PageContainer className="mt-8">
+        {error && (
+          <pre className="rounded-md border p-4 text-sm overflow-auto mb-6 bg-red-50 text-red-600 border-red-100">
+            {JSON.stringify(error, null, 2)}
+          </pre>
+        )}
 
-      <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-6">
-          <TabsTrigger value="nowe" className="data-[state=active]:bg-indigo-100 data-[state=active]:text-indigo-700">
-            Nowe ({nowe.length})
-          </TabsTrigger>
-          <TabsTrigger value="realizacja" className="data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700">
-            W realizacji ({wRealizacji.length})
-          </TabsTrigger>
-          <TabsTrigger value="zakonczone" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-700">
-            Zakończone ({zakonczone.length})
-          </TabsTrigger>
-        </TabsList>
+        <Tabs defaultValue={defaultTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-8 bg-slate-100/50 p-1 h-14 rounded-2xl">
+            <TabsTrigger value="nowe" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-indigo-700 h-12">
+              Nowe ({nowe.length})
+            </TabsTrigger>
+            <TabsTrigger value="realizacja" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 h-12">
+              W realizacji ({wRealizacji.length})
+            </TabsTrigger>
+            <TabsTrigger value="zakonczone" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-slate-700 h-12">
+              Zakończone ({zakonczone.length})
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="nowe" className="space-y-4">
-          {nowe.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center border rounded-xl bg-gray-50 border-dashed">
-              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4 text-2xl">📭</div>
-              <h3 className="text-lg font-semibold text-gray-900">Brak nowych zgłoszeń</h3>
-              <p className="text-sm text-gray-500 max-w-sm mt-1">
-                Na razie nikt nie aplikował na Twoje oferty.
-              </p>
-            </div>
-          ) : (
-            nowe.map(renderNowaCard)
-          )}
-        </TabsContent>
+          <TabsContent value="nowe" className="space-y-6 outline-none">
+            {nowe.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed rounded-3xl bg-slate-50/50 border-slate-200">
+                <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-6 text-3xl">📭</div>
+                <h3 className="text-xl font-bold text-slate-900">Brak nowych zgłoszeń</h3>
+                <p className="text-slate-500 max-w-xs mx-auto mt-2">
+                  Na razie nikt nie aplikował na Twoje oferty.
+                </p>
+              </div>
+            ) : (
+              nowe.map(renderNowaCard)
+            )}
+          </TabsContent>
 
-        <TabsContent value="realizacja" className="space-y-4">
-          {wRealizacji.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center border rounded-xl bg-gray-50 border-dashed">
-              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4 text-2xl">🚀</div>
-              <h3 className="text-lg font-semibold text-gray-900">Brak aktywnych realizacji</h3>
-              <p className="text-sm text-gray-500 max-w-sm mt-1">
-                Zaakceptuj zgłoszenie, aby rozpocząć współpracę.
-              </p>
-            </div>
-          ) : (
-            wRealizacji.map(renderRealizacjaCard)
-          )}
-        </TabsContent>
+          <TabsContent value="realizacja" className="space-y-6 outline-none">
+            {wRealizacji.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed rounded-3xl bg-slate-50/50 border-slate-200">
+                <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-6 text-3xl">🚀</div>
+                <h3 className="text-xl font-bold text-slate-900">Brak aktywnych realizacji</h3>
+                <p className="text-slate-500 max-w-xs mx-auto mt-2">
+                  Zaakceptuj zgłoszenie, aby rozpocząć współpracę.
+                </p>
+              </div>
+            ) : (
+              wRealizacji.map(renderRealizacjaCard)
+            )}
+          </TabsContent>
 
-        <TabsContent value="zakonczone" className="space-y-4">
-          {zakonczone.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center border rounded-xl bg-gray-50 border-dashed">
-              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4 text-2xl">📋</div>
-              <h3 className="text-lg font-semibold text-gray-900">Brak zakończonych zleceń</h3>
-              <p className="text-sm text-gray-500 max-w-sm mt-1">
-                Tutaj pojawią się zakończone i odrzucone zgłoszenia.
-              </p>
-            </div>
-          ) : (
-            zakonczone.map(renderZakonczonaCard)
-          )}
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="zakonczone" className="space-y-6 outline-none">
+            {zakonczone.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed rounded-3xl bg-slate-50/50 border-slate-200">
+                <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-6 text-3xl">📋</div>
+                <h3 className="text-xl font-bold text-slate-900">Brak zakończonych zleceń</h3>
+                <p className="text-slate-500 max-w-xs mx-auto mt-2">
+                  Tutaj pojawią się zakończone i odrzucone zgłoszenia.
+                </p>
+              </div>
+            ) : (
+              zakonczone.map(renderZakonczonaCard)
+            )}
+          </TabsContent>
+        </Tabs>
+      </PageContainer>
     </main>
   );
 }

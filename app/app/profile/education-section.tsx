@@ -126,7 +126,7 @@ export default function EducationSection({ entries }: { entries: any[] }) {
 
                             <div className="flex gap-3 pt-4 justify-end border-t border-indigo-100">
                                 <Button variant="ghost" type="button" onClick={() => setIsAdding(false)} className="rounded-xl font-bold text-slate-500 hover:text-slate-700">Anuluj</Button>
-                                <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 px-6">Zapisz</Button>
+                                <Button type="submit" className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl font-bold shadow-lg shadow-indigo-200/50 border border-indigo-500/30 transition-all duration-300 px-6 hover:-translate-y-0.5">Zapisz</Button>
                             </div>
                         </form>
                     </div>

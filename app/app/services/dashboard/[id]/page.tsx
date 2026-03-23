@@ -38,6 +38,7 @@ export default async function ServiceOrderDetailPage(props: Props) {
             created_at,
             status,
             amount,
+            counter_amount,
             requirements,
             company_id,
             package:service_packages!service_orders_package_id_fkey(
