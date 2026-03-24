@@ -17,8 +17,21 @@ export async function saveStudentProfile(formData: FormData) {
   const bio = String(formData.get("bio") ?? "").trim() || null;
   const doswiadczenie = String(formData.get("doswiadczenie") ?? "").trim() || null;
 
-  const linkedin_url = String(formData.get("linkedin_url") ?? "").trim() || null;
-  const portfolio_url = String(formData.get("portfolio_url") ?? "").trim() || null;
+  if (bio && bio.length > 2000) throw new Error("Bio jest za długie (max 2000 znaków)");
+  if (doswiadczenie && doswiadczenie.length > 3000) throw new Error("Opis doświadczenia jest za długi (max 3000 znaków)");
+
+  const linkedinRaw = String(formData.get("linkedin_url") ?? "").trim() || null;
+  const portfolioRaw = String(formData.get("portfolio_url") ?? "").trim() || null;
+
+  // Walidacja URL — tylko https:// (blokuje javascript:, data:, http://)
+  const isValidHttpsUrl = (url: string | null) =>
+    !url || url.startsWith("https://");
+
+  if (!isValidHttpsUrl(linkedinRaw)) throw new Error("LinkedIn URL musi zaczynać się od https://");
+  if (!isValidHttpsUrl(portfolioRaw)) throw new Error("Portfolio URL musi zaczynać się od https://");
+
+  const linkedin_url = linkedinRaw;
+  const portfolio_url = portfolioRaw;
 
   // ✅ tagi kompetencji
   const kompetencjeJson = String(formData.get("kompetencje_json") ?? "").trim();

@@ -4,11 +4,23 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-export async function createSystemService(formData: FormData) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+async function requireAdmin() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Nieautoryzowany");
 
-    if (!user) throw new Error("Brak autoryzacji");
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .single();
+
+  if (profile?.role !== "admin") throw new Error("Brak uprawnień administratora");
+  return { supabase, user };
+}
+
+export async function createSystemService(formData: FormData) {
+    const { supabase } = await requireAdmin();
 
     const title = String(formData.get("tytul") ?? "").trim();
     const description = String(formData.get("opis") ?? "").trim();
@@ -16,12 +28,14 @@ export async function createSystemService(formData: FormData) {
     const delivery_time_days = String(formData.get("czas") ?? "").trim() || null;
     const priceRaw = String(formData.get("stawka") ?? "").trim();
     const price = priceRaw ? Number(priceRaw) : null;
-    const locked_content = String(formData.get("obligations") ?? "").trim() || null; // Use locked_content
+    const locked_content = String(formData.get("obligations") ?? "").trim() || null;
 
     if (!title || !description) throw new Error("Tytuł i opis są wymagane");
+    if (title.length > 200) throw new Error("Tytuł jest za długi (max 200 znaków)");
+    if (description.length > 5000) throw new Error("Opis jest za długi (max 5000 znaków)");
+    if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidłowa cena");
 
     const { error } = await supabase.from("service_packages").insert({
-        // company_id: user.id, // Removed as column doesn't exist
         title,
         description,
         category,
@@ -40,10 +54,7 @@ export async function createSystemService(formData: FormData) {
 }
 
 export async function updateSystemService(offerId: string, formData: FormData) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) throw new Error("Brak autoryzacji");
+    const { supabase } = await requireAdmin();
 
     const title = String(formData.get("tytul") ?? "").trim();
     const description = String(formData.get("opis") ?? "").trim();
@@ -54,6 +65,9 @@ export async function updateSystemService(offerId: string, formData: FormData) {
     const locked_content = String(formData.get("obligations") ?? "").trim() || null;
 
     if (!title || !description) throw new Error("Tytuł i opis są wymagane");
+    if (title.length > 200) throw new Error("Tytuł jest za długi (max 200 znaków)");
+    if (description.length > 5000) throw new Error("Opis jest za długi (max 5000 znaków)");
+    if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidłowa cena");
 
     const { error } = await supabase
         .from("service_packages")
@@ -71,16 +85,11 @@ export async function updateSystemService(offerId: string, formData: FormData) {
 
     revalidatePath("/app/admin/system-services");
     revalidatePath("/app/company/packages");
-
-
     redirect("/app/admin/system-services");
 }
 
 export async function deleteSystemService(serviceId: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) throw new Error("Brak autoryzacji");
+    const { supabase } = await requireAdmin();
 
     const { error } = await supabase
         .from("service_packages")

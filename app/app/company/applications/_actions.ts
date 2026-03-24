@@ -11,6 +11,16 @@ interface OfferRow {
   tytul: string | null;
 }
 
+function toMinorUnits(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Math.round(value * 100);
+}
+
+function fromMinorUnits(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return value / 100;
+}
+
 function toNumber(v: FormDataEntryValue | null): number | null {
   if (typeof v !== "string") return null;
   const n = Number(v);
@@ -100,7 +110,7 @@ export async function acceptApplication(applicationId: string) {
   const { data: appRow, error: appErr } = await supabase
     .from("applications")
     .select(
-      "id, status, student_id, offer_id, proposed_stawka, agreed_stawka, counter_stawka, offers!inner(id, tytul, stawka, company_id)"
+      "id, status, student_id, offer_id, proposed_stawka, agreed_stawka, agreed_stawka_minor, counter_stawka, offers!inner(id, tytul, stawka, company_id)"
     )
     .eq("id", applicationId)
     .single();
@@ -123,12 +133,21 @@ export async function acceptApplication(applicationId: string) {
   // If sent: use agreed > proposed > offer default
   const agreed = appRow.status === "countered"
     ? (appRow as any).counter_stawka ?? (appRow as any).proposed_stawka ?? offer.stawka ?? null
-    : (appRow as any).agreed_stawka ?? (appRow as any).proposed_stawka ?? offer.stawka ?? null;
+    : (appRow as any).agreed_stawka
+      ?? fromMinorUnits((appRow as any).agreed_stawka_minor)
+      ?? (appRow as any).proposed_stawka
+      ?? offer.stawka
+      ?? null;
 
   // ✅ zaakceptuj
   const { error: updErr } = await supabase
     .from("applications")
-    .update({ status: "accepted", agreed_stawka: agreed, decided_at: now })
+    .update({
+      status: "accepted",
+      agreed_stawka: agreed,
+      agreed_stawka_minor: toMinorUnits(agreed),
+      decided_at: now,
+    })
     .eq("id", applicationId);
 
   if (updErr) throw new Error(updErr.message);
@@ -188,7 +207,10 @@ export async function acceptApplication(applicationId: string) {
       user.id,
       `Stawka ${agreed ?? offer.stawka ?? "-"} zł zaakceptowana.`,
       "application_accepted",
-      { agreed_stawka: agreed }
+      {
+        agreed_stawka: agreed,
+        agreed_stawka_minor: toMinorUnits(agreed),
+      }
     );
   } catch {
     // nie blokujemy flow
@@ -200,6 +222,7 @@ export async function acceptApplication(applicationId: string) {
     offer_id: offer.id,
     offer_title: offer.tytul ?? null,
     agreed_stawka: agreed,
+    agreed_stawka_minor: toMinorUnits(agreed),
   });
 
   // Revalidate chat page if conversation exists
@@ -288,7 +311,7 @@ export async function counterOffer(applicationId: string, formData: FormData) {
   if (!user) redirect("/auth");
 
   const counter = toNumber(formData.get("counter_stawka"));
-  if (counter == null || counter <= 0) {
+  if (counter == null || counter <= 0 || counter > 500000) {
     revalidatePath("/app/company/applications");
     return;
   }
@@ -314,7 +337,13 @@ export async function counterOffer(applicationId: string, formData: FormData) {
 
   const { error: updErr } = await supabase
     .from("applications")
-    .update({ status: "countered", counter_stawka: counter, decided_at: null, agreed_stawka: null })
+    .update({
+      status: "countered",
+      counter_stawka: counter,
+      decided_at: null,
+      agreed_stawka: null,
+      agreed_stawka_minor: null,
+    })
     .eq("id", applicationId);
 
   if (updErr) throw new Error(updErr.message);

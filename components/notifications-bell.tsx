@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { Bell, Check, Info, AlertCircle, CheckCircle, MessageSquare } from "lucide-react";
+import { Bell, Info, AlertCircle, CheckCircle, MessageSquare } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { pl } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -10,9 +12,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { getRecentNotifications, markNotificationRead, markAllNotificationsRead } from "@/app/app/notifications/_actions";
-import { formatDistanceToNow } from "date-fns";
-import { pl } from "date-fns/locale";
+import {
+  getRecentNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from "@/app/app/notifications/_actions";
 import { getNotificationTitle } from "@/app/app/notifications/utils";
 
 interface Notification {
@@ -29,42 +33,70 @@ export default function NotificationsBell({ unread }: { unread: number }) {
   const [loading, setLoading] = useState(false);
   const [cleared, setCleared] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      setCleared(true);
-      setLoading(true);
-      getRecentNotifications(5).then((data) => {
-        setNotifications(data);
-        setLoading(false);
-      });
+  const handleOpenChange = async (nextOpen: boolean) => {
+    setOpen(nextOpen);
+
+    if (!nextOpen) {
+      return;
     }
-  }, [open]); // Refresh when opened
+
+    setCleared(true);
+    setLoading(true);
+
+    try {
+      const data = await getRecentNotifications(5);
+      setNotifications(data);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleMarkAllRead = async () => {
     await markAllNotificationsRead();
-    setNotifications((prev) => prev.map((n) => ({ ...n, read_at: new Date().toISOString() })));
+    setNotifications((prev) =>
+      prev.map((notification) => ({
+        ...notification,
+        read_at: new Date().toISOString(),
+      }))
+    );
   };
 
   const handleMarkRead = async (id: string, currentReadAt: string | null) => {
-    if (!currentReadAt) {
-      await markNotificationRead(id);
-      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read_at: new Date().toISOString() } : n));
+    if (currentReadAt) {
+      return;
     }
+
+    await markNotificationRead(id);
+    setNotifications((prev) =>
+      prev.map((notification) =>
+        notification.id === id
+          ? { ...notification, read_at: new Date().toISOString() }
+          : notification
+      )
+    );
   };
 
   const getIcon = (type: string) => {
     switch (type) {
-      case "MESSAGE": return <MessageSquare className="h-4 w-4 text-blue-500" />;
-      case "OFFER": return <AlertCircle className="h-4 w-4 text-orange-500" />;
-      case "JOB_COMPLETED": return <CheckCircle className="h-4 w-4 text-green-500" />;
-      default: return <Info className="h-4 w-4 text-slate-500" />;
+      case "MESSAGE":
+        return <MessageSquare className="h-4 w-4 text-blue-500" />;
+      case "OFFER":
+        return <AlertCircle className="h-4 w-4 text-orange-500" />;
+      case "JOB_COMPLETED":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      default:
+        return <Info className="h-4 w-4 text-slate-500" />;
     }
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative text-slate-500 hover:text-indigo-600 hover:bg-indigo-50/50">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative text-slate-500 hover:text-indigo-600 hover:bg-indigo-50/50"
+        >
           <Bell className="h-5 w-5" />
           {unread > 0 && !cleared && (
             <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm ring-2 ring-white">
@@ -88,9 +120,9 @@ export default function NotificationsBell({ unread }: { unread: number }) {
 
         <div className="max-h-[300px] overflow-y-auto py-1">
           {loading ? (
-            <div className="p-2 space-y-1" aria-label="Ładowanie powiadomień">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex gap-3 items-start px-4 py-3 animate-pulse">
+            <div className="p-2 space-y-1" aria-label="Ladowanie powiadomien">
+              {[1, 2, 3].map((item) => (
+                <div key={item} className="flex gap-3 items-start px-4 py-3 animate-pulse">
                   <div className="h-7 w-7 rounded-full bg-slate-100 shrink-0" />
                   <div className="flex-1 space-y-2">
                     <div className="h-3 bg-slate-100 rounded w-3/4" />
@@ -102,31 +134,47 @@ export default function NotificationsBell({ unread }: { unread: number }) {
           ) : notifications.length === 0 ? (
             <div className="p-8 text-center">
               <Bell className="h-8 w-8 text-slate-200 mx-auto mb-2" />
-              <p className="text-xs text-slate-400">Brak nowych powiadomień</p>
+              <p className="text-xs text-slate-400">Brak nowych powiadomien</p>
             </div>
           ) : (
-            notifications.map((n) => (
+            notifications.map((notification) => (
               <div
-                key={n.id}
+                key={notification.id}
                 className={cn(
                   "px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-50 last:border-0",
-                  !n.read_at && "bg-indigo-50/30"
+                  !notification.read_at && "bg-indigo-50/30"
                 )}
-                onClick={() => handleMarkRead(n.id, n.read_at)}
+                onClick={() =>
+                  handleMarkRead(notification.id, notification.read_at)
+                }
               >
                 <div className="flex gap-3 items-start">
-                  <div className={cn("mt-0.5 p-1.5 rounded-full bg-white border shadow-sm", !n.read_at && "border-indigo-100 bg-indigo-50")}>
-                    {getIcon(n.typ)}
+                  <div
+                    className={cn(
+                      "mt-0.5 p-1.5 rounded-full bg-white border shadow-sm",
+                      !notification.read_at && "border-indigo-100 bg-indigo-50"
+                    )}
+                  >
+                    {getIcon(notification.typ)}
                   </div>
                   <div className="flex-1 space-y-1">
-                    <p className={cn("text-xs text-slate-700 leading-snug", !n.read_at && "font-medium text-slate-900")}>
-                      {getNotificationTitle(n)}
+                    <p
+                      className={cn(
+                        "text-xs text-slate-700 leading-snug",
+                        !notification.read_at && "font-medium text-slate-900"
+                      )}
+                    >
+                      {getNotificationTitle(notification)}
                     </p>
                     <p className="text-[10px] text-slate-400">
-                      {n.created_at && formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: pl })}
+                      {notification.created_at &&
+                        formatDistanceToNow(new Date(notification.created_at), {
+                          addSuffix: true,
+                          locale: pl,
+                        })}
                     </p>
                   </div>
-                  {!n.read_at && (
+                  {!notification.read_at && (
                     <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 mt-2 shrink-0" />
                   )}
                 </div>
@@ -137,7 +185,10 @@ export default function NotificationsBell({ unread }: { unread: number }) {
 
         <div className="p-2 border-t border-slate-100 bg-slate-50/30">
           <Link href="/app/notifications" onClick={() => setOpen(false)}>
-            <Button variant="ghost" className="w-full h-8 text-xs font-medium text-slate-600 hover:text-indigo-600">
+            <Button
+              variant="ghost"
+              className="w-full h-8 text-xs font-medium text-slate-600 hover:text-indigo-600"
+            >
               Zobacz wszystkie
             </Button>
           </Link>

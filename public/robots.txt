@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Allow: /app/offers/
+Disallow: /app/admin/
+Disallow: /app/chat/
+Disallow: /app/profile/
+Disallow: /app/finances/
+
+Sitemap: https://student2work.pl/sitemap.xml

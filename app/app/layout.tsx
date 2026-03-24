@@ -1,8 +1,5 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { EnsureOnboarding } from "./EnsureOnboarding";
-import { signOut } from "./_actions/auth";
-import NotificationsBell from "@/components/notifications-bell";
 import { AppNavbar } from "./app-navbar";
 import { redirect } from "next/navigation";
 
@@ -55,14 +52,24 @@ export default async function AppLayout({
 
     unread = unreadRows?.length ?? 0;
 
-    // Count unread chat messages for badge initialization (SSR)
-    const { count: chatCount } = await supabase
-      .from("messages")
-      .select("id", { count: "exact", head: true })
-      .neq("sender_id", user.id)
-      .is("read_at", null);
+    // Count unread chat messages only inside the user's conversations.
+    const { data: conversations } = await supabase
+      .from("conversations")
+      .select("id")
+      .or(`company_id.eq.${user.id},student_id.eq.${user.id}`);
 
-    unreadChat = chatCount ?? 0;
+    const conversationIds = conversations?.map((conversation) => conversation.id) ?? [];
+
+    if (conversationIds.length > 0) {
+      const { count: chatCount } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .in("conversation_id", conversationIds)
+        .neq("sender_id", user.id)
+        .is("read_at", null);
+
+      unreadChat = chatCount ?? 0;
+    }
   }
 
   // --- ONBOARDING CHECK ---

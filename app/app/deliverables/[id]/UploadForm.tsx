@@ -27,8 +27,57 @@ export function UploadForm({
         await action(applicationId, formData);
     }
 
+    // Dozwolone typy plików (whitelist MIME)
+    const ALLOWED_MIME_TYPES = new Set([
+        // Dokumenty
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "text/plain",
+        "text/csv",
+        "text/markdown",
+        // Obrazy
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "image/svg+xml",
+        // Archiwa (max 50MB)
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/x-rar-compressed",
+        "application/x-7z-compressed",
+        // Kod / dane
+        "application/json",
+        "text/html",
+        "text/css",
+        "application/javascript",
+        "text/javascript",
+    ]);
+    const MAX_FILE_SIZE_MB = 50;
+    const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
     async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files?.length) return;
+
+        // Walidacja przed uplodem
+        for (let i = 0; i < e.target.files.length; i++) {
+            const file = e.target.files[i];
+            if (file.size > MAX_FILE_SIZE_BYTES) {
+                alert(`Plik "${file.name}" przekracza limit ${MAX_FILE_SIZE_MB} MB. Skompresuj plik i spróbuj ponownie.`);
+                e.target.value = "";
+                return;
+            }
+            if (file.type && !ALLOWED_MIME_TYPES.has(file.type)) {
+                alert(`Typ pliku "${file.type}" nie jest dozwolony. Dozwolone formaty: PDF, DOCX, XLSX, PPTX, TXT, CSV, JPG, PNG, GIF, WEBP, SVG, ZIP, RAR, JSON.`);
+                e.target.value = "";
+                return;
+            }
+        }
 
         setIsUploading(true);
         const supabase = createClient();
@@ -77,6 +126,7 @@ export function UploadForm({
                             </div>
                             <span className="font-bold text-indigo-700 text-lg">Kliknij, aby wybrać pliki</span>
                             <span className="text-sm text-slate-500 mt-1">lub przeciągnij je tutaj</span>
+                            <span className="text-xs text-slate-400 mt-2">PDF, DOCX, XLSX, JPG, PNG, ZIP i inne · maks. 50 MB / plik</span>
                         </div>
                         <Input
                             id="file-upload"

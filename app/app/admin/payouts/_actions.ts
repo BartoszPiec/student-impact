@@ -4,6 +4,48 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
+type PayoutContractRelation = {
+  student_id: string | null;
+  applications?: {
+    offers?: {
+      tytul?: string | null;
+    } | null;
+  } | null;
+};
+
+type PayoutRow = {
+  id: string;
+  contract_id: string | null;
+  milestone_id: string | null;
+  amount_net: number | string;
+  amount_gross: number | string;
+  platform_fee: number | string;
+  contracts: PayoutContractRelation | null;
+};
+
+type PayoutListRow = PayoutRow & {
+  status: string;
+  created_at: string;
+  paid_at: string | null;
+  milestones: {
+    title: string | null;
+    idx: number | null;
+  } | null;
+};
+
+type StudentProfileRow = {
+  user_id: string;
+  public_name: string | null;
+};
+
+function getStudentIdFromPayout(payout: PayoutRow): string | null {
+  return payout.contracts?.student_id ?? null;
+}
+
+function getOfferTitleFromPayout(payout: PayoutRow): string {
+  return payout.contracts?.applications?.offers?.tytul?.trim() || "Brak tytułu";
+}
+
 /**
  * Verify the current user is an admin.
  * Uses the profiles table's `role` column.
@@ -16,7 +58,7 @@ async function requireAdmin() {
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")
-    .eq("id", userData.user.id)
+    .eq("user_id", userData.user.id)
     .single();
 
   if (profile?.role !== "admin") {
@@ -27,7 +69,7 @@ async function requireAdmin() {
 }
 
 /**
- * Mark a payout as "processing" — admin has begun the transfer.
+ * Mark a payout as "processing" - admin has begun the transfer.
  */
 export async function markPayoutProcessing(payoutId: string) {
   await requireAdmin();
@@ -48,23 +90,38 @@ export async function markPayoutProcessing(payoutId: string) {
 }
 
 /**
- * Mark a payout as "paid" — funds transferred to student.
+ * Mark a payout as "paid" - funds transferred to student.
  */
 export async function markPayoutPaid(payoutId: string) {
-  await requireAdmin();
+  const user = await requireAdmin();
   const admin = createAdminClient();
 
-  const { error } = await admin
+  const { data: payout, error: payoutError } = await admin
     .from("payouts")
-    .update({
-      status: "paid",
-      paid_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
+    .select("id, contract_id, milestone_id, amount_net, amount_gross, platform_fee, contracts(student_id, applications!contracts_application_id_fkey(offers(tytul)))")
     .eq("id", payoutId)
-    .in("status", ["pending", "processing"]);
+    .maybeSingle();
 
-  if (error) throw new Error("Nie udało się zmienić statusu: " + error.message);
+  if (payoutError) {
+    throw new Error("Nie udało się pobrać wypłaty: " + payoutError.message);
+  }
+
+  if (!payout) {
+    throw new Error("Nie znaleziono wypłaty");
+  }
+
+  const typedPayout = payout as unknown as PayoutRow;
+
+  // ✅ [Refactor v1] Atomic Payout Processing with Accounting
+  const { error: rpcError } = await admin.rpc("process_payout_paid_v1", {
+    p_payout_id: payoutId,
+    p_admin_id: user.id
+  });
+
+  if (rpcError) {
+    console.error("RPC Error processing payout:", rpcError);
+    throw new Error("Nie udało się zatwierdzić wypłaty: " + rpcError.message);
+  }
 
   revalidatePath("/app/admin/payouts");
 }
@@ -101,24 +158,34 @@ export async function getPayouts(statusFilter?: string) {
     return [];
   }
 
-  // Enrich with student names
-  if (data && data.length > 0) {
-    const studentIds = [...new Set(data.map((p: any) => p.contracts?.student_id).filter(Boolean))];
-    const { data: students } = await admin
-      .from("student_profiles")
-      .select("id, public_name")
-      .in("id", studentIds);
-
-    const studentMap = new Map((students || []).map((s: any) => [s.id, s.public_name]));
-
-    return data.map((p: any) => ({
-      ...p,
-      studentName: studentMap.get(p.contracts?.student_id) || "Nieznany",
-      offerTitle: (p.contracts?.applications as any)?.offers?.tytul || "—",
-      milestoneTitle: p.milestones?.title || "—",
-      milestoneIdx: p.milestones?.idx || 0,
-    }));
+  if (!data || data.length === 0) {
+    return [];
   }
 
-  return data || [];
+  const typedData = data as unknown as PayoutListRow[];
+  const studentIds = [...new Set(typedData.map((p) => getStudentIdFromPayout(p)).filter((id): id is string => Boolean(id)))];
+
+  const { data: students, error: studentError } = await admin
+    .from("student_profiles")
+    .select("user_id, public_name")
+    .in("user_id", studentIds);
+
+  if (studentError) {
+    console.error("Error fetching student profiles:", studentError);
+  }
+
+  const studentMap = new Map(
+    ((students ?? []) as StudentProfileRow[]).map((student) => [
+      student.user_id,
+      student.public_name ?? "Nieznany",
+    ])
+  );
+
+  return typedData.map((payout) => ({
+    ...payout,
+    studentName: studentMap.get(getStudentIdFromPayout(payout) ?? "") || "Nieznany",
+    offerTitle: getOfferTitleFromPayout(payout),
+    milestoneTitle: payout.milestones?.title || "Brak",
+    milestoneIdx: payout.milestones?.idx || 0,
+  }));
 }

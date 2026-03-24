@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -25,7 +26,7 @@ import {
     getSignedStorageUrl
 } from "../../_actions";
 import { toast } from "sonner";
-import { Shield, ShieldCheck, AlertCircle, CircleDollarSign, CheckCircle2, Lock, Clock, FileText, ChevronDown, ChevronUp, Star, Medal, MessageSquare } from "lucide-react";
+import { Shield, ShieldCheck, AlertCircle, CircleDollarSign, CheckCircle2, Lock, Clock, FileText, ChevronDown, ChevronUp, Star, Medal, MessageSquare, XCircle } from "lucide-react";
 import { PaymentModal } from "@/app/components/payment-modal";
 import { MilestoneNegotiation } from "./MilestoneNegotiation";
 import { ContractDocumentsCard } from "./ContractDocumentsCard";
@@ -35,6 +36,7 @@ import { SecureImageViewer } from "@/app/components/SecureImageViewer";
 
 export function StatusTab({
     status,
+    applicationStatus,
     isStudent,
     isCompany,
     applicationId,
@@ -433,6 +435,37 @@ export function StatusTab({
                                 )}
                             </>
                         )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* DANGER ZONE — Zakończ współpracę (tylko gdy zlecenie w trakcie) */}
+            {applicationStatus === 'accepted' && contract?.status !== 'completed' && (
+                <Card className="border-red-200 bg-red-50/40 shadow-sm overflow-hidden">
+                    <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 bg-red-100 rounded-lg shrink-0 mt-0.5">
+                                <XCircle className="w-5 h-5 text-red-600" />
+                            </div>
+                            <div>
+                                <p className="font-semibold text-red-800 text-sm">Zakończ współpracę</p>
+                                <p className="text-red-600/80 text-xs mt-0.5 max-w-md">
+                                    Ta operacja jest nieodwracalna. Zlecenie zostanie anulowane,
+                                    a środki z depozytu — zwrócone zgodnie z regulaminem.
+                                </p>
+                            </div>
+                        </div>
+                        <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0 border-red-300 text-red-700 hover:bg-red-100 hover:border-red-400 hover:text-red-800 transition-colors"
+                        >
+                            <Link href={`/app/cancel/${applicationId}`}>
+                                <XCircle className="w-4 h-4 mr-1.5" />
+                                Anuluj zlecenie
+                            </Link>
+                        </Button>
                     </CardContent>
                 </Card>
             )}

@@ -21,7 +21,7 @@ export async function createOrder(formData: FormData) {
     // Fetch package details EARLY to know the schema and student
     const { data: pkgData, error: pkgError } = await supabase
         .from("service_packages")
-        .select("student_id, is_system, form_schema")
+        .select("student_id, is_system, form_schema, price") // ✅ Added price to select
         .eq("id", packageId)
         .single();
 
@@ -58,8 +58,8 @@ export async function createOrder(formData: FormData) {
             company_id: user.id,
             package_id: packageId,
             student_id: pkgData.is_system ? null : pkgData.student_id,
-            amount: price,
-            requirements: requirementsText, // Zapisujemy wszystko jako jeden tekst dla studenta
+            amount: Number(pkgData.price), // ✅ SECURE: Use price from DB, not client-side value
+            requirements: requirementsText, 
             status: "pending",
             title: title,
             contact_email: contactEmail,

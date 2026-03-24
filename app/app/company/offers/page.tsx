@@ -8,6 +8,11 @@ import OffersTabs from "./offers-tabs";
 
 export const dynamic = "force-dynamic";
 
+function fromMinorUnits(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return null;
+  return value / 100;
+}
+
 export default async function CompanyOffersPage() {
   const supabase = await createClient();
 
@@ -71,7 +76,7 @@ export default async function CompanyOffersPage() {
   if (offerIds.length > 0) {
     const { data: apps } = await supabase
       .from("applications")
-      .select("id, offer_id, status, student_id, agreed_stawka, contracts:contracts!application_id(terms_status)")
+      .select("id, offer_id, status, student_id, agreed_stawka, agreed_stawka_minor, contracts:contracts!application_id(terms_status)")
       .in("offer_id", offerIds);
 
     (apps ?? []).forEach((a: any) => {
@@ -107,7 +112,7 @@ export default async function CompanyOffersPage() {
         acceptedByOffer.set(a.offer_id, (acceptedByOffer.get(a.offer_id) ?? 0) + 1);
         if (!acceptedAppIdByOffer.has(a.offer_id)) {
           acceptedAppIdByOffer.set(a.offer_id, a.id);
-          agreedStawkaByOffer.set(a.offer_id, a.agreed_stawka ?? null);
+          agreedStawkaByOffer.set(a.offer_id, a.agreed_stawka ?? fromMinorUnits(a.agreed_stawka_minor));
 
           // Extract contract status if available
           const contract = Array.isArray(a.contracts) ? a.contracts[0] : a.contracts;

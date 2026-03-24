@@ -58,11 +58,12 @@ export async function cancelCooperation(applicationId: string, formData: FormDat
               company_id: companyId,
               student_id: studentId,
               offer_id: appRow.offer_id,
+              type: 'application',
             })
             .select("id")
-            .single();
+            .maybeSingle();
 
-          if (createErr) throw createErr;
+          if (createErr || !created) throw createErr || new Error("Nie udało się stworzyć rozmowy.");
           conversationId = created.id;
 
           // jeśli było message przy aplikacji – wrzuć jako pierwszą wiadomość (żeby historia była pełna)

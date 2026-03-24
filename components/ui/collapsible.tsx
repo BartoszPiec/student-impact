@@ -51,12 +51,16 @@ const CollapsibleTrigger = React.forwardRef<
     }
 
     if (asChild && React.isValidElement(children)) {
-        return React.cloneElement(children as React.ReactElement<any>, {
-            ref,
-            ...props,
-            onClick: handleClick,
-            "data-state": open ? "open" : "closed",
-        })
+        return React.cloneElement(
+            children as React.ReactElement<{
+                onClick?: React.MouseEventHandler<HTMLElement>
+                "data-state"?: "open" | "closed"
+            }>,
+            {
+                onClick: () => onOpenChange(!open),
+                "data-state": open ? "open" : "closed",
+            }
+        )
     }
 
     return (

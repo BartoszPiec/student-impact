@@ -11,11 +11,145 @@ import { ContractBDocument } from "@/lib/pdf/contract-b-template";
 import { generateStudentInvoice } from "@/lib/pdf/generate-invoice";
 import type { ContractData } from "@/lib/pdf/types";
 
+type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type JsonPayload = Record<string, unknown>;
+type RelationValue<T> = T | T[] | null;
+
+type OfferSummaryRow = {
+  company_id: string | null;
+  tytul: string | null;
+};
+
+type PackageSummaryRow = {
+  title: string | null;
+};
+
+type OfferDetailRow = {
+  tytul: string | null;
+  opis: string | null;
+};
+
+type ContractMilestoneRow = {
+  idx: number | null;
+  title: string | null;
+  amount: number | string | null;
+  acceptance_criteria: string | null;
+  status: string | null;
+  due_at?: string | null;
+};
+
+type ContractWithMilestonesRow = {
+  company_id: string;
+  student_id: string;
+  application_id: string | null;
+  service_order_id: string | null;
+  total_amount: number | string | null;
+  currency: string | null;
+  review_window_days: number | null;
+  milestones: ContractMilestoneRow[] | null;
+};
+
+type ApplicationDeliverableRow = {
+  student_id: string | null;
+  offers: RelationValue<Pick<OfferSummaryRow, "tytul">>;
+};
+
+type DeliverableReviewRow = {
+  application_id: string | null;
+  applications: RelationValue<ApplicationDeliverableRow>;
+};
+
+type ReviewApplicationRow = {
+  student_id: string;
+  offer_id: string | null;
+  offers: RelationValue<OfferSummaryRow>;
+};
+
+type ReviewServiceOrderRow = {
+  company_id: string;
+  student_id: string;
+};
+
+type ReviewPayload = {
+  reviewer_id: string;
+  reviewee_id: string;
+  application_id: string | null;
+  service_order_id: string | null;
+  reviewer_role: "student" | "company";
+  rating: number;
+  comment: string | null;
+  company_id: string;
+  student_id: string;
+  offer_id?: string;
+};
+
+type ProjectResourceInsert = {
+  uploader_id: string;
+  file_name: string;
+  file_path: string;
+  application_id?: string;
+  service_order_id?: string;
+};
+
+type ApplicationNotificationRow = {
+  offers: RelationValue<OfferSummaryRow>;
+};
+
+type ApplicationOfferDetailsRow = {
+  offers: RelationValue<OfferDetailRow>;
+};
+
+type ServiceOrderNotificationRow = {
+  company_id: string | null;
+  package: RelationValue<PackageSummaryRow>;
+};
+
+type ContractApplicationsRow = {
+  offers: RelationValue<Pick<OfferSummaryRow, "tytul">>;
+};
+
+type ContractNotificationRow = {
+  student_id: string | null;
+  total_amount: number | string | null;
+  applications: RelationValue<ContractApplicationsRow>;
+};
+
+type MilestoneContractCompanyRow = {
+  company_id: string | null;
+  application_id: string | null;
+  applications: RelationValue<ContractApplicationsRow>;
+};
+
+type MilestoneCompanyNotificationRow = {
+  title: string | null;
+  contracts: RelationValue<MilestoneContractCompanyRow>;
+};
+
+type MilestoneContractStudentRow = {
+  student_id: string | null;
+  application_id: string | null;
+  applications: RelationValue<ContractApplicationsRow>;
+};
+
+type MilestoneStudentNotificationRow = {
+  title: string | null;
+  amount: number | string | null;
+  contracts: RelationValue<MilestoneContractStudentRow>;
+};
+
+function unwrapRelation<T>(value: RelationValue<T>): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
 async function notifyUser(
-  supabase: any,
+  supabase: AppSupabaseClient,
   userId: string,
   typ: string,
-  payload: Record<string, any> = {}
+  payload: JsonPayload = {},
 ) {
   try {
     await supabase.rpc("create_notification", {
@@ -23,7 +157,7 @@ async function notifyUser(
       p_typ: typ,
       p_payload: payload,
     });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("notifyUser error:", err);
   }
 }
@@ -82,7 +216,7 @@ export async function submitDeliverable(applicationId: string, formData: FormDat
 
   const description = String(formData.get("description") ?? "").trim();
   const filesJson = String(formData.get("filesJson") ?? "[]");
-  let files = [];
+  let files: unknown[] = [];
   try {
     files = JSON.parse(filesJson);
   } catch {
@@ -124,16 +258,22 @@ export async function submitDeliverable(applicationId: string, formData: FormDat
         .select("offers(company_id, tytul)")
         .eq("id", applicationId)
         .maybeSingle();
-      companyId = (appData as any)?.offers?.company_id ?? null;
-      offerTitle = (appData as any)?.offers?.tytul ?? null;
+
+      const applicationRow = appData as ApplicationNotificationRow | null;
+      const offer = unwrapRelation(applicationRow?.offers ?? null);
+      companyId = offer?.company_id ?? null;
+      offerTitle = offer?.tytul ?? null;
     } else {
       const { data: soData } = await supabase
         .from("service_orders")
         .select("company_id, package:service_packages(title)")
         .eq("id", applicationId)
         .maybeSingle();
-      companyId = (soData as any)?.company_id ?? null;
-      offerTitle = (soData as any)?.package?.title ?? null;
+
+      const serviceOrder = soData as ServiceOrderNotificationRow | null;
+      const servicePackage = unwrapRelation(serviceOrder?.package ?? null);
+      companyId = serviceOrder?.company_id ?? null;
+      offerTitle = servicePackage?.title ?? null;
     }
     if (companyId) {
       await notifyUser(supabase, companyId, "deliverable_submitted", {
@@ -153,24 +293,34 @@ export async function reviewDeliverable(deliverableId: string, status: "accepted
   if (!user.user) redirect("/auth");
 
   // Need appId for revalidation
-  const { data: deliv } = await supabase
+  const { data: delivData } = await supabase
     .from("deliverables")
     .select("application_id, applications(student_id, offers(tytul))")
     .eq("id", deliverableId)
-    .single();
+    .maybeSingle();
+
+  const deliv = delivData as DeliverableReviewRow | null;
+  if (!deliv) throw new Error("Nie znaleziono oddanej pracy.");
 
   // ✅ [Realization Guard]
-  const { error } = await supabase.rpc("review_deliverable_and_progress", {
-    p_deliverable_id: deliverableId,
-    p_decision: status, // "accepted" | "rejected"
-    p_feedback: feedback ?? null,
-  });
-  if (error) throw new Error(error.message);
+  try {
+    const { error } = await supabase.rpc("review_deliverable_and_progress", {
+      p_deliverable_id: deliverableId,
+      p_decision: status, // "accepted" | "rejected"
+      p_feedback: feedback ?? null,
+    });
+    if (error) throw new Error(error.message);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Blad podczas oceniania pracy.";
+    throw new Error(message);
+  }
 
   // Powiadom studenta o decyzji firmy
   try {
-    const studentId = (deliv as any)?.applications?.student_id;
-    const offerTitle = (deliv as any)?.applications?.offers?.tytul ?? null;
+    const application = unwrapRelation(deliv.applications);
+    const offer = unwrapRelation(application?.offers ?? null);
+    const studentId = application?.student_id ?? null;
+    const offerTitle = offer?.tytul ?? null;
     const appId = deliv?.application_id;
     if (studentId && appId) {
       const notifType = status === "accepted" ? "deliverable_accepted" : "deliverable_rejected";
@@ -195,30 +345,40 @@ export async function submitReview(applicationId: string, rating: number, commen
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) redirect("/auth");
 
+  const reviewerId = user.user.id;
+  const normalizedRating = Math.max(1, Math.min(5, Math.trunc(rating)));
+  const normalizedComment = comment.trim() || null;
+
   // Try Application first
   let studentId = "";
   let companyId = "";
-  let offerId = ""; // Might be null for service orders if not using offers table
-  let sourceType = "application";
+  let offerId: string | null = null;
+  let offerTitle: string | null = null;
+  let sourceType: "application" | "service_order" = "application";
 
-  const { data: appRow } = await supabase
+  const { data: applicationData } = await supabase
     .from("applications")
-    .select("id, student_id, offer_id, offers(company_id)")
+    .select("id, student_id, offer_id, offers(company_id, tytul)")
     .eq("id", applicationId)
     .maybeSingle();
 
+  const appRow = applicationData as ReviewApplicationRow | null;
+
   if (appRow) {
+    const offer = unwrapRelation(appRow.offers);
     studentId = appRow.student_id;
-    companyId = (appRow.offers as any)?.company_id;
+    companyId = offer?.company_id ?? "";
     offerId = appRow.offer_id;
+    offerTitle = offer?.tytul ?? null;
   } else {
     // Try Service Order
-    const { data: soRow } = await supabase
+    const { data: serviceOrderData } = await supabase
       .from("service_orders")
       .select("id, company_id, student_id")
       .eq("id", applicationId)
       .maybeSingle();
 
+    const soRow = serviceOrderData as ReviewServiceOrderRow | null;
     if (soRow) {
       sourceType = "service_order";
       studentId = soRow.student_id;
@@ -229,48 +389,70 @@ export async function submitReview(applicationId: string, rating: number, commen
     }
   }
 
-  let role = "";
+  if (!studentId || !companyId) {
+    throw new Error("Brak danych stron do zapisania opinii.");
+  }
+
+  let role: "student" | "company";
   let revieweeId = "";
 
-  if (user.user.id === studentId) {
+  if (reviewerId === studentId) {
     role = "student";
     revieweeId = companyId;
-  } else if (user.user.id === companyId) {
+  } else if (reviewerId === companyId) {
     role = "company";
     revieweeId = studentId;
   } else {
     throw new Error("Nie jesteś stroną tej umowy");
   }
 
+  // Zabezpieczenie przed review flooding: sprawdź czy użytkownik już ocenił
+  const existingReviewQuery = supabase
+    .from("reviews")
+    .select("id")
+    .eq("reviewer_id", reviewerId);
+
+  if (sourceType === "application") {
+    existingReviewQuery.eq("application_id", applicationId);
+  } else {
+    existingReviewQuery.eq("service_order_id", applicationId);
+  }
+
+  const { data: existingReview } = await existingReviewQuery.maybeSingle();
+  if (existingReview) {
+    throw new Error("Już wystawiłeś ocenę dla tego zlecenia.");
+  }
+
   // Insert Review
-  const reviewPayload: any = {
-    reviewer_id: user.user.id,
+  const reviewPayload: ReviewPayload = {
+    reviewer_id: reviewerId,
     reviewee_id: revieweeId,
     application_id: sourceType === 'application' ? applicationId : null,
     service_order_id: sourceType === 'service_order' ? applicationId : null,
-    // offer_id: offerId, // Optional?
     reviewer_role: role,
-    rating: rating,
-    comment: comment
+    rating: normalizedRating,
+    comment: normalizedComment,
+    company_id: companyId,
+    student_id: studentId,
   };
 
   if (offerId) reviewPayload.offer_id = offerId;
 
-  // Backward compatibility for profile page
-  if (role === 'company') {
-    reviewPayload.student_id = revieweeId;
+  try {
+    const { error: insertErr } = await supabase.from("reviews").insert(reviewPayload);
+    if (insertErr) throw new Error(insertErr.message);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Błąd bazy danych";
+    throw new Error("Nie udało się zapisać opinii: " + message);
   }
-
-  await supabase.from("reviews").insert(reviewPayload);
 
   // Powiadom drugą stronę o otrzymanej ocenie
   try {
-    const offerTitle = appRow?.offers ? (appRow.offers as any)?.tytul : null;
-    const ratingLabel = `${rating}/5 ⭐`;
+    const ratingLabel = `${normalizedRating}/5`;
     const notifPayload = {
       application_id: applicationId,
       offer_title: offerTitle,
-      rating,
+      rating: normalizedRating,
       snippet: `Otrzymałeś ocenę ${ratingLabel} za zlecenie "${offerTitle ?? "zlecenie"}".`,
     };
     await notifyUser(supabase, revieweeId, "review_received", notifPayload);
@@ -306,8 +488,6 @@ export async function addResource(applicationId: string, formData: FormData) {
 
   const filename = String(formData.get("filename"));
   const filePathOrUrl = String(formData.get("fileUrl"));
-  const description = String(formData.get("description") ?? "");
-  const fileSize = Number(formData.get("fileSize") ?? 0);
 
   if (!filename || !filePathOrUrl) throw new Error("Brak pliku");
 
@@ -332,8 +512,21 @@ export async function addResource(applicationId: string, formData: FormData) {
   revalidatePath(`/app/deliverables/${applicationId}`);
 }
 
-export async function deleteResource(resourceId: string, applicationId: string) { // appId param for revalidation
+export async function deleteResource(resourceId: string, applicationId: string) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/auth");
+
+  // IDOR fix: upewnij się że user jest uploaderem tego zasobu
+  const { data: resource } = await supabase
+    .from("project_resources")
+    .select("uploader_id")
+    .eq("id", resourceId)
+    .maybeSingle();
+
+  if (!resource) throw new Error("Zasób nie istnieje");
+  if (resource.uploader_id !== user.id) throw new Error("Brak uprawnień do usunięcia tego zasobu");
+
   const { error } = await supabase.from("project_resources").delete().eq("id", resourceId);
   if (error) throw new Error(error.message);
   revalidatePath(`/app/deliverables/${applicationId}`);
@@ -362,6 +555,19 @@ export async function addSecret(applicationId: string, formData: FormData) {
 
 export async function deleteSecret(secretId: string, applicationId: string) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/auth");
+
+  // IDOR fix: upewnij się że user jest autorem sekretu
+  const { data: secret } = await supabase
+    .from("project_secrets")
+    .select("author_id")
+    .eq("id", secretId)
+    .maybeSingle();
+
+  if (!secret) throw new Error("Sekret nie istnieje");
+  if (secret.author_id !== user.id) throw new Error("Brak uprawnień do usunięcia tego sekretu");
+
   const { error } = await supabase.from("project_secrets").delete().eq("id", secretId);
   if (error) throw new Error(error.message);
   revalidatePath(`/app/deliverables/${applicationId}`);
@@ -391,13 +597,18 @@ export async function fundContractAction(contractId: string, applicationId: stri
 
   // Powiadom studenta że środki wpłynęły i może zacząć pracę
   try {
-    const { data: contractData } = await supabase
+    const { data: contractDataRaw } = await supabase
       .from("contracts")
       .select("student_id, total_amount, applications(offers(tytul))")
       .eq("id", contractId)
       .maybeSingle();
+
+    const contractData = contractDataRaw as ContractNotificationRow | null;
+    const application = unwrapRelation(contractData?.applications ?? null);
+    const offer = unwrapRelation(application?.offers ?? null);
+
     if (contractData?.student_id) {
-      const offerTitle = (contractData as any)?.applications?.offers?.tytul ?? null;
+      const offerTitle = offer?.tytul ?? null;
       await notifyUser(supabase, contractData.student_id, "escrow_funded", {
         application_id: applicationId,
         contract_id: contractId,
@@ -441,14 +652,20 @@ export async function submitMilestoneWorkAction(
 
   // Powiadom firmę że student przesłał pracę do oceny
   try {
-    const { data: milestoneData } = await supabase
+    const { data: milestoneDataRaw } = await supabase
       .from("milestones")
       .select("title, contracts(company_id, application_id, applications(offers(tytul)))")
       .eq("id", milestoneId)
       .maybeSingle();
-    const companyId = (milestoneData as any)?.contracts?.company_id;
+
+    const milestoneData = milestoneDataRaw as MilestoneCompanyNotificationRow | null;
+    const contract = unwrapRelation(milestoneData?.contracts ?? null);
+    const application = unwrapRelation(contract?.applications ?? null);
+    const offer = unwrapRelation(application?.offers ?? null);
+    const companyId = contract?.company_id ?? null;
+
     if (companyId) {
-      const offerTitle = (milestoneData as any)?.contracts?.applications?.offers?.tytul ?? null;
+      const offerTitle = offer?.tytul ?? null;
       await notifyUser(supabase, companyId, "milestone_submitted", {
         application_id: applicationId,
         offer_title: offerTitle,
@@ -472,7 +689,7 @@ export async function reviewMilestoneAction(
   if (!user.user) redirect("/auth");
 
   // ✅ [Refactor v1] Consolidated RPC
-  const { error } = await supabase.rpc("review_delivery_v2", {
+  const { error } = await supabase.rpc("review_delivery_v3", {
     p_milestone_id: milestoneId,
     p_decision: decision,
     p_feedback: feedback
@@ -488,7 +705,7 @@ export async function reviewMilestoneAction(
         .from("milestones")
         .select("id, title, amount, contract_id")
         .eq("id", milestoneId)
-        .single();
+        .maybeSingle();
 
       if (milestoneData) {
         const amount = Number(milestoneData.amount);
@@ -525,14 +742,20 @@ export async function reviewMilestoneAction(
 
   // Powiadom studenta o decyzji firmy ws. milestone'a
   try {
-    const { data: milestoneData } = await supabase
+    const { data: milestoneDataRaw } = await supabase
       .from("milestones")
       .select("title, contracts(student_id, applications(offers(tytul)))")
       .eq("id", milestoneId)
       .maybeSingle();
-    const studentId = (milestoneData as any)?.contracts?.student_id;
+
+    const milestoneData = milestoneDataRaw as MilestoneStudentNotificationRow | null;
+    const contract = unwrapRelation(milestoneData?.contracts ?? null);
+    const application = unwrapRelation(contract?.applications ?? null);
+    const offer = unwrapRelation(application?.offers ?? null);
+    const studentId = contract?.student_id ?? null;
+
     if (studentId) {
-      const offerTitle = (milestoneData as any)?.contracts?.applications?.offers?.tytul ?? null;
+      const offerTitle = offer?.tytul ?? null;
       const notifType = decision === "accepted" ? "milestone_accepted" : "milestone_rejected";
       const snippet = decision === "accepted"
         ? `Etap "${milestoneData?.title}" został zaakceptowany. Środki zostaną przekazane!`
@@ -571,14 +794,20 @@ export async function fundMilestoneAction(milestoneId: string, applicationId: st
 
   // Powiadom studenta że środki wpłynęły
   try {
-    const { data: milestoneData } = await supabase
+    const { data: milestoneDataRaw } = await supabase
       .from("milestones")
       .select("title, amount, contracts(student_id, application_id, applications(offers(tytul)))")
       .eq("id", milestoneId)
       .maybeSingle();
-    const studentId = (milestoneData as any)?.contracts?.student_id;
+
+    const milestoneData = milestoneDataRaw as MilestoneStudentNotificationRow | null;
+    const contract = unwrapRelation(milestoneData?.contracts ?? null);
+    const application = unwrapRelation(contract?.applications ?? null);
+    const offer = unwrapRelation(application?.offers ?? null);
+    const studentId = contract?.student_id ?? null;
+
     if (studentId) {
-      const offerTitle = (milestoneData as any)?.contracts?.applications?.offers?.tytul ?? null;
+      const offerTitle = offer?.tytul ?? null;
       await notifyUser(supabase, studentId, "escrow_funded", {
         application_id: applicationId,
         offer_title: offerTitle,
@@ -615,6 +844,8 @@ export async function generateContract(contractId: string, applicationId: string
     .eq('contract_id', contractId)
     .order('idx');
 
+  const contractMilestones = (milestones ?? []) as ContractMilestoneRow[];
+
   const dateStr = new Date().toLocaleDateString('pl-PL');
   let content = `UMOWA O DZIEŁO\n\n`;
   content += `ID Kontraktu: ${contractId}\n`;
@@ -622,7 +853,7 @@ export async function generateContract(contractId: string, applicationId: string
   content += `HARMONOGRAM REALIZACJI I PŁATNOŚCI:\n\n`;
 
   let total = 0;
-  milestones?.forEach((m: any, i: number) => {
+  contractMilestones.forEach((m, i) => {
     content += `${i + 1}. ${m.title}\n`;
     content += `   Kwota: ${Number(m.amount).toFixed(2)} PLN\n`;
     content += `   Zakres: ${m.acceptance_criteria}\n`;
@@ -646,7 +877,7 @@ export async function generateContract(contractId: string, applicationId: string
     throw new Error("Błąd wgrywania pliku: " + uploadError.message);
   }
 
-  const insertPayload: any = {
+  const insertPayload: ProjectResourceInsert = {
     uploader_id: user.user.id,
     file_name: `Umowa_o_Dzieło_${dateStr}.txt`,
     file_path: fileName
@@ -709,18 +940,22 @@ export async function generateContractDocuments(contractId: string, applicationI
   let offerDescription = "";
 
   if (contract.application_id) {
-    const { data: app } = await supabase
+    const { data: appData } = await supabase
       .from("applications")
       .select("offers(tytul, opis)")
       .eq("id", contract.application_id)
       .single();
-    offerTitle = (app?.offers as any)?.tytul || offerTitle;
-    offerDescription = (app?.offers as any)?.opis || "";
+
+    const app = appData as ApplicationOfferDetailsRow | null;
+    const offer = unwrapRelation(app?.offers ?? null);
+    offerTitle = offer?.tytul || offerTitle;
+    offerDescription = offer?.opis || "";
   }
 
   // 5. Build ContractData
-  const milestones = (contract.milestones || [])
-    .sort((a: any, b: any) => (a.idx || 0) - (b.idx || 0));
+  const typedContract = contract as ContractWithMilestonesRow;
+  const milestones = (typedContract.milestones || [])
+    .sort((a, b) => (a.idx || 0) - (b.idx || 0));
 
   const totalAmount = Number(contract.total_amount) || 0;
   const platformFeePercent = 5;
@@ -740,7 +975,7 @@ export async function generateContractDocuments(contractId: string, applicationI
     studentEmail,
     offerTitle,
     offerDescription,
-    milestones: milestones.map((m: any, i: number) => ({
+    milestones: milestones.map((m, i) => ({
       idx: m.idx || i + 1,
       title: m.title || `Etap ${i + 1}`,
       criteria: m.acceptance_criteria || "",

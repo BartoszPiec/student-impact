@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    ".claude/**",
+    "items/**",
+    "git_diff_output*.txt",
+    "tsconfig.tsbuildinfo",
   ]),
 ]);
 
