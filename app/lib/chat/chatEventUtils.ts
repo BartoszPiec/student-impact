@@ -1,128 +1,145 @@
-
 export type ChatEventType =
-    | "text.sent"
-    | "file.sent"
-    | "rate.proposed"
-    | "rate.accepted"
-    | "rate.rejected"
-    | "deadline.proposed"
-    | "deadline.accepted"
-    | "deadline.rejected"
-    | "system.notice"
-    | "inquiry.details";
+  | "text.sent"
+  | "file.sent"
+  | "rate.proposed"
+  | "rate.accepted"
+  | "rate.rejected"
+  | "deadline.proposed"
+  | "deadline.accepted"
+  | "deadline.rejected"
+  | "system.notice"
+  | "inquiry.details";
 
-export interface NormalizedMessage {
-    id: string;
-    sender_id: string;
-    conversation_id: string;
-    created_at: string;
-    event: ChatEventType;
-    content: string | null;
-    payload: any;
-    is_mine: boolean;
+export type ChatMessagePayload = Record<string, unknown>;
+
+export interface ChatMessageRecord {
+  id: string;
+  sender_id: string;
+  conversation_id?: string;
+  created_at: string;
+  event?: string | null;
+  content: string | null;
+  payload?: ChatMessagePayload | null;
+  attachment_url?: string | null;
+  attachment_type?: string | null;
 }
 
-export function normalizeMessage(msg: any, currentUserId: string): NormalizedMessage {
-    const isMine = msg.sender_id === currentUserId;
-    let event: ChatEventType = "text.sent";
-    let payload: any = msg.payload || {};
+export interface NormalizedMessage {
+  id: string;
+  sender_id: string;
+  conversation_id: string;
+  created_at: string;
+  event: ChatEventType;
+  content: string | null;
+  payload: ChatMessagePayload;
+  is_mine: boolean;
+}
 
-    // 1. New standard events (Explicit)
-    if (msg.event) {
-        // Map known logical events to our standard types if they differ, or pass through
-        switch (msg.event) {
-            case "text.sent":
-            case "file.sent":
-                event = msg.event;
-                break;
-            case "rate.proposed":
-                event = "rate.proposed";
-                // Ensure proposed_stawka exists (fallback from amount or content)
-                if (!payload?.proposed_stawka && payload?.amount) {
-                    payload = { ...payload, proposed_stawka: payload.amount };
-                }
-                if (!payload?.proposed_stawka && msg.content) {
-                    const numMatch = msg.content.match(/(\d+)/);
-                    if (numMatch) payload = { ...payload, proposed_stawka: parseInt(numMatch[1]) };
-                }
-                break;
-            case "rate.accepted":
-            case "rate.rejected":
-            case "deadline.proposed":
-            case "deadline.accepted":
-            case "deadline.rejected":
-            case "system.notice":
-                event = msg.event;
-                break;
+function isRecord(value: unknown): value is ChatMessagePayload {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-            case "inquiry_details":
-                event = "inquiry.details";
-                break;
+function getNumericContentValue(content: string | null): number | null {
+  if (!content) {
+    return null;
+  }
 
-            // Legacy mapping
-            case "negotiation_proposed":
-                // If it has proposed_stawka, it's a rate proposal
-                if (payload?.proposed_stawka) {
-                    event = "rate.proposed";
-                } else {
-                    // Fallback for legacy messages where payload might be missing
-                    const match = msg.content?.match(/Proponuję stawkę (\d+)/);
-                    if (match && match[1]) {
-                        event = "rate.proposed";
-                        payload = { ...payload, proposed_stawka: parseInt(match[1]) };
-                    } else {
-                        event = "system.notice";
-                    }
-                }
-                break;
+  const match = content.match(/(\d+)/);
+  return match?.[1] ? parseInt(match[1], 10) : null;
+}
 
-            case "counter_offer":
-                event = "rate.proposed";
-                // Legacy counter_offer used { amount } instead of { proposed_stawka }
-                if (payload?.amount && !payload?.proposed_stawka) {
-                    payload = { ...payload, proposed_stawka: payload.amount };
-                }
-                break;
-            case "counter_accepted":
-                event = "rate.accepted";
-                break;
-            case "counter_rejected":
-                event = "rate.rejected";
-                break;
+export function normalizeMessage(
+  message: ChatMessageRecord,
+  currentUserId: string
+): NormalizedMessage {
+  const isMine = message.sender_id === currentUserId;
+  let event: ChatEventType = "text.sent";
+  let payload: ChatMessagePayload = isRecord(message.payload) ? message.payload : {};
 
-            case "application_sent":
-            case "offer_closed":
-                event = "system.notice";
-                break;
+  if (message.event) {
+    switch (message.event) {
+      case "text.sent":
+      case "file.sent":
+        event = message.event;
+        break;
+      case "rate.proposed": {
+        event = "rate.proposed";
+        const proposedRate = payload.proposed_stawka;
+        const fallbackAmount = payload.amount;
+        const contentAmount = getNumericContentValue(message.content);
 
-            default:
-                // Unknown event -> treat as system notice or fallback text
-                event = "system.notice";
-                break;
+        if (proposedRate == null && fallbackAmount != null) {
+          payload = { ...payload, proposed_stawka: fallbackAmount };
         }
-    }
-    // 2. Legacy implicit text/file
-    else {
-        if (msg.attachment_url) {
-            event = "file.sent";
-            payload = {
-                url: msg.attachment_url,
-                type: msg.attachment_type,
-                name: msg.content // often filename was stored in content or just "File"
-            };
-        } else if (msg.content) {
-            event = "text.sent";
-        }
-    }
 
-    return {
-        id: msg.id,
-        sender_id: msg.sender_id,
-        conversation_id: msg.conversation_id,
-        created_at: msg.created_at,
-        event,
-        content: msg.content,
-        payload,
-        is_mine: isMine
+        if (proposedRate == null && fallbackAmount == null && contentAmount != null) {
+          payload = { ...payload, proposed_stawka: contentAmount };
+        }
+        break;
+      }
+      case "rate.accepted":
+      case "rate.rejected":
+      case "deadline.proposed":
+      case "deadline.accepted":
+      case "deadline.rejected":
+      case "system.notice":
+        event = message.event;
+        break;
+      case "inquiry_details":
+        event = "inquiry.details";
+        break;
+      case "negotiation_proposed": {
+        if (payload.proposed_stawka != null) {
+          event = "rate.proposed";
+          break;
+        }
+
+        const contentAmount = getNumericContentValue(message.content);
+        if (contentAmount != null) {
+          event = "rate.proposed";
+          payload = { ...payload, proposed_stawka: contentAmount };
+        } else {
+          event = "system.notice";
+        }
+        break;
+      }
+      case "counter_offer":
+        event = "rate.proposed";
+        if (payload.amount != null && payload.proposed_stawka == null) {
+          payload = { ...payload, proposed_stawka: payload.amount };
+        }
+        break;
+      case "counter_accepted":
+        event = "rate.accepted";
+        break;
+      case "counter_rejected":
+        event = "rate.rejected";
+        break;
+      case "application_sent":
+      case "offer_closed":
+      default:
+        event = "system.notice";
+        break;
+    }
+  } else if (message.attachment_url) {
+    event = "file.sent";
+    payload = {
+      url: message.attachment_url,
+      type: message.attachment_type,
+      name: message.content,
     };
+  } else if (message.content) {
+    event = "text.sent";
+  }
+
+  return {
+    id: message.id,
+    sender_id: message.sender_id,
+    conversation_id: message.conversation_id ?? "",
+    created_at: message.created_at,
+    event,
+    content: message.content,
+    payload,
+    is_mine: isMine,
+  };
 }

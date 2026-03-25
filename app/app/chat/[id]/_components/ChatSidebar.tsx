@@ -5,6 +5,11 @@ import { Button } from "@/components/ui/button";
 import { ExternalLink, FileText, AlertTriangle, CheckCircle, Package, Briefcase } from "lucide-react";
 import Link from "next/link";
 
+function fromMinorUnits(value: number | null | undefined) {
+    if (value == null || !Number.isFinite(value)) return null;
+    return value / 100;
+}
+
 export function ChatSidebar({
     conversation,
     application,
@@ -57,7 +62,7 @@ export function ChatSidebar({
         // Standard Application / Offer
         title = offer?.tytul || "Zlecenie";
         subtitle = "Zlecenie niestandardowe";
-        price = application?.agreed_stawka || offer?.stawka;
+        price = application?.agreed_stawka ?? fromMinorUnits(application?.agreed_stawka_minor) ?? offer?.stawka;
         statusRaw = application?.status || 'negotiating';
 
         // Logic for standard application link

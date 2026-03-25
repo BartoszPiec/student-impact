@@ -1,5 +1,4 @@
 import { notFound } from 'next/navigation';
-if (process.env.NODE_ENV !== "development") notFound();
 
 const { createClient } = require('@supabase/supabase-js');
 
@@ -14,6 +13,10 @@ import { redirect } from 'next/navigation';
 export const dynamic = 'force-dynamic';
 
 export default async function SeedBenchmarkPage() {
+    if (process.env.NODE_ENV !== "development") {
+        notFound();
+    }
+
     const supabase = await createServerClient();
 
     // 1. Get Admin User (We assume the current user accessing this page is logged in, I'll visit it as admin)

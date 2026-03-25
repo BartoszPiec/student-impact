@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -25,7 +26,7 @@ import {
     getSignedStorageUrl
 } from "../../_actions";
 import { toast } from "sonner";
-import { Shield, ShieldCheck, AlertCircle, CircleDollarSign, CheckCircle2, Lock, Clock, FileText, ChevronDown, ChevronUp, Star, Medal, MessageSquare } from "lucide-react";
+import { Shield, ShieldCheck, AlertCircle, CircleDollarSign, CheckCircle2, Lock, Clock, FileText, ChevronDown, ChevronUp, Star, Medal, MessageSquare, XCircle } from "lucide-react";
 import { PaymentModal } from "@/app/components/payment-modal";
 import { MilestoneNegotiation } from "./MilestoneNegotiation";
 import { ContractDocumentsCard } from "./ContractDocumentsCard";
@@ -35,6 +36,7 @@ import { SecureImageViewer } from "@/app/components/SecureImageViewer";
 
 export function StatusTab({
     status,
+    applicationStatus,
     isStudent,
     isCompany,
     applicationId,
@@ -77,7 +79,7 @@ export function StatusTab({
     const allFunded = milestones.length > 0 && milestones.every((m: any) => ['funded', 'in_progress', 'delivered', 'completed', 'released', 'accepted'].includes(m.status));
 
     // Calculate Total Budget strictly from milestones to avoid mismatches
-    const contractBudget = milestones.reduce((sum: number, m: any) => sum + Number(m.amount), 0);
+    const contractBudget = milestones.reduce((sum: number, m: any) => sum + (Number(m.amount_minor ?? (m.amount * 100)) / 100), 0);
 
     const handlePaymentConfirm = async () => {
         try {
@@ -168,7 +170,7 @@ export function StatusTab({
                     isOpen={isPaymentModalOpen}
                     onClose={() => setIsPaymentModalOpen(false)}
                     onConfirm={handlePaymentConfirm}
-                    amount={fundingMode === "full" ? (contractBudget > 0 ? contractBudget : totalAmount) : Number(nextToFund?.amount ?? 0)}
+                    amount={fundingMode === "full" ? (contractBudget > 0 ? contractBudget : totalAmount) : Number((nextToFund?.amount_minor ? nextToFund.amount_minor / 100 : nextToFund?.amount) ?? 0)}
                     title={fundingMode === "full" ? `Zasilenie Depozytu (Cały Projekt)` : `Zasilenie Depozytu (Następny etap)`}
                     contractId={contract.id}
                     applicationId={applicationId}
@@ -275,7 +277,7 @@ export function StatusTab({
                                 className="relative z-10 w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-white shadow-xl font-bold px-8 h-14 rounded-none transition-all active:scale-[0.98]"
                             >
                                 <CircleDollarSign className="w-5 h-5 mr-2" />
-                                Zasil Depozyt ({fundingMode === "full" ? (contractBudget > 0 ? contractBudget : totalAmount) : Number(nextToFund?.amount ?? 0)} PLN)
+                                Zasil Depozyt ({fundingMode === "full" ? (contractBudget > 0 ? contractBudget : totalAmount) : Number((nextToFund?.amount_minor ? nextToFund.amount_minor / 100 : nextToFund?.amount) ?? 0)} PLN)
                             </Button>
                         )}
 
@@ -437,6 +439,37 @@ export function StatusTab({
                 </Card>
             )}
 
+            {/* DANGER ZONE — Zakończ współpracę (tylko gdy zlecenie w trakcie) */}
+            {applicationStatus === 'accepted' && contract?.status !== 'completed' && (
+                <Card className="border-red-200 bg-red-50/40 shadow-sm overflow-hidden">
+                    <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 bg-red-100 rounded-lg shrink-0 mt-0.5">
+                                <XCircle className="w-5 h-5 text-red-600" />
+                            </div>
+                            <div>
+                                <p className="font-semibold text-red-800 text-sm">Zakończ współpracę</p>
+                                <p className="text-red-600/80 text-xs mt-0.5 max-w-md">
+                                    Ta operacja jest nieodwracalna. Zlecenie zostanie anulowane,
+                                    a środki z depozytu — zwrócone zgodnie z regulaminem.
+                                </p>
+                            </div>
+                        </div>
+                        <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0 border-red-300 text-red-700 hover:bg-red-100 hover:border-red-400 hover:text-red-800 transition-colors"
+                        >
+                            <Link href={`/app/cancel/${applicationId}`}>
+                                <XCircle className="w-4 h-4 mr-1.5" />
+                                Anuluj zlecenie
+                            </Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+            )}
+
         </div>
     );
 }
@@ -515,7 +548,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                     </div>
 
                     <div className="flex flex-row md:flex-col items-center md:items-end gap-3 md:gap-1 min-w-[150px] w-full md:w-auto justify-between md:justify-start border-t md:border-t-0 pt-4 md:pt-0 mt-2 md:mt-0 border-slate-100">
-                        <div className="font-black text-slate-900 text-lg">{milestone.amount} <span className="text-xs font-bold text-slate-400">PLN</span></div>
+                        <div className="font-black text-slate-900 text-lg">{(milestone.amount_minor ? milestone.amount_minor / 100 : milestone.amount)} <span className="text-xs font-bold text-slate-400">PLN</span></div>
                         <Badge variant="outline" className={`font-semibold border px-2.5 py-0.5 ${statusConfig.color}`}>
                             {statusConfig.label}
                         </Badge>

@@ -2,7 +2,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Clock, FileText, Lock, MessageSquare, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,6 +13,86 @@ import { SecretsTab } from "./tabs/SecretsTab";
 import { ChatTab } from "./tabs/ChatTab"; // We might embed Chat or just link
 
 export const dynamic = "force-dynamic";
+
+type RelationValue<T> = T | T[] | null;
+
+type WorkspaceOffer = {
+    id: string | null;
+    tytul: string | null;
+    company_id: string | null;
+    stawka: number | null;
+    typ: string | null;
+    is_platform_service: boolean | null;
+    service_package_id?: string | null;
+};
+
+type WorkspaceApplicationRow = {
+    id: string;
+    status: string;
+    realization_status: string | null;
+    student_id: string;
+    offer_id: string | null;
+    created_at: string;
+    agreed_stawka: number | null;
+    agreed_stawka_minor?: number | null;
+    offers: RelationValue<WorkspaceOffer>;
+};
+
+type WorkspacePackage = {
+    title: string | null;
+    type: string | null;
+    locked_content?: string | null;
+};
+
+type ServiceOrderRow = {
+    id: string;
+    status: string;
+    student_id: string;
+    company_id: string;
+    amount: number | null;
+    created_at: string;
+    package_id: string | null;
+    package: RelationValue<WorkspacePackage>;
+};
+
+type WorkspaceRow = {
+    id: string;
+    status: string;
+    realization_status: string | null;
+    student_id: string;
+    offer_id: string | null;
+    agreed_stawka: number | null;
+    agreed_stawka_minor?: number | null;
+    offers: RelationValue<WorkspaceOffer>;
+    created_at: string;
+    package_id: string | null;
+};
+
+type ReviewRow = {
+    reviewer_id: string;
+};
+
+type ConversationMatch = {
+    id: string;
+};
+
+type ContractDocumentRow = {
+    id: string;
+    created_at: string | null;
+};
+
+function unwrapRelation<T>(value: RelationValue<T>): T | null {
+    if (Array.isArray(value)) {
+        return value[0] ?? null;
+    }
+
+    return value ?? null;
+}
+
+function fromMinorUnits(value?: number | null): number | null {
+    if (value == null || !Number.isFinite(value)) return null;
+    return value / 100;
+}
 
 export default async function RealizationWorkspace({
     params,
@@ -28,43 +107,51 @@ export default async function RealizationWorkspace({
     if (!user) redirect("/auth");
 
     // Unified Fetch (App or Service Order)
-    let appRow = null;
+    let appRow: WorkspaceRow | null = null;
     let isServiceOrder = false;
 
     // 1. Try Application
-    const { data: application, error: appError } = await supabase
+    const { data: application } = await supabase
         .from("applications")
         .select(`
-            id, status, realization_status, student_id, offer_id, created_at, agreed_stawka,
+            id, status, realization_status, student_id, offer_id, created_at, agreed_stawka, agreed_stawka_minor,
             offers ( id, tytul, company_id, stawka, typ, is_platform_service, service_package_id )
         `)
         .eq("id", applicationId)
         .maybeSingle();
 
-    if (application) {
-        appRow = application;
+    const applicationRow = application as WorkspaceApplicationRow | null;
+
+    if (applicationRow) {
+        appRow = {
+            ...applicationRow,
+            package_id: null,
+        };
     } else {
         // 2. Try Service Order
-        const { data: serviceOrder, error: soError } = await supabase
+        const { data: serviceOrder } = await supabase
             .from("service_orders")
             .select(`
-                id, status, student_id, company_id, amount, created_at, package_id,
+                id, status, student_id, company_id, amount, amount_minor, created_at, package_id,
                 package:service_packages( title, type )
             `)
             .eq("id", applicationId)
             .maybeSingle();
 
-        if (serviceOrder) {
+        const serviceOrderRow = serviceOrder as ServiceOrderRow | null;
+
+        if (serviceOrderRow) {
             isServiceOrder = true;
-            // Polyfill to look like 'appRow'
-            const so = serviceOrder as any;
+            const pkg = unwrapRelation(serviceOrderRow.package);
+            const so = { ...serviceOrderRow, package: pkg };
             appRow = {
-                id: so.id,
-                status: so.status,
-                realization_status: so.status === 'completed' ? 'completed' : 'pending',
-                student_id: so.student_id,
+                id: serviceOrderRow.id,
+                status: serviceOrderRow.status,
+                realization_status: serviceOrderRow.status === "completed" ? "completed" : "pending",
+                student_id: serviceOrderRow.student_id,
                 offer_id: null,
-                agreed_stawka: so.amount, // For service orders, amount IS the agreed price
+                agreed_stawka: serviceOrderRow.amount,
+                agreed_stawka_minor: (serviceOrderRow as any).amount_minor || (serviceOrderRow.amount != null ? Math.round(serviceOrderRow.amount * 100) : null),
                 offers: {
                     id: null,
                     tytul: so.package?.title || "Zlecenie Usługi",
@@ -98,7 +185,7 @@ export default async function RealizationWorkspace({
         );
     }
 
-    const offer = Array.isArray(appRow.offers) ? appRow.offers[0] : appRow.offers;
+    const offer = unwrapRelation(appRow.offers);
     const companyId = offer?.company_id;
     const studentId = appRow.student_id;
 
@@ -107,13 +194,14 @@ export default async function RealizationWorkspace({
 
     // Fetch student-only instructions (locked_content) from service_package — only for platform services
     let studentInstructions: string | null = null;
-    const servicePackageId = (offer as any)?.service_package_id ?? null;
+    const servicePackageId = offer?.service_package_id ?? appRow.package_id ?? null;
     if (isStudent && servicePackageId) {
-        const { data: pkg } = await supabase
+        const { data: pkgData } = await supabase
             .from("service_packages")
             .select("locked_content")
             .eq("id", servicePackageId)
             .maybeSingle();
+        const pkg = pkgData as { locked_content: string | null } | null;
         studentInstructions = pkg?.locked_content ?? null;
     }
 
@@ -128,93 +216,60 @@ export default async function RealizationWorkspace({
     const filterColumn = isServiceOrder ? "service_order_id" : "application_id";
 
     // 1. Deliverables (Student Work)
-    const { data: deliverables } = await supabase
+    const { data: deliverablesData } = await supabase
         .from("deliverables")
         .select("*")
         .eq(filterColumn, applicationId) // applicationId variable holds the ID
         .order("created_at", { ascending: false });
+    const deliverables = deliverablesData ?? [];
 
     // 2. Reviews
-    const { data: reviews } = await supabase
+    const { data: reviewsData } = await supabase
         .from("reviews")
         .select("*")
         .eq(filterColumn, applicationId);
+    const reviews = (reviewsData ?? []) as ReviewRow[];
 
     // 3. Resources (Company Files)
-    const { data: resources } = await supabase
+    const { data: resourcesData } = await supabase
         .from("project_resources")
         .select("*")
         .eq(filterColumn, applicationId)
         .order("created_at", { ascending: false });
+    const resources = resourcesData ?? [];
 
     // 4. Secrets
-    const { data: secrets } = await supabase
+    const { data: secretsData } = await supabase
         .from("project_secrets")
         .select("*")
         .eq(filterColumn, applicationId)
         .order("created_at", { ascending: false });
+    const secrets = secretsData ?? [];
 
     // 5. Conversation ID for Chat
     // Chat might not support service_order_id yet. 
     // We try to fetch by application_id if not service order, otherwise we might skip or need schema update.
     // For now, we try dynamic column, assuming Conversation schema supports it (or will support it).
     // If not, it will return error or empty.
-    let conversation = null;
+    let conversation: ConversationMatch | null = null;
     if (!isServiceOrder) {
-        const { data: conv } = await supabase
+        const { data: convData } = await supabase
             .from("conversations")
             .select("id")
             .eq("application_id", applicationId)
             .maybeSingle();
-        conversation = conv;
-    } else {
-        // TEMPORAL MATCHING HEURISTIC
-        // Since we don't have service_order_id in conversations, we match by TIME.
-        // We find the conversation created closest to the Order creation time.
-        // Orders and Chats created via 'createOrder' have nearly identical timestamps.
-
-        const orderTime = new Date((appRow as any).created_at).getTime();
-        const pkgId = (appRow as any).package_id;
-
-        if (pkgId) {
-            const { data: candidates } = await supabase
-                .from("conversations")
-                .select("id, created_at")
-                .eq("company_id", companyId)
-                .eq("student_id", studentId)
-                .eq("package_id", pkgId)
-                .order("created_at", { ascending: true });
-
-            if (candidates && candidates.length > 0) {
-                let best = candidates[0];
-                let minDiff = Infinity;
-
-                for (const c of candidates) {
-                    const cTime = new Date(c.created_at).getTime();
-                    const diff = Math.abs(cTime - orderTime);
-                    if (diff < minDiff) {
-                        minDiff = diff;
-                        best = c;
-                    }
-                }
-
-                conversation = best;
-            }
-        }
-    }
-
-    // FALLBACK: If temporal matching failed (e.g. no package_id or no exact match),
-    // try to find ANY conversation for these users to avoid empty state.
-    if (!conversation && studentId && companyId) {
+        conversation = convData as ConversationMatch | null;
+    } else if (servicePackageId && studentId && companyId) {
         const { data: latestConv } = await supabase
             .from("conversations")
             .select("id")
+            .eq("package_id", servicePackageId)
             .eq("company_id", companyId)
             .eq("student_id", studentId)
-            .order("updated_at", { ascending: false }) // Get most active
+            .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
-        if (latestConv) conversation = latestConv;
+        conversation = latestConv as ConversationMatch | null;
     }
     // 6. [Realization Guard] Contract & Milestones
     // Try by Application ID first, then Service Order ID
@@ -248,21 +303,22 @@ export default async function RealizationWorkspace({
 
 
     // 7. Contract Documents (PDF umowy)
-    let contractDocuments: any[] = [];
+    let contractDocuments: ContractDocumentRow[] = [];
     if (contract?.id) {
         const { data: docs } = await supabase
             .from("contract_documents")
             .select("*")
             .eq("contract_id", contract.id)
             .order("created_at", { ascending: true });
-        contractDocuments = docs || [];
+        contractDocuments = (docs ?? []) as ContractDocumentRow[];
     }
 
     // --- HELPERS ---
     const currentDeliv = deliverables?.[0]; // Latest deliverable
-    const status = appRow.realization_status;
-    const myReview = reviews?.find(r => r.reviewer_id === user.id);
-    const theirReview = reviews?.find(r => r.reviewer_id !== user.id);
+    const status = appRow.realization_status ?? appRow.status;
+    const myReview = reviews.find((review) => review.reviewer_id === user.id);
+    const theirReview = reviews.find((review) => review.reviewer_id !== user.id);
+    const agreedAmount = fromMinorUnits(appRow.agreed_stawka_minor) ?? appRow.agreed_stawka ?? offer?.stawka ?? null;
 
     return (
         <main className="min-h-screen bg-[#f8fafc]">
@@ -316,7 +372,7 @@ export default async function RealizationWorkspace({
                                 <div className="text-right hidden md:block">
                                     <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Wartość zlecenia</p>
                                     <p className="text-xl font-black text-white">
-                                        {(appRow.agreed_stawka || offer?.stawka) ? `${appRow.agreed_stawka || offer.stawka} PLN` : "---"}
+                                        {agreedAmount != null ? `${agreedAmount} PLN` : "---"}
                                     </p>
                                 </div>
                                 <div className="h-10 w-px bg-white/10 mx-2 hidden md:block" />
@@ -361,6 +417,7 @@ export default async function RealizationWorkspace({
                         <TabsContent value="status" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
                             <StatusTab
                                 status={status}
+                                applicationStatus={appRow.status}
                                 isStudent={isStudent}
                                 isCompany={isCompany}
                                 applicationId={applicationId}
@@ -369,7 +426,7 @@ export default async function RealizationWorkspace({
                                 myReview={myReview}
                                 theirReview={theirReview}
                                 contract={contract}
-                                totalAmount={Number(appRow?.agreed_stawka || offer?.stawka || 0)}
+                                totalAmount={Number(agreedAmount || 0)}
                                 enableNegotiation={!offer?.is_platform_service && offer?.typ !== 'job_offer'}
                                 isPlatformService={offer?.is_platform_service ?? false}
                                 studentInstructions={studentInstructions}

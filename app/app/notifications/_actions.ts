@@ -9,10 +9,12 @@ export async function markNotificationRead(id: string) {
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/auth");
 
+  // IDOR fix: upewnij się że user może oznaczyć tylko swoje powiadomienia
   const { error } = await supabase
     .from("notifications")
     .update({ read_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", data.user.id);
 
   if (error) throw new Error(error.message);
 

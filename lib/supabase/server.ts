@@ -1,6 +1,15 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
+type CookieStore = Awaited<ReturnType<typeof cookies>>;
+type MutableCookieStore = CookieStore & {
+  set: (name: string, value: string, options?: Record<string, unknown>) => void;
+};
+
+function isMutableCookieStore(store: CookieStore): store is MutableCookieStore {
+  return "set" in store && typeof store.set === "function";
+}
+
 export async function createClient() {
   const cookieStore = await cookies();
 
@@ -15,11 +24,12 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
-              // w Server Components czasem nie da się setować cookies -> dlatego try/catch
-              (cookieStore as any).set(name, value, options);
+              if (isMutableCookieStore(cookieStore)) {
+                cookieStore.set(name, value, options);
+              }
             });
           } catch {
-            // OK
+            // Server Components may expose a read-only cookie store.
           }
         },
       },

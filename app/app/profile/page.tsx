@@ -401,9 +401,16 @@ export default async function ProfilePage() {
                             name="bio"
                             className="min-h-[120px] bg-slate-50 border-slate-200 focus:bg-white resize-none rounded-xl text-base p-4"
                             defaultValue={(student as any)?.bio ?? ""}
-                            placeholder="Opisz krótko siebie, swoje cele i pasje..."
+                            placeholder="Opisz krótko siebie, swoje cele i pasje (min. 50 znaków)..."
                           />
-                          <p className="text-xs text-slate-400 mt-2 text-right">To, co napiszesz, zobaczą pracodawcy.</p>
+                          <div className="flex justify-between items-center mt-2">
+                            {((student as any)?.bio?.length ?? 0) < 50 && (
+                              <p className="text-xs text-amber-600 font-medium">
+                                ⚠ Min. 50 znaków dla punktu uzupełnienia profilu (masz {(student as any)?.bio?.length ?? 0})
+                              </p>
+                            )}
+                            <p className="text-xs text-slate-400 ml-auto">To, co napiszesz, zobaczą pracodawcy.</p>
+                          </div>
                         </div>
 
                         <div className="md:col-span-2">

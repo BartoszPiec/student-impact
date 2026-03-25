@@ -38,14 +38,15 @@ export async function POST(req: NextRequest) {
 
     const contractId = session.metadata?.contract_id;
     const applicationId = session.metadata?.application_id;
+    const serviceOrderId = session.metadata?.service_order_id;
     const milestoneIdsJson = session.metadata?.milestone_ids;
 
-    if (!contractId || !applicationId) {
+    if (!contractId || (!applicationId && !serviceOrderId)) {
       return NextResponse.json({ error: "Invalid session metadata" }, { status: 400 });
     }
 
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!UUID_RE.test(contractId) || !UUID_RE.test(applicationId)) {
+    if (!UUID_RE.test(contractId) || (applicationId && !UUID_RE.test(applicationId)) || (serviceOrderId && !UUID_RE.test(serviceOrderId))) {
       return NextResponse.json({ error: "Nieprawidłowe ID w metadanych sesji" }, { status: 400 });
     }
 
@@ -77,26 +78,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 7. Payment confirmed! Update database using admin client (bypasses RLS)
+    // 7. Payment confirmed! Update database using atomic RPC via admin client
     const admin = createAdminClient();
 
     console.log(`[verify-payment] Processing payment for contract ${contractId}`);
 
-    // Update payment record
-    const { error: paymentUpdateError } = await admin
-      .from("payments")
-      .update({
-        status: "completed",
-        stripe_payment_intent_id: session.payment_intent as string,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("stripe_session_id", session.id);
-
-    if (paymentUpdateError) {
-      console.error("[verify-payment] Failed to update payment:", paymentUpdateError);
-    }
-
-    // Parse milestone IDs
+    // Parse milestone IDs from metadata
     let milestoneIds: string[] = [];
     if (milestoneIdsJson) {
       try {
@@ -106,56 +93,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Update milestones to 'funded'
-    if (milestoneIds.length > 0) {
-      const { error: milestoneError } = await admin
-        .from("milestones")
-        .update({ status: "funded" })
-        .in("id", milestoneIds)
-        .eq("status", "awaiting_funding");
+    // Use atomic RPC for all updates (v4 with Accounting & Service Order support)
+    const { error: rpcError } = await admin.rpc("process_stripe_payment_v4", {
+      p_session_id: session.id,
+      p_payment_intent_id: session.payment_intent as string,
+      p_contract_id: contractId,
+      p_application_id: applicationId || null,
+      p_service_order_id: serviceOrderId || null,
+      p_amount_pln: session.amount_total ? session.amount_total / 100 : 0,
+      p_fee_pln: session.metadata?.platform_fee ? Number(session.metadata.platform_fee) / 100 : 0,
+      p_milestone_ids: milestoneIds,
+      p_user_id: user.id,
+    });
 
-      if (milestoneError) {
-        console.error("[verify-payment] Failed to update milestones:", milestoneError);
-      }
-    } else {
-      // Fallback: update all awaiting_funding milestones for this contract
-      const { error: milestoneError } = await admin
-        .from("milestones")
-        .update({ status: "funded" })
-        .eq("contract_id", contractId)
-        .eq("status", "awaiting_funding");
-
-      if (milestoneError) {
-        console.error("[verify-payment] Failed to update milestones (fallback):", milestoneError);
-      }
-    }
-
-    // Update contract status to 'active'
-    const { error: contractError } = await admin
-      .from("contracts")
-      .update({
-        status: "active",
-        funded_at: new Date().toISOString(),
-      })
-      .eq("id", contractId)
-      .in("status", ["awaiting_funding", "draft"]);
-
-    if (contractError) {
-      console.error("[verify-payment] Failed to update contract:", contractError);
-    }
-
-    // Update application status to 'in_progress'
-    const { error: appError } = await admin
-      .from("applications")
-      .update({
-        status: "in_progress",
-        realization_status: "in_progress"
-      })
-      .eq("id", applicationId)
-      .in("status", ["accepted"]);
-
-    if (appError) {
-      console.error("[verify-payment] Failed to update application:", appError);
+    if (rpcError) {
+      console.error("[verify-payment] RPC Error processing payment:", rpcError);
+      throw new Error(`Failed to process payment atomically: ${rpcError.message}`);
     }
 
     // Send notification to student (optional, don't fail)
@@ -172,7 +125,8 @@ export async function POST(req: NextRequest) {
           p_typ: "contract_funded",
           p_payload: {
             contract_id: contractId,
-            application_id: applicationId,
+            application_id: applicationId || null,
+            service_order_id: serviceOrderId || null,
             amount: session.amount_total ? session.amount_total / 100 : 0,
           },
         });

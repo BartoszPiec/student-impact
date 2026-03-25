@@ -1,14 +1,107 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type JsonPayload = Record<string, unknown>;
+type RelationValue<T> = T | T[] | null;
+
+type OfferRecord = {
+  id: string;
+  tytul: string | null;
+  company_id?: string | null;
+  stawka?: number | null;
+  is_platform_service?: boolean | null;
+  typ?: string | null;
+};
+
+type ApplicationRowBase = {
+  id: string;
+  status: string;
+  student_id: string;
+  offer_id: string;
+};
+
+type ApplicationRowWithOffer = ApplicationRowBase & {
+  proposed_stawka?: number | null;
+  counter_stawka?: number | null;
+  offers: RelationValue<OfferRecord>;
+};
+
+type SimpleConversationRow = {
+  id: string;
+};
+
+type ConversationArgs = {
+  application_id: string;
+  offer_id: string;
+  company_id: string;
+  student_id: string;
+};
+
+type OfferNotificationRow = {
+  company_id: string | null;
+  tytul: string | null;
+};
+
+type ConversationOfferRecord = {
+  tytul: string | null;
+  company_id: string | null;
+};
+
+type ConversationRow = {
+  id: string;
+  company_id: string;
+  student_id: string;
+  offer_id: string;
+  offers: RelationValue<ConversationOfferRecord>;
+};
+
+type IdRow = {
+  id: string;
+};
+
+function unwrapRelation<T>(value: RelationValue<T>): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
+function getOffer(row: ApplicationRowWithOffer): OfferRecord {
+  const offer = unwrapRelation(row.offers);
+  if (!offer) {
+    throw new Error("Missing related offer");
+  }
+
+  return offer;
+}
+
+function getCompanyId(offer: OfferRecord): string {
+  if (!offer.company_id) {
+    throw new Error("Missing offer company");
+  }
+
+  return offer.company_id;
+}
+
+function isMultiInstanceOffer(offer: OfferRecord): boolean {
+  if (offer.is_platform_service === true) {
+    return true;
+  }
+
+  const offerType = offer.typ?.toLowerCase() ?? "";
+  return offerType.includes("micro") || offerType.includes("mikro");
+}
 
 async function notifyUser(
-  supabase: any,
+  supabase: AppSupabaseClient,
   userId: string,
   typ: string,
-  payload: Record<string, any> = {}
+  payload: JsonPayload = {},
 ) {
   try {
     await supabase.rpc("create_notification", {
@@ -16,65 +109,73 @@ async function notifyUser(
       p_typ: typ,
       p_payload: payload,
     });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("notifyUser error:", err);
   }
 }
 
-function toNumber(v: FormDataEntryValue | null): number | null {
-  if (typeof v !== "string") return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return n;
+function toNumber(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== "string") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
 }
 
-async function ensureConversationForApplication(supabase: any, args: {
-  application_id: string;
-  offer_id: string;
-  company_id: string;
-  student_id: string;
-}) {
-  const { data: existing } = await supabase
+function toMinorUnits(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Math.round(value * 100);
+}
+
+async function ensureConversationForApplication(
+  supabase: AppSupabaseClient,
+  args: ConversationArgs,
+) {
+  const { data: existingData } = await supabase
     .from("conversations")
     .select("id")
     .eq("application_id", args.application_id)
     .maybeSingle();
 
-  if (existing?.id) return existing.id as string;
+  const existing = existingData as SimpleConversationRow | null;
+  if (existing?.id) return existing.id;
 
-  const { data: created, error } = await supabase
+  const { data: createdData, error } = await supabase
     .from("conversations")
     .insert({
       application_id: args.application_id,
       company_id: args.company_id,
       student_id: args.student_id,
       offer_id: args.offer_id,
-      type: 'application',
+      type: "application",
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
-  if (error || !created?.id) throw new Error(error?.message ?? "Nie udało się utworzyć rozmowy");
-  return created.id as string;
+  const created = createdData as SimpleConversationRow | null;
+  if (error || !created?.id) {
+    throw new Error(error?.message ?? "Nie udalo sie utworzyc rozmowy");
+  }
+
+  return created.id;
 }
 
 async function insertChatMessage(
-  supabase: any,
+  supabase: AppSupabaseClient,
   conversationId: string,
   senderId: string,
   content: string,
   event: string | null = null,
-  payload: Record<string, any> | null = null
+  payload: JsonPayload | null = null,
 ) {
-  const b = (content ?? "").trim();
-  if (!b) return;
+  const trimmedContent = content.trim();
+  if (!trimmedContent) return;
 
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
     sender_id: senderId,
-    content: b,
-    event: event,
-    payload: payload
+    content: trimmedContent,
+    event,
+    payload,
   });
 
   if (error) throw new Error(error.message);
@@ -87,49 +188,44 @@ export async function acceptCounterAsStudent(applicationId: string) {
   const user = userData.user;
   if (!user) redirect("/auth");
 
-  const { data: appRow, error } = await supabase
+  const { data, error } = await supabase
     .from("applications")
     .select(
-      "id, status, student_id, offer_id, counter_stawka, offers!inner(id, tytul, company_id, stawka, is_platform_service, typ)"
+      "id, status, student_id, offer_id, counter_stawka, offers!inner(id, tytul, company_id, stawka, is_platform_service, typ)",
     )
     .eq("id", applicationId)
     .single();
 
+  const appRow = data as ApplicationRowWithOffer | null;
   if (error || !appRow) return;
   if (appRow.student_id !== user.id) redirect("/app");
 
-  if (appRow.status !== "countered" || (appRow as any).counter_stawka == null) {
+  if (appRow.status !== "countered" || appRow.counter_stawka == null) {
     revalidatePath("/app/applications");
     return;
   }
 
-  const offer: any = Array.isArray((appRow as any).offers)
-    ? (appRow as any).offers[0]
-    : (appRow as any).offers;
+  const offer = getOffer(appRow);
+  const companyId = getCompanyId(offer);
+  const agreed = appRow.counter_stawka;
 
-  const agreed = (appRow as any).counter_stawka as number;
-
-  const { error: updErr } = await supabase
+  const { error: updateError } = await supabase
     .from("applications")
     .update({
       status: "accepted",
       agreed_stawka: agreed,
+      agreed_stawka_minor: toMinorUnits(agreed),
       decided_at: new Date().toISOString(),
     })
     .eq("id", applicationId);
 
-  if (updErr) throw new Error(updErr.message);
+  if (updateError) throw new Error(updateError.message);
 
-  // ✅ Utwórz kontrakt
   await supabase.rpc("ensure_contract_for_application", {
     p_application_id: applicationId,
   });
 
-  // ✅ Odrzuć inne aplikacje + zmień status oferty
-  const isMultiInstance = offer.is_platform_service === true ||
-    (offer.typ && (offer.typ.toLowerCase().includes("micro") || offer.typ.toLowerCase().includes("mikro")));
-
-  if (!isMultiInstance) {
+  if (!isMultiInstanceOffer(offer)) {
     const now = new Date().toISOString();
     await supabase
       .from("applications")
@@ -144,33 +240,36 @@ export async function acceptCounterAsStudent(applicationId: string) {
       .eq("id", appRow.offer_id);
   }
 
-  // ✅ wiadomość systemowa na czacie
   try {
-    const conversationId = await ensureConversationForApplication(supabase as any, {
+    const conversationId = await ensureConversationForApplication(supabase, {
       application_id: applicationId,
       offer_id: appRow.offer_id,
-      company_id: offer.company_id,
+      company_id: companyId,
       student_id: appRow.student_id,
     });
 
     await insertChatMessage(
-      supabase as any,
+      supabase,
       conversationId,
       user.id,
-      `Stawka ${agreed} zł zaakceptowana.`,
+      `Stawka ${agreed} zl zaakceptowana.`,
       "rate.accepted",
-      { agreed_stawka: agreed, agreed_rate: agreed }
+      {
+        agreed_stawka: agreed,
+        agreed_stawka_minor: toMinorUnits(agreed),
+        agreed_rate: agreed,
+      },
     );
   } catch {
-    // nie blokujemy
+    // Do not block the main flow if chat sync fails.
   }
 
-  // ✅ powiadom firmę
-  await notifyUser(supabase as any, offer.company_id, "counter_accepted", {
+  await notifyUser(supabase, companyId, "counter_accepted", {
     application_id: applicationId,
     offer_id: appRow.offer_id,
-    offer_title: offer.tytul ?? null,
+    offer_title: offer.tytul,
     agreed_stawka: agreed,
+    agreed_stawka_minor: toMinorUnits(agreed),
   });
 
   revalidatePath("/app/applications");
@@ -187,69 +286,87 @@ export async function acceptProposalAsStudent(applicationId: string) {
   const user = userData.user;
   if (!user) redirect("/auth");
 
-  const { data: appRow, error } = await supabase
+  const { data, error } = await supabase
     .from("applications")
     .select(
-      "id, status, student_id, offer_id, proposed_stawka, offers!inner(id, tytul, company_id, stawka)"
+      "id, status, student_id, offer_id, proposed_stawka, offers!inner(id, tytul, company_id, stawka, is_platform_service, typ)",
     )
     .eq("id", applicationId)
     .single();
 
+  const appRow = data as ApplicationRowWithOffer | null;
   if (error || !appRow) return;
   if (appRow.student_id !== user.id) redirect("/app");
 
-  if (appRow.status !== "sent") {
+  if (appRow.status !== "sent" || appRow.proposed_stawka == null) {
     revalidatePath("/app/applications");
     return;
   }
 
-  const offer: any = Array.isArray((appRow as any).offers)
-    ? (appRow as any).offers[0]
-    : (appRow as any).offers;
+  const offer = getOffer(appRow);
+  const companyId = getCompanyId(offer);
+  const agreed = appRow.proposed_stawka;
 
-  const agreed = (appRow as any).proposed_stawka as number;
-
-  const { error: updErr } = await supabase
+  const { error: updateError } = await supabase
     .from("applications")
     .update({
       status: "accepted",
       agreed_stawka: agreed,
+      agreed_stawka_minor: toMinorUnits(agreed),
       decided_at: new Date().toISOString(),
     })
     .eq("id", applicationId);
 
-  if (updErr) throw new Error(updErr.message);
+  if (updateError) throw new Error(updateError.message);
 
-  // ✅ [Realization Guard]
   await supabase.rpc("ensure_contract_for_application", {
     p_application_id: applicationId,
   });
 
-  // ✅ wiadomość systemowa na czacie
+  if (!isMultiInstanceOffer(offer)) {
+    const now = new Date().toISOString();
+    await supabase
+      .from("applications")
+      .update({ status: "rejected", decided_at: now })
+      .eq("offer_id", appRow.offer_id)
+      .neq("id", applicationId)
+      .in("status", ["sent", "countered"]);
+
+    await supabase
+      .from("offers")
+      .update({ status: "in_progress" })
+      .eq("id", appRow.offer_id);
+  }
+
   try {
-    const conversationId = await ensureConversationForApplication(supabase as any, {
+    const conversationId = await ensureConversationForApplication(supabase, {
       application_id: applicationId,
       offer_id: appRow.offer_id,
-      company_id: offer.company_id,
+      company_id: companyId,
       student_id: appRow.student_id,
     });
 
     await insertChatMessage(
-      supabase as any,
+      supabase,
       conversationId,
       user.id,
-      `Stawka ${agreed} zł zaakceptowana.`,
-      "application_accepted", // Reusing system event
-      { agreed_stawka: agreed }
+      `Stawka ${agreed} zl zaakceptowana.`,
+      "application_accepted",
+      {
+        agreed_stawka: agreed,
+        agreed_stawka_minor: toMinorUnits(agreed),
+      },
     );
-  } catch { }
+  } catch {
+    // Do not block the main flow if chat sync fails.
+  }
 
-  // ✅ powiadom firmę
-  await notifyUser(supabase as any, offer.company_id, "application_accepted", {
+  await notifyUser(supabase, companyId, "application_accepted", {
     application_id: applicationId,
     offer_id: appRow.offer_id,
-    offer_title: offer.tytul ?? null,
+    offer_title: offer.tytul,
     agreed_stawka: agreed,
+    agreed_stawka_minor: toMinorUnits(agreed),
   });
 
   revalidatePath("/app/applications");
@@ -261,10 +378,17 @@ export async function acceptProposalAsStudent(applicationId: string) {
 
 export async function rejectProposalAsStudent(applicationId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData.user;
   if (!user) redirect("/auth");
 
-  const { data: appRow, error } = await supabase.from("applications").select("id, status, student_id, offer_id, offers!inner(id, tytul, company_id)").eq("id", applicationId).single();
+  const { data, error } = await supabase
+    .from("applications")
+    .select("id, status, student_id, offer_id, offers!inner(id, tytul, company_id)")
+    .eq("id", applicationId)
+    .single();
+
+  const appRow = data as ApplicationRowWithOffer | null;
   if (error || !appRow || appRow.student_id !== user.id) redirect("/app");
 
   if (appRow.status !== "sent") {
@@ -272,17 +396,40 @@ export async function rejectProposalAsStudent(applicationId: string) {
     return;
   }
 
-  const offer: any = Array.isArray((appRow as any).offers) ? (appRow as any).offers[0] : (appRow as any).offers;
+  const offer = getOffer(appRow);
+  const companyId = getCompanyId(offer);
 
-  const { error: updErr } = await supabase.from("applications").update({ status: "rejected", decided_at: new Date().toISOString() }).eq("id", applicationId);
-  if (updErr) throw new Error(updErr.message);
+  const { error: updateError } = await supabase
+    .from("applications")
+    .update({ status: "rejected", decided_at: new Date().toISOString() })
+    .eq("id", applicationId);
+
+  if (updateError) throw new Error(updateError.message);
 
   try {
-    const conversationId = await ensureConversationForApplication(supabase, { application_id: applicationId, offer_id: appRow.offer_id, company_id: offer.company_id, student_id: appRow.student_id });
-    await insertChatMessage(supabase, conversationId, user.id, "Propozycja odrzucona.", "application_rejected", {});
-  } catch { }
+    const conversationId = await ensureConversationForApplication(supabase, {
+      application_id: applicationId,
+      offer_id: appRow.offer_id,
+      company_id: companyId,
+      student_id: appRow.student_id,
+    });
+    await insertChatMessage(
+      supabase,
+      conversationId,
+      user.id,
+      "Propozycja odrzucona.",
+      "application_rejected",
+      {},
+    );
+  } catch {
+    // Do not block the main flow if chat sync fails.
+  }
 
-  await notifyUser(supabase, offer.company_id, "application_rejected", { application_id: applicationId, offer_id: appRow.offer_id, offer_title: offer.tytul ?? null });
+  await notifyUser(supabase, companyId, "application_rejected", {
+    application_id: applicationId,
+    offer_id: appRow.offer_id,
+    offer_title: offer.tytul,
+  });
 
   revalidatePath("/app/applications");
   revalidatePath("/app/company/applications");
@@ -296,13 +443,14 @@ export async function rejectCounterAsStudent(applicationId: string) {
   const user = userData.user;
   if (!user) redirect("/auth");
 
-  const { data: appRow, error: appErr } = await supabase
+  const { data, error } = await supabase
     .from("applications")
     .select("id, status, student_id, offer_id, offers!inner(id, tytul, company_id)")
     .eq("id", applicationId)
     .single();
 
-  if (appErr || !appRow) redirect("/app");
+  const appRow = data as ApplicationRowWithOffer | null;
+  if (error || !appRow) redirect("/app");
   if (appRow.student_id !== user.id) redirect("/app");
 
   if (appRow.status !== "countered") {
@@ -310,47 +458,50 @@ export async function rejectCounterAsStudent(applicationId: string) {
     return;
   }
 
-  const offer: any = Array.isArray((appRow as any).offers)
-    ? (appRow as any).offers[0]
-    : (appRow as any).offers;
+  const offer = getOffer(appRow);
+  const companyId = getCompanyId(offer);
 
-  const { error: updErr } = await supabase
+  const { error: updateError } = await supabase
     .from("applications")
     .update({ status: "rejected", decided_at: new Date().toISOString() })
     .eq("id", applicationId);
 
-  if (updErr) throw new Error(updErr.message);
+  if (updateError) throw new Error(updateError.message);
 
-  await notifyUser(supabase as any, offer.company_id, "counter_rejected", {
+  await notifyUser(supabase, companyId, "counter_rejected", {
     application_id: applicationId,
     offer_id: appRow.offer_id,
-    offer_title: offer.tytul ?? null,
+    offer_title: offer.tytul,
   });
 
-  // ✅ wiadomość systemowa
   try {
-    const conversationId = await ensureConversationForApplication(supabase as any, {
+    const conversationId = await ensureConversationForApplication(supabase, {
       application_id: applicationId,
       offer_id: appRow.offer_id,
-      company_id: offer.company_id,
+      company_id: companyId,
       student_id: appRow.student_id,
     });
     await insertChatMessage(
-      supabase as any,
+      supabase,
       conversationId,
       user.id,
       "Kontra odrzucona.",
       "rate.rejected",
-      {}
+      {},
     );
-  } catch { }
+  } catch {
+    // Do not block the main flow if chat sync fails.
+  }
 
   revalidatePath("/app/applications");
   revalidatePath("/app/company/applications");
   revalidatePath("/app/notifications");
 }
 
-export async function proposeNewPriceAsStudent(applicationId: string, formData: FormData) {
+export async function proposeNewPriceAsStudent(
+  applicationId: string,
+  formData: FormData,
+) {
   const supabase = await createClient();
 
   const { data: userData } = await supabase.auth.getUser();
@@ -363,28 +514,27 @@ export async function proposeNewPriceAsStudent(applicationId: string, formData: 
     return;
   }
 
-  const { data: appRow, error: appErr } = await supabase
+  const { data, error } = await supabase
     .from("applications")
     .select(
-      "id, status, student_id, offer_id, offers!inner(id, tytul, company_id, stawka)"
+      "id, status, student_id, offer_id, offers!inner(id, tytul, company_id, stawka)",
     )
     .eq("id", applicationId)
     .single();
 
-  if (appErr || !appRow) redirect("/app");
+  const appRow = data as ApplicationRowWithOffer | null;
+  if (error || !appRow) redirect("/app");
   if (appRow.student_id !== user.id) redirect("/app");
 
-  // ✅ student może proponować nową stawkę dopiero po kontrze firmy
   if (appRow.status !== "countered") {
     revalidatePath("/app/applications");
     return;
   }
 
-  const offer: any = Array.isArray((appRow as any).offers)
-    ? (appRow as any).offers[0]
-    : (appRow as any).offers;
+  const offer = getOffer(appRow);
+  const companyId = getCompanyId(offer);
 
-  const { error: updErr } = await supabase
+  const { error: updateError } = await supabase
     .from("applications")
     .update({
       status: "sent",
@@ -392,39 +542,38 @@ export async function proposeNewPriceAsStudent(applicationId: string, formData: 
       counter_stawka: null,
       decided_at: null,
       agreed_stawka: null,
+      agreed_stawka_minor: null,
     })
     .eq("id", applicationId);
 
-  if (updErr) throw new Error(updErr.message);
+  if (updateError) throw new Error(updateError.message);
 
-  // ✅ dopisz do czatu
   try {
-    const conversationId = await ensureConversationForApplication(supabase as any, {
+    const conversationId = await ensureConversationForApplication(supabase, {
       application_id: applicationId,
       offer_id: appRow.offer_id,
-      company_id: offer.company_id,
+      company_id: companyId,
       student_id: appRow.student_id,
     });
 
     await insertChatMessage(
-      supabase as any,
+      supabase,
       conversationId,
       user.id,
-      `Proponuję stawkę ${proposed} zł.`,
+      `Proponuje stawke ${proposed} zl.`,
       "rate.proposed",
-      { proposed_stawka: proposed }
+      { proposed_stawka: proposed },
     );
 
-    // powiadom firmę o nowej wiadomości / propozycji
-    await notifyUser(supabase as any, offer.company_id, "negotiation_proposed", {
+    await notifyUser(supabase, companyId, "negotiation_proposed", {
       application_id: applicationId,
       offer_id: appRow.offer_id,
-      offer_title: offer.tytul ?? null,
+      offer_title: offer.tytul,
       proposed_stawka: proposed,
       conversation_id: conversationId,
     });
   } catch {
-    // nie blokujemy
+    // Do not block the main flow if chat sync fails.
   }
 
   revalidatePath("/app/applications");
@@ -432,38 +581,44 @@ export async function proposeNewPriceAsStudent(applicationId: string, formData: 
   revalidatePath("/app/notifications");
 }
 
-export async function withdrawApplication(applicationId: string, _formData?: FormData) {
+export async function withdrawApplication(
+  applicationId: string,
+  formData?: FormData,
+) {
+  void formData;
+
   const supabase = await createClient();
 
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
 
-  const { data: appRow, error: appErr } = await supabase
+  const { data, error } = await supabase
     .from("applications")
     .select("id, student_id, status, offer_id")
     .eq("id", applicationId)
     .single();
 
-  if (appErr || !appRow) {
+  const appRow = data as ApplicationRowBase | null;
+  if (error || !appRow) {
     revalidatePath("/app/applications");
-    return { error: "Nie znaleziono zgłoszenia." };
+    return { error: "Nie znaleziono zgloszenia." };
   }
 
-  if (appRow.student_id !== user.id) return { error: "Brak dostępu do zgłoszenia." };
+  if (appRow.student_id !== user.id) {
+    return { error: "Brak dostepu do zgloszenia." };
+  }
 
-  // wycofanie tylko przed accepted (czyli sent/countered)
   if (appRow.status !== "sent" && appRow.status !== "countered") {
     revalidatePath("/app/applications");
-    return { error: `Nie można usunąć zgłoszenia o statusie: ${appRow.status}` };
+    return { error: `Nie mozna usunac zgloszenia o statusie: ${appRow.status}` };
   }
 
-  // Soft delete (Archive) instead of hard delete
   const { error: updateError } = await supabase
     .from("applications")
     .update({
       status: "cancelled",
-      cancelled_at: new Date().toISOString()
+      cancelled_at: new Date().toISOString(),
     })
     .eq("id", applicationId);
 
@@ -472,22 +627,25 @@ export async function withdrawApplication(applicationId: string, _formData?: For
     return { error: updateError.message };
   }
 
-  // Powiadom firmę o wycofaniu zgłoszenia
   try {
     const { data: offerData } = await supabase
       .from("offers")
       .select("company_id, tytul")
       .eq("id", appRow.offer_id)
       .maybeSingle();
-    if (offerData?.company_id) {
-      await notifyUser(supabase as any, offerData.company_id, "application_withdrawn", {
+
+    const offer = offerData as OfferNotificationRow | null;
+    if (offer?.company_id) {
+      await notifyUser(supabase, offer.company_id, "application_withdrawn", {
         application_id: applicationId,
         offer_id: appRow.offer_id,
-        offer_title: offerData.tytul ?? null,
-        snippet: `Kandydat wycofał zgłoszenie do oferty "${offerData.tytul ?? "oferta"}".`,
+        offer_title: offer.tytul,
+        snippet: `Kandydat wycofal zgloszenie do oferty "${offer.tytul ?? "oferta"}".`,
       });
     }
-  } catch {}
+  } catch {
+    // Do not block the main flow if notifications fail.
+  }
 
   revalidatePath("/app");
   revalidatePath("/app/applications");
@@ -498,78 +656,107 @@ export async function withdrawApplication(applicationId: string, _formData?: For
 
 export async function removeSavedOffer(offerId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData.user;
   if (!user) return;
 
-  await supabase.from("saved_offers").delete().eq("offer_id", offerId).eq("student_id", user.id);
+  await supabase
+    .from("saved_offers")
+    .delete()
+    .eq("offer_id", offerId)
+    .eq("student_id", user.id);
+
   revalidatePath("/app/applications");
 }
-export async function submitQuoteProposal(conversationId: string, offerId: string, price: number, message: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Musisz być zalogowany.");
 
-  // 1. Check conversation and offer
-  const { data: conv } = await supabase
+export async function submitQuoteProposal(
+  conversationId: string,
+  offerId: string,
+  price: number,
+  message: string,
+) {
+  const supabase = await createClient();
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData.user;
+  if (!user) throw new Error("Musisz byc zalogowany.");
+
+  const { data } = await supabase
     .from("conversations")
     .select("id, company_id, student_id, offer_id, offers(tytul, company_id)")
     .eq("id", conversationId)
     .single();
 
-  if (!conv || conv.student_id !== user.id) throw new Error("Brak dostępu do rozmowy.");
+  const conversation = data as ConversationRow | null;
+  if (!conversation || conversation.student_id !== user.id) {
+    throw new Error("Brak dostepu do rozmowy.");
+  }
 
-  // 2. Create Application (Proposal)
-  // Check if application already exists? Likely not if button is shown.
-  // Or if exists, update it?
-  const { data: existingApp } = await supabase.from("applications").select("id").eq("offer_id", offerId).eq("student_id", user.id).maybeSingle();
+  const { data: existingAppData } = await supabase
+    .from("applications")
+    .select("id")
+    .eq("offer_id", offerId)
+    .eq("student_id", user.id)
+    .maybeSingle();
 
-  let appId = existingApp?.id;
+  const existingApp = existingAppData as IdRow | null;
+  let appId = existingApp?.id ?? null;
 
   if (existingApp) {
-    // Update existing
-    await supabase.from("applications").update({
-      status: "sent",
-      proposed_stawka: price,
-      message_to_company: message,
-    }).eq("id", existingApp.id);
+    await supabase
+      .from("applications")
+      .update({
+        status: "sent",
+        proposed_stawka: price,
+        message_to_company: message,
+      })
+      .eq("id", existingApp.id);
   } else {
-    // Create new
-    const { data: newApp, error } = await supabase.from("applications").insert({
-      offer_id: offerId,
-      student_id: user.id,
-      status: "sent", // Standard proposal status
-      proposed_stawka: price,
-      message_to_company: message,
-    }).select("id").single();
+    const { data: newAppData, error } = await supabase
+      .from("applications")
+      .insert({
+        offer_id: offerId,
+        student_id: user.id,
+        status: "sent",
+        proposed_stawka: price,
+        message_to_company: message,
+      })
+      .select("id")
+      .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    const newApp = newAppData as IdRow | null;
+    if (error || !newApp) {
+      throw new Error(error?.message || "Nie udalo sie zlozyc oferty.");
+    }
+
     appId = newApp.id;
   }
 
-  // 3. Link Application to Conversation
-  await supabase.from("conversations").update({ application_id: appId }).eq("id", conversationId);
+  await supabase
+    .from("conversations")
+    .update({ application_id: appId })
+    .eq("id", conversationId);
 
-  // 4. Send Message & Notify
-  const content = `Złożyłem ofertę realizacji: ${price} zł.\n${message}`;
+  const content = `Zlozylem oferte realizacji: ${price} zl.\n${message}`;
 
   try {
     await insertChatMessage(supabase, conversationId, user.id, content, "negotiation_proposed", {
       proposed_stawka: price,
-      initiator: "student"
+      initiator: "student",
     });
 
-    const offerTitle = (conv as any).offers?.tytul || "Zapytanie";
-    await notifyUser(supabase, conv.company_id, "negotiation_proposed", {
+    const offerTitle = unwrapRelation(conversation.offers)?.tytul || "Zapytanie";
+    await notifyUser(supabase, conversation.company_id, "negotiation_proposed", {
       conversation_id: conversationId,
       offer_id: offerId,
       offer_title: offerTitle,
       proposed_stawka: price,
-      snippet: `Otrzymałeś ofertę od studenta: ${price} zł`
+      snippet: `Otrzymales oferte od studenta: ${price} zl`,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error sending message/notify:", err);
-    // Return error but maybe success? No, if msg fails, it's bad.
-    return { error: err.message };
+    return {
+      error: err instanceof Error ? err.message : "Nie udalo sie wyslac wiadomosci.",
+    };
   }
 
   revalidatePath(`/app/chat/${conversationId}`);

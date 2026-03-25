@@ -40,6 +40,11 @@ function money(v: number | null | undefined) {
   return `${v} zł`;
 }
 
+function fromMinorUnits(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return null;
+  return value / 100;
+}
+
 function daysUntil(dateStr: string): number {
   const diff = new Date(dateStr).getTime() - Date.now();
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
@@ -72,7 +77,7 @@ export default async function CompanyApplicationsPage({
     .from("applications")
     .select(`
       id, status, message_to_company, cv_url, created_at, student_id, offer_id,
-      proposed_stawka, counter_stawka, agreed_stawka,
+      proposed_stawka, counter_stawka, agreed_stawka, agreed_stawka_minor,
       offers(id, tytul, stawka, company_id, typ, is_platform_service),
       contracts!contracts_application_id_fkey(id, status, milestones(id, status, auto_accept_at, title))
     `)
@@ -390,7 +395,7 @@ export default async function CompanyApplicationsPage({
     const offer = Array.isArray(a.offers) ? a.offers[0] : a.offers;
     const openChatAction = openChatForApplication.bind(null, a.id);
     const offerStawka: number | null = offer?.stawka ?? null;
-    const agreed: number | null = a.agreed_stawka ?? null;
+    const agreed: number | null = a.agreed_stawka ?? fromMinorUnits(a.agreed_stawka_minor);
 
     // Dane kontraktu i milestones
     const contract = Array.isArray(a.contracts) ? a.contracts[0] : a.contracts;
@@ -478,7 +483,7 @@ export default async function CompanyApplicationsPage({
     const offer = Array.isArray(a.offers) ? a.offers[0] : a.offers;
     const openChatAction = openChatForApplication.bind(null, a.id);
     const offerStawka: number | null = offer?.stawka ?? null;
-    const agreed: number | null = a.agreed_stawka ?? null;
+    const agreed: number | null = a.agreed_stawka ?? fromMinorUnits(a.agreed_stawka_minor);
     const isReviewed = reviewedAppIds.has(a.id);
 
     return (

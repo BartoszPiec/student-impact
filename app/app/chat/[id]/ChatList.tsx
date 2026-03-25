@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useMemo } from "react";
 import { markMessagesAsRead } from "../_actions";
-import { normalizeMessage, NormalizedMessage } from "@/app/lib/chat/chatEventUtils";
+import { normalizeMessage } from "@/app/lib/chat/chatEventUtils";
 import { TextBubble } from "../_components/TextBubble";
 import { FileBubble } from "../_components/FileBubble";
 import { RateCard } from "../_components/RateCard";
@@ -13,12 +13,40 @@ import { InquiryCard } from "../_components/InquiryCard";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 
+type ChatMessageRecord = {
+    id: string;
+    sender_id: string;
+    content: string | null;
+    created_at: string;
+    read_at?: string | null;
+    attachment_url?: string | null;
+    attachment_type?: string | null;
+    event?: string | null;
+    payload?: Record<string, unknown> | null;
+};
+
+function getPayloadString(
+    payload: Record<string, unknown>,
+    key: string
+): string | undefined {
+    const value = payload[key];
+    return typeof value === "string" ? value : undefined;
+}
+
+function getPayloadNumber(
+    payload: Record<string, unknown>,
+    key: string
+): number | undefined {
+    const value = payload[key];
+    return typeof value === "number" ? value : undefined;
+}
+
 export function ChatList({
     messages,
     userId,
     conversationId,
 }: {
-    messages: any[];
+    messages: ChatMessageRecord[];
     userId: string;
     conversationId: string;
 }) {
@@ -26,18 +54,19 @@ export function ChatList({
 
     // 1. Normalize messages
     const normalizedMessages = useMemo(() => {
-        return messages.map(m => normalizeMessage(m, userId));
+        return messages.map((message) => normalizeMessage(message, userId));
     }, [messages, userId]);
 
     // 2. Identify Latest Proposals
     const statusMap = useMemo(() => {
         const map = new Map<string, "accepted" | "rejected">();
         normalizedMessages.forEach(m => {
+            const refMessageId = getPayloadString(m.payload, "ref_message_id");
             if (m.event === "rate.accepted" || m.event === "deadline.accepted") {
-                if (m.payload?.ref_message_id) map.set(m.payload.ref_message_id, "accepted");
+                if (refMessageId) map.set(refMessageId, "accepted");
             }
             if (m.event === "rate.rejected" || m.event === "deadline.rejected") {
-                if (m.payload?.ref_message_id) map.set(m.payload.ref_message_id, "rejected");
+                if (refMessageId) map.set(refMessageId, "rejected");
             }
         });
         return map;
@@ -62,12 +91,14 @@ export function ChatList({
     }, [normalizedMessages]);
 
 
-    useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }, [messages]);
+    const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
 
     useEffect(() => {
-        const hasUnread = messages.some((m) => !m.read_at && m.sender_id !== userId);
+        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, [lastMessageId]);
+
+    useEffect(() => {
+        const hasUnread = messages.some((message) => !message.read_at && message.sender_id !== userId);
         if (conversationId && hasUnread) {
             markMessagesAsRead(conversationId).catch(console.error);
         }
@@ -80,15 +111,15 @@ export function ChatList({
             </div>
         );
     }
-
-    let lastDate = "";
-
     return (
         <div className="flex flex-col gap-6 py-6 pb-4">
             {normalizedMessages.map((msg, index) => {
                 const dateKey = new Date(msg.created_at).toDateString();
-                const showDate = dateKey !== lastDate;
-                lastDate = dateKey;
+                const previousMessage = normalizedMessages[index - 1];
+                const previousDateKey = previousMessage
+                    ? new Date(previousMessage.created_at).toDateString()
+                    : null;
+                const showDate = dateKey !== previousDateKey;
 
                 return (
                     <div key={msg.id} className="w-full">
@@ -122,27 +153,26 @@ export function ChatList({
 
                             {msg.event === "file.sent" && (
                                 <FileBubble
-                                    name={msg.payload.name}
-                                    url={msg.payload.url}
-                                    type={msg.payload.type}
+                                    name={getPayloadString(msg.payload, "name") ?? "Plik"}
+                                    url={getPayloadString(msg.payload, "url") ?? ""}
+                                    type={getPayloadString(msg.payload, "type") ?? "file"}
                                     isMine={msg.is_mine}
                                 />
                             )}
 
                             {msg.event === "rate.proposed" && (() => {
                                 // Extract rate from payload with multiple fallbacks
-                                let rateValue = msg.payload?.proposed_stawka
-                                    ?? msg.payload?.amount
+                                let rateValue = getPayloadNumber(msg.payload, "proposed_stawka")
+                                    ?? getPayloadNumber(msg.payload, "amount")
                                     ?? (msg.content ? parseFloat(msg.content.replace(/[^\d.]/g, '')) : undefined);
                                 
                                 // Defensive check
-                                if (typeof rateValue === 'number' && isNaN(rateValue)) {
-                                    rateValue = 0;
-                                }
+                                const safeRateValue =
+                                    typeof rateValue === "number" && !isNaN(rateValue) ? rateValue : 0;
 
                                 return (
                                     <RateCard
-                                        rate={rateValue}
+                                        rate={safeRateValue}
                                         isMine={msg.is_mine}
                                         isLatest={msg.id === latestRateProposalId}
                                         conversationId={conversationId}
@@ -154,7 +184,7 @@ export function ChatList({
 
                             {msg.event === "deadline.proposed" && (
                                 <DeadlineCard
-                                    deadline={msg.payload.proposed_deadline}
+                                    deadline={getPayloadString(msg.payload, "proposed_deadline") ?? ""}
                                     isMine={msg.is_mine}
                                     isLatest={msg.id === latestDeadlineProposalId}
                                     conversationId={conversationId}

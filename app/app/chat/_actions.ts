@@ -153,6 +153,7 @@ async function validateParticipant(conversationId: string) {
 export async function sendTextMessage(conversationId: string, content: string) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
   if (!content.trim()) return;
+  if (content.length > 10000) throw new Error("Wiadomość jest za długa (max 10 000 znaków)");
 
   await supabase.from("messages").insert({
     conversation_id: conversationId,
@@ -178,6 +179,15 @@ export async function sendTextMessage(conversationId: string, content: string) {
 
 export async function sendFileMessage(conversationId: string, fileName: string, fileUrl: string, fileType: string) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
+
+  // Walidacja URL pliku — musi być ścieżką Supabase Storage (relatywna) lub https://
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const isValidFileUrl = fileUrl.startsWith(SUPABASE_URL) || fileUrl.startsWith("/") || (!fileUrl.startsWith("javascript:") && !fileUrl.startsWith("data:") && fileUrl.startsWith("https://"));
+  if (!isValidFileUrl) throw new Error("Nieprawidłowy URL pliku");
+
+  // Walidacja nazwy pliku
+  if (!fileName || fileName.length > 255) throw new Error("Nieprawidłowa nazwa pliku");
+  if (fileType && fileType.length > 100) throw new Error("Nieprawidłowy typ pliku");
 
   // Backward compatibility: fill attachment_url/type cols, but also set event
   await supabase.from("messages").insert({
@@ -227,9 +237,18 @@ export async function sendEventMessage(conversationId: string, event: string, pa
   revalidatePath(`/app/chat/${conversationId}`);
 }
 
+function toMinorUnits(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Math.round(value * 100);
+}
+
 
 export async function acceptRate(conversationId: string, refMessageId: string, rate: number) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
+
+  // Nie można akceptować własnej propozycji (Self-Acceptance Bypass fix)
+  const { data: refMsg } = await supabase.from("messages").select("sender_id").eq("id", refMessageId).maybeSingle();
+  if (refMsg && refMsg.sender_id === user.id) throw new Error("Nie możesz zaakceptować własnej propozycji stawki");
 
   // 1. Update Application OR Service Order
   if (conv.application_id) {
@@ -237,6 +256,7 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
       .from("applications")
       .update({
         agreed_stawka: rate,
+        agreed_stawka_minor: toMinorUnits(rate),
         proposed_stawka: null,
         status: 'accepted',        // ✅ Fix: Sync status
         decided_at: new Date().toISOString()
@@ -331,7 +351,8 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
     event: "rate.accepted",
     payload: {
       ref_message_id: refMessageId,
-      agreed_rate: rate
+      agreed_rate: rate,
+      agreed_rate_minor: toMinorUnits(rate)
     }
   });
 
@@ -356,6 +377,10 @@ export async function rejectRate(conversationId: string, refMessageId: string, r
 
 export async function acceptDeadline(conversationId: string, refMessageId: string, deadline: string) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
+
+  // Nie można akceptować własnej propozycji (Self-Acceptance Bypass fix)
+  const { data: refMsg } = await supabase.from("messages").select("sender_id").eq("id", refMessageId).maybeSingle();
+  if (refMsg && refMsg.sender_id === user.id) throw new Error("Nie możesz zaakceptować własnej propozycji terminu");
 
   if (conv.application_id) {
     // 1. Update Application
