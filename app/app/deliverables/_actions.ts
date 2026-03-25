@@ -33,6 +33,7 @@ type ContractMilestoneRow = {
   idx: number | null;
   title: string | null;
   amount: number | string | null;
+  amount_minor?: number | string | null;
   acceptance_criteria: string | null;
   status: string | null;
   due_at?: string | null;
@@ -44,6 +45,7 @@ type ContractWithMilestonesRow = {
   application_id: string | null;
   service_order_id: string | null;
   total_amount: number | string | null;
+  total_amount_minor?: number | string | null;
   currency: string | null;
   review_window_days: number | null;
   milestones: ContractMilestoneRow[] | null;
@@ -853,12 +855,13 @@ export async function generateContract(contractId: string, applicationId: string
   content += `HARMONOGRAM REALIZACJI I PŁATNOŚCI:\n\n`;
 
   let total = 0;
-  contractMilestones.forEach((m, i) => {
+  contractMilestones.forEach((m: any, i) => {
+    const mAmount = Number(m.amount_minor) / 100 || Number(m.amount) || 0;
     content += `${i + 1}. ${m.title}\n`;
-    content += `   Kwota: ${Number(m.amount).toFixed(2)} PLN\n`;
+    content += `   Kwota: ${mAmount.toFixed(2)} PLN\n`;
     content += `   Zakres: ${m.acceptance_criteria}\n`;
     content += `   Status: ${m.status}\n\n`;
-    total += Number(m.amount);
+    total += mAmount;
   });
 
   content += `----------------------------------------\n`;
@@ -957,7 +960,7 @@ export async function generateContractDocuments(contractId: string, applicationI
   const milestones = (typedContract.milestones || [])
     .sort((a, b) => (a.idx || 0) - (b.idx || 0));
 
-  const totalAmount = Number(contract.total_amount) || 0;
+  const totalAmount = Number(contract.total_amount_minor) / 100 || Number(contract.total_amount) || 0;
   const platformFeePercent = 5;
   const platformFee = Math.round(totalAmount * platformFeePercent) / 100;
   const netAmount = totalAmount - platformFee;
@@ -979,7 +982,7 @@ export async function generateContractDocuments(contractId: string, applicationI
       idx: m.idx || i + 1,
       title: m.title || `Etap ${i + 1}`,
       criteria: m.acceptance_criteria || "",
-      amount: Number(m.amount) || 0,
+      amount: Number(m.amount_minor) / 100 || Number(m.amount) || 0,
       dueAt: m.due_at ? new Date(m.due_at).toLocaleDateString("pl-PL") : null,
     })),
     totalAmount,
@@ -1002,7 +1005,7 @@ export async function generateContractDocuments(contractId: string, applicationI
 
   // 7. Upload Contract A
   const pathA = `contracts/${contractId}/Umowa_A_Firma_${timestamp}.pdf`;
-  const { error: uploadErrorA } = await supabase.storage
+  const { error: uploadErrorA } = await admin.storage
     .from("deliverables")
     .upload(pathA, pdfA, { contentType: "application/pdf" });
 
@@ -1013,7 +1016,7 @@ export async function generateContractDocuments(contractId: string, applicationI
 
   // 8. Upload Contract B
   const pathB = `contracts/${contractId}/Umowa_B_Student_${timestamp}.pdf`;
-  const { error: uploadErrorB } = await supabase.storage
+  const { error: uploadErrorB } = await admin.storage
     .from("deliverables")
     .upload(pathB, pdfB, { contentType: "application/pdf" });
 

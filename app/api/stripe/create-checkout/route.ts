@@ -98,6 +98,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Contract already funded or in invalid state" }, { status: 400 });
     }
 
+    // OBS-02: Guard against duplicate checkout sessions by re-using open ones
+    const { data: existingPayment, error: existingPaymentError } = await supabase
+      .from("payments")
+      .select("stripe_session_id")
+      .eq("contract_id", contractId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!existingPaymentError && existingPayment) {
+      try {
+        const existingSession = await getStripe().checkout.sessions.retrieve(existingPayment.stripe_session_id);
+        if (existingSession && existingSession.status === "open") {
+          return NextResponse.json({
+            url: existingSession.url,
+            sessionId: existingSession.id,
+            reused: true
+          });
+        }
+      } catch (e) {
+        console.warn("[OBS-02] Could not retrieve existing session, creating new one:", e);
+      }
+    }
+
     // Get milestone titles for description
     const milestones = (contract.milestones || []) as { id: string, title: string }[];
     const milestoneIds = milestones.map(m => m.id);

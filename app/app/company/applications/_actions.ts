@@ -9,6 +9,8 @@ interface OfferRow {
   company_id: string;
   stawka: number | null;
   tytul: string | null;
+  is_platform_service?: boolean | null;
+  typ?: string | null;
 }
 
 function toMinorUnits(value: number | null | undefined): number | null {
@@ -26,6 +28,12 @@ function toNumber(v: FormDataEntryValue | null): number | null {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
   return n;
+}
+
+function isMultiInstanceOffer(offer: OfferRow): boolean {
+  if (offer.is_platform_service === true) return true;
+  const offerType = offer.typ?.toLowerCase() ?? "";
+  return offerType.includes("micro") || offerType.includes("mikro");
 }
 
 async function notifyUser(
@@ -110,7 +118,7 @@ export async function acceptApplication(applicationId: string) {
   const { data: appRow, error: appErr } = await supabase
     .from("applications")
     .select(
-      "id, status, student_id, offer_id, proposed_stawka, agreed_stawka, agreed_stawka_minor, counter_stawka, offers!inner(id, tytul, stawka, company_id)"
+      "id, status, student_id, offer_id, proposed_stawka, agreed_stawka, agreed_stawka_minor, counter_stawka, offers!inner(id, tytul, stawka, company_id, is_platform_service, typ)"
     )
     .eq("id", applicationId)
     .single();
@@ -158,6 +166,7 @@ export async function acceptApplication(applicationId: string) {
   });
 
   // ✅ odrzuć inne aplikacje do tej samej oferty (sent/countered)
+  if (!isMultiInstanceOffer(offer)) {
   const { data: others } = await supabase
     .from("applications")
     .select("id, student_id")
@@ -191,6 +200,7 @@ export async function acceptApplication(applicationId: string) {
     .eq("id", offer.id);
 
   if (offerErr) throw new Error(offerErr.message);
+  }
 
   // ✅ wiadomość systemowa na czacie
   try {

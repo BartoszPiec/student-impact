@@ -132,7 +132,7 @@ export default async function RealizationWorkspace({
         const { data: serviceOrder } = await supabase
             .from("service_orders")
             .select(`
-                id, status, student_id, company_id, amount, created_at, package_id,
+                id, status, student_id, company_id, amount, amount_minor, created_at, package_id,
                 package:service_packages( title, type )
             `)
             .eq("id", applicationId)
@@ -151,7 +151,7 @@ export default async function RealizationWorkspace({
                 student_id: serviceOrderRow.student_id,
                 offer_id: null,
                 agreed_stawka: serviceOrderRow.amount,
-                agreed_stawka_minor: serviceOrderRow.amount != null ? Math.round(serviceOrderRow.amount * 100) : null,
+                agreed_stawka_minor: (serviceOrderRow as any).amount_minor || (serviceOrderRow.amount != null ? Math.round(serviceOrderRow.amount * 100) : null),
                 offers: {
                     id: null,
                     tytul: so.package?.title || "Zlecenie Usługi",
@@ -318,7 +318,7 @@ export default async function RealizationWorkspace({
     const status = appRow.realization_status ?? appRow.status;
     const myReview = reviews.find((review) => review.reviewer_id === user.id);
     const theirReview = reviews.find((review) => review.reviewer_id !== user.id);
-    const agreedAmount = appRow.agreed_stawka ?? fromMinorUnits(appRow.agreed_stawka_minor) ?? offer?.stawka ?? null;
+    const agreedAmount = fromMinorUnits(appRow.agreed_stawka_minor) ?? appRow.agreed_stawka ?? offer?.stawka ?? null;
 
     return (
         <main className="min-h-screen bg-[#f8fafc]">
