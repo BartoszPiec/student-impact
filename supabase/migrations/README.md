@@ -51,6 +51,13 @@ State as of 2026-03-24.
 | 20260324195523 | accounting_materialized_views_v2 | APPLIED |
 | 20260324204443 | unification_hardening_phase_a | APPLIED |
 
+### Accounting analytics / reporting
+
+| Version | Name | DB status |
+|--------|------|-----------|
+| 20260325203000 | admin_accounting_analytics_v1 | PENDING / REPO |
+| 20260325210000 | variable_commission_model_v1 | PENDING / REPO |
+
 ## Drift status
 
 ### Resolved on 2026-03-24

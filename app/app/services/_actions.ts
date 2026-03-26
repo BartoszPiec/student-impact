@@ -4,6 +4,22 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { openChatForOfferInquiry } from "../chat/_actions";
+import { parseCommissionRateInput, resolveCommissionRate } from "@/lib/commission";
+
+type ServiceOrderNegotiationRow = {
+    student_id: string;
+    company_id: string;
+    package: { title?: string | null } | null;
+};
+
+function getExplicitCommissionRateValue(data: Record<string, unknown>): string | number | null {
+    const value = data["commission_rate"];
+    return typeof value === "string" || typeof value === "number" ? value : null;
+}
+
+function isPlatformServiceInput(data: Record<string, unknown>): boolean {
+    return data["type"] === "platform_service" || data["is_system"] === true;
+}
 
 export async function createOfferFromSystemPackage(packageId: string) {
     const supabase = await createClient();
@@ -48,6 +64,11 @@ export async function createOfferFromSystemPackage(packageId: string) {
             // Spróbujmy dopasować do tego co widziałem w _actions.ts w new-offer
             status: "published",
             is_platform_service: true,
+            commission_rate: resolveCommissionRate({
+                explicitRate: pkg.commission_rate ?? null,
+                sourceType: "service_order",
+                isPlatformService: true,
+            }),
         })
         .select("id")
         .single();
@@ -94,7 +115,12 @@ export async function createInquiryAction(packageId: string) {
         status: "published",
         is_private: true,
         service_package_id: pkg.id, // Link to package
-        typ: "micro" // Standardize type
+        typ: "micro", // Standardize type
+        commission_rate: resolveCommissionRate({
+            explicitRate: pkg.commission_rate ?? null,
+            sourceType: "service_order",
+            offerType: "micro",
+        })
     }).select("id").single();
 
     if (error) throw new Error(error.message);
@@ -156,7 +182,7 @@ export async function deleteServiceAction(serviceId: string) {
     return { success: true };
 }
 
-export async function createServiceAction(data: any) {
+export async function createServiceAction(data: Record<string, unknown>) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -166,6 +192,11 @@ export async function createServiceAction(data: any) {
         .from("service_packages")
         .insert({
             ...data,
+            commission_rate: resolveCommissionRate({
+                explicitRate: parseCommissionRateInput(getExplicitCommissionRateValue(data)),
+                sourceType: "service_order",
+                isPlatformService: isPlatformServiceInput(data),
+            }),
             student_id: user.id
         });
 
@@ -175,7 +206,7 @@ export async function createServiceAction(data: any) {
     return { success: true };
 }
 
-export async function updateServiceAction(serviceId: string, data: any) {
+export async function updateServiceAction(serviceId: string, data: Record<string, unknown>) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -194,7 +225,14 @@ export async function updateServiceAction(serviceId: string, data: any) {
 
     const { error } = await supabase
         .from("service_packages")
-        .update(data)
+        .update({
+            ...data,
+            commission_rate: resolveCommissionRate({
+                explicitRate: parseCommissionRateInput(getExplicitCommissionRateValue(data)),
+                sourceType: "service_order",
+                isPlatformService: isPlatformServiceInput(data),
+            }),
+        })
         .eq("id", serviceId);
 
     if (error) throw new Error(error.message);
@@ -239,11 +277,12 @@ export async function proposeServicePriceAction(orderId: string, price: number, 
         if (!user) throw new Error("Unauthorized");
 
         // Verify ownership (Student side)
-        const { data: order } = await supabase
+        const { data: orderData } = await supabase
             .from("service_orders")
             .select("student_id, company_id, package:service_packages(title)")
             .eq("id", orderId)
             .single();
+        const order = orderData as ServiceOrderNegotiationRow | null;
 
         if (!order || order.student_id !== user.id) {
             console.error("Order not found or unauthorized", order);
@@ -307,7 +346,7 @@ export async function proposeServicePriceAction(orderId: string, price: number, 
                     conversation_id: conv.id,
                     snippet: message ? `Nowa oferta (${price} PLN): ${message.slice(0, 40)}...` : `Otrzymałeś ofertę: ${price} PLN`,
                     proposed_stawka: price,
-                    offer_title: (order.package as any)?.title || 'Usługa'
+                    offer_title: order.package?.title || 'Usługa'
                 }
             });
             if (rpcError) console.error("Error sending notification RPC", rpcError);
@@ -317,10 +356,10 @@ export async function proposeServicePriceAction(orderId: string, price: number, 
 
         revalidatePath("/app/services/dashboard");
         return { success: true };
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("Action Error:", err);
         // Throw simple error for client toast
-        throw new Error(err.message || "Wystąpił błąd po stronie serwera.");
+        throw new Error(err instanceof Error ? err.message : "Wystąpił błąd po stronie serwera.");
     }
 }
 

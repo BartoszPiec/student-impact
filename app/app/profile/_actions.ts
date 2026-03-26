@@ -48,7 +48,7 @@ export async function saveStudentProfile(formData: FormData) {
   }
 
   const linkiRaw = String(formData.get("linki") ?? "").trim();
-  let linki: any = {};
+  let linki: Record<string, unknown> = {};
   try {
     linki = linkiRaw ? JSON.parse(linkiRaw) : {};
   } catch {
@@ -71,6 +71,7 @@ export async function saveStudentProfile(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/app/profile");
+  redirect("/app/profile?saved=student");
 }
 
 export async function saveCompanyProfile(formData: FormData) {
@@ -107,6 +108,7 @@ export async function saveCompanyProfile(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/app/profile");
+  redirect("/app/profile?saved=company");
 }
 
 export async function saveStudentTaxData(formData: FormData) {

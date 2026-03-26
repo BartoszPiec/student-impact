@@ -3,23 +3,84 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, Users, Wallet, Trophy, Target, ArrowUpRight, BarChart3 } from "lucide-react";
+import { TrendingUp, Users, Wallet, Trophy, Target } from "lucide-react";
 import { FunnelChart } from "./FunnelChart";
 import { DashboardHeader } from "./DashboardHeader";
 
+type AnalyticsSeriesPoint = {
+  month: string;
+  amount: number;
+};
+
+type LeaderboardRow = {
+  email?: string | null;
+  total_volume?: number | null;
+  contracts_count?: number | null;
+};
+
+type AnalyticsStats = {
+  financials?: {
+    total_volume_pln?: number;
+    total_revenue_pln?: number;
+    escrow_active_pln?: number;
+    student_payable_pln?: number;
+    tax_payable_pln?: number;
+  };
+  users?: {
+    students?: number;
+    companies?: number;
+  };
+  contracts?: {
+    completed?: number;
+    total?: number;
+  };
+  revenue_history?: AnalyticsSeriesPoint[];
+  volume_history?: AnalyticsSeriesPoint[];
+  leaderboard?: {
+    top_companies?: LeaderboardRow[];
+    top_students?: LeaderboardRow[];
+  };
+  funnel?: {
+    offers?: number;
+    applications?: number;
+    accepted?: number;
+    contracts?: number;
+  };
+};
+
 interface AnalyticsDashboardProps {
-  stats: any;
+  stats: AnalyticsStats;
   onRefresh: () => void;
   loading: boolean;
 }
 
 export function AnalyticsDashboard({ stats, onRefresh, loading }: AnalyticsDashboardProps) {
   const [activeSeries, setActiveSeries] = useState<'revenue' | 'volume'>('revenue');
+  const financials = stats?.financials ?? {};
+  const users = {
+    students: stats?.users?.students ?? 0,
+    companies: stats?.users?.companies ?? 0,
+  };
+  const contracts = {
+    completed: stats?.contracts?.completed ?? 0,
+    total: stats?.contracts?.total ?? 0,
+  };
+  const revenueHistory = Array.isArray(stats?.revenue_history) ? stats.revenue_history : [];
+  const volumeHistory = Array.isArray(stats?.volume_history) ? stats.volume_history : [];
+  const topCompanies = Array.isArray(stats?.leaderboard?.top_companies) ? stats.leaderboard.top_companies : [];
+  const topStudents = Array.isArray(stats?.leaderboard?.top_students) ? stats.leaderboard.top_students : [];
+  const funnelData = {
+    offers: stats?.funnel?.offers ?? 0,
+    applications: stats?.funnel?.applications ?? 0,
+    accepted: stats?.funnel?.accepted ?? 0,
+    contracts: stats?.funnel?.contracts ?? 0,
+  };
 
   // Multi-series chart data
-  const chartData = activeSeries === 'revenue' ? stats.revenue_history : stats.volume_history;
-  const maxVal = Math.max(...chartData.map((d: any) => d.amount), 100);
+  const chartData = activeSeries === 'revenue' ? revenueHistory : volumeHistory;
+  const maxVal = Math.max(...chartData.map((point) => point.amount), 100);
   const yAxisMax = Math.ceil(maxVal / 1000) * 1000;
+  const revenueValue = financials.total_revenue_pln ?? 0;
 
   return (
     <div className="space-y-12">
@@ -37,7 +98,7 @@ export function AnalyticsDashboard({ stats, onRefresh, loading }: AnalyticsDashb
             </div>
             <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Całkowity Obrót</div>
             <div className="text-3xl font-black text-slate-900 tracking-tight">
-              {stats.financials.total_volume_pln?.toLocaleString()} <span className="text-sm text-slate-400">PLN</span>
+              {financials.total_volume_pln?.toLocaleString()} <span className="text-sm text-slate-400">PLN</span>
             </div>
           </CardContent>
         </Card>
@@ -48,11 +109,11 @@ export function AnalyticsDashboard({ stats, onRefresh, loading }: AnalyticsDashb
               <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl group-hover:scale-110 transition-transform">
                 <TrendingUp className="w-6 h-6" />
               </div>
-              <div className="px-2 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded-lg">5% FEE</div>
+              <div className="px-2 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded-lg">LEDGER</div>
             </div>
             <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Przychód (Prowizja)</div>
             <div className="text-3xl font-black text-slate-900 tracking-tight">
-              {(stats.financials.total_volume_pln * 0.05).toLocaleString()} <span className="text-sm text-slate-400">PLN</span>
+              {revenueValue?.toLocaleString()} <span className="text-sm text-slate-400">PLN</span>
             </div>
           </CardContent>
         </Card>
@@ -66,11 +127,11 @@ export function AnalyticsDashboard({ stats, onRefresh, loading }: AnalyticsDashb
             </div>
             <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Użytkownicy</div>
             <div className="text-3xl font-black text-slate-900 tracking-tight">
-              {stats.users.students + stats.users.companies}
+              {users.students + users.companies}
             </div>
             <div className="flex gap-2 mt-2">
-                <span className="text-[10px] font-bold text-slate-400 italic">{stats.users.students}S</span>
-                <span className="text-[10px] font-bold text-slate-400 italic">{stats.users.companies}F</span>
+                <span className="text-[10px] font-bold text-slate-400 italic">{users.students}S</span>
+                <span className="text-[10px] font-bold text-slate-400 italic">{users.companies}F</span>
             </div>
           </CardContent>
         </Card>
@@ -84,9 +145,47 @@ export function AnalyticsDashboard({ stats, onRefresh, loading }: AnalyticsDashb
             </div>
             <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Skuteczność</div>
             <div className="text-3xl font-black text-slate-900 tracking-tight">
-              {Math.round((stats.contracts.completed / (stats.contracts.total || 1)) * 100)}%
+              {Math.round((contracts.completed / (contracts.total || 1)) * 100)}%
             </div>
             <div className="text-[10px] font-bold text-purple-400 uppercase mt-2">Conversion to success</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="bg-white border-none shadow-xl shadow-slate-200/40 rounded-[2rem] overflow-hidden">
+          <CardContent className="p-6">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Escrow liability</div>
+            <div className="text-2xl font-black text-slate-900">
+              {financials.escrow_active_pln?.toLocaleString()} <span className="text-sm text-slate-400">PLN</span>
+            </div>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              Środki firm, które są już zasilone i czekają na release do kolejnych etapów.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-none shadow-xl shadow-slate-200/40 rounded-[2rem] overflow-hidden">
+          <CardContent className="p-6">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Student payable</div>
+            <div className="text-2xl font-black text-slate-900">
+              {financials.student_payable_pln?.toLocaleString()} <span className="text-sm text-slate-400">PLN</span>
+            </div>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              Kwota już należna studentom, ale jeszcze niewypłacona z banku.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-none shadow-xl shadow-slate-200/40 rounded-[2rem] overflow-hidden">
+          <CardContent className="p-6">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Tax payable</div>
+            <div className="text-2xl font-black text-slate-900">
+              {financials.tax_payable_pln?.toLocaleString()} <span className="text-sm text-slate-400">PLN</span>
+            </div>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              Zobowiązania PIT wynikające z zaakceptowanych milestone&apos;ów.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -131,7 +230,7 @@ export function AnalyticsDashboard({ stats, onRefresh, loading }: AnalyticsDashb
 
               {/* Bars */}
               <div className="absolute inset-x-12 inset-y-0 flex items-end justify-around gap-4">
-                {chartData.length > 0 ? chartData.map((d: any) => {
+                {chartData.length > 0 ? chartData.map((d) => {
                   const height = (d.amount / yAxisMax) * 100;
                   return (
                     <div key={d.month} className="relative w-full h-full flex flex-col justify-end group cursor-pointer">
@@ -160,7 +259,7 @@ export function AnalyticsDashboard({ stats, onRefresh, loading }: AnalyticsDashb
         </Card>
 
         {/* Funnel Chart */}
-        <FunnelChart data={stats.funnel} />
+        <FunnelChart data={funnelData} />
       </div>
 
       {/* Hall of Fame */}
@@ -174,7 +273,7 @@ export function AnalyticsDashboard({ stats, onRefresh, loading }: AnalyticsDashb
             </CardHeader>
             <CardContent className="p-0">
                 <div className="divide-y divide-slate-50">
-                    {stats.leaderboard.top_companies.map((c: any, idx: number) => (
+                    {topCompanies.map((c, idx: number) => (
                         <div key={idx} className="p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
                             <div className="flex items-center gap-4">
                                 <span className="text-xl font-black text-slate-200 w-6">#{idx+1}</span>
@@ -202,7 +301,7 @@ export function AnalyticsDashboard({ stats, onRefresh, loading }: AnalyticsDashb
             </CardHeader>
             <CardContent className="p-0">
                 <div className="divide-y divide-slate-50">
-                    {stats.leaderboard.top_students.map((s: any, idx: number) => (
+                    {topStudents.map((s, idx: number) => (
                          <div key={idx} className="p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
                             <div className="flex items-center gap-4">
                                 <span className="text-xl font-black text-slate-200 w-6">#{idx+1}</span>

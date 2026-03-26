@@ -9,12 +9,30 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import ImageUpload from "@/components/image-upload";
-import { Badge } from "@/components/ui/badge";
 import { SERVICE_CATEGORIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
+type ServiceQuestionDraft = {
+    id: string;
+    label: string;
+};
+
+type ServiceFormInitialData = {
+    id?: string;
+    title?: string;
+    description?: string | null;
+    price?: number | null;
+    price_max?: number | null;
+    delivery_time_days?: number | null;
+    requirements?: string | null;
+    gallery_urls?: string[] | null;
+    categories?: string[] | null;
+    portfolio_items?: string[] | null;
+    form_schema?: Array<{ id?: string; label?: string | null }> | null;
+};
+
 interface ServiceFormProps {
-    initialData?: any;
+    initialData?: ServiceFormInitialData;
     isEditing?: boolean;
 }
 
@@ -24,9 +42,15 @@ export default function ServiceForm({ initialData, isEditing = false }: ServiceF
     const [error, setError] = useState<string | null>(null);
     const [galleryUrls, setGalleryUrls] = useState<string[]>(initialData?.gallery_urls || []);
     const [selectedCategories, setSelectedCategories] = useState<string[]>(initialData?.categories || []);
-    const [questions, setQuestions] = useState<{ id: string; label: string }[]>(
+    const [questions, setQuestions] = useState<ServiceQuestionDraft[]>(
         initialData?.form_schema
-            ? (Array.isArray(initialData.form_schema) ? initialData.form_schema.map((q: any) => ({ id: q.id, label: q.label })) : [])
+            ? (
+                Array.isArray(initialData.form_schema)
+                    ? initialData.form_schema
+                        .filter((question): question is { id: string; label?: string | null } => typeof question?.id === "string")
+                        .map((question) => ({ id: question.id, label: question.label ?? "" }))
+                    : []
+            )
             : []
     );
     const [enableQuestions, setEnableQuestions] = useState(questions.length > 0);
@@ -91,10 +115,10 @@ export default function ServiceForm({ initialData, isEditing = false }: ServiceF
                 } else {
                     await createServiceAction(data);
                 }
-                router.push("/app/services/my");
+                router.push(`/app/services/my?saved=${isEditing ? "updated" : "created"}`);
                 router.refresh();
-            } catch (err: any) {
-                setError(err.message);
+            } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : "Nie udało się zapisać usługi.");
             }
         });
     }
@@ -113,7 +137,7 @@ export default function ServiceForm({ initialData, isEditing = false }: ServiceF
                     id="title"
                     name="title"
                     required
-                    defaultValue={initialData?.title}
+                    defaultValue={initialData?.title ?? ""}
                     placeholder="np. Projekt logo, Tłumaczenie CV"
                 />
             </div>
@@ -147,7 +171,7 @@ export default function ServiceForm({ initialData, isEditing = false }: ServiceF
                     id="description"
                     name="description"
                     rows={4}
-                    defaultValue={initialData?.description}
+                    defaultValue={initialData?.description ?? ""}
                     placeholder="Opisz dokładnie, co oferujesz w ramach tego pakietu..."
                 />
             </div>
@@ -162,7 +186,7 @@ export default function ServiceForm({ initialData, isEditing = false }: ServiceF
                         min="0"
                         step="0.01"
                         required
-                        defaultValue={initialData?.price}
+                        defaultValue={initialData?.price ?? undefined}
                         placeholder="od..."
                     />
                 </div>
@@ -174,7 +198,7 @@ export default function ServiceForm({ initialData, isEditing = false }: ServiceF
                         type="number"
                         min="0"
                         step="0.01"
-                        defaultValue={initialData?.price_max}
+                        defaultValue={initialData?.price_max ?? undefined}
                         placeholder="do..."
                     />
                 </div>
@@ -225,7 +249,7 @@ export default function ServiceForm({ initialData, isEditing = false }: ServiceF
                     id="requirements"
                     name="requirements"
                     rows={4}
-                    defaultValue={initialData?.requirements}
+                    defaultValue={initialData?.requirements ?? ""}
                     placeholder="Aby zrealizować zlecenie, będziemy potrzebować..."
                     className="bg-indigo-50/30 border-indigo-100 focus:border-indigo-500"
                 />

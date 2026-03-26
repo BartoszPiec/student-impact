@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { parseCommissionRateInput, resolveCommissionRate } from "@/lib/commission";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -29,6 +30,11 @@ export async function createSystemService(formData: FormData) {
     const priceRaw = String(formData.get("stawka") ?? "").trim();
     const price = priceRaw ? Number(priceRaw) : null;
     const locked_content = String(formData.get("obligations") ?? "").trim() || null;
+    const commission_rate = resolveCommissionRate({
+        explicitRate: parseCommissionRateInput(formData.get("commission_rate")),
+        sourceType: "service_order",
+        isPlatformService: true,
+    });
 
     if (!title || !description) throw new Error("Tytuł i opis są wymagane");
     if (title.length > 200) throw new Error("Tytuł jest za długi (max 200 znaków)");
@@ -41,6 +47,7 @@ export async function createSystemService(formData: FormData) {
         category,
         delivery_time_days: delivery_time_days ? parseInt(delivery_time_days) : null,
         price,
+        commission_rate,
         locked_content,
         type: 'platform_service',
         status: 'active'
@@ -63,6 +70,11 @@ export async function updateSystemService(offerId: string, formData: FormData) {
     const priceRaw = String(formData.get("stawka") ?? "").trim();
     const price = priceRaw ? Number(priceRaw) : null;
     const locked_content = String(formData.get("obligations") ?? "").trim() || null;
+    const commission_rate = resolveCommissionRate({
+        explicitRate: parseCommissionRateInput(formData.get("commission_rate")),
+        sourceType: "service_order",
+        isPlatformService: true,
+    });
 
     if (!title || !description) throw new Error("Tytuł i opis są wymagane");
     if (title.length > 200) throw new Error("Tytuł jest za długi (max 200 znaków)");
@@ -77,6 +89,7 @@ export async function updateSystemService(offerId: string, formData: FormData) {
             category,
             delivery_time_days: delivery_time_days ? parseInt(delivery_time_days) : null,
             price,
+            commission_rate,
             locked_content,
         })
         .eq("id", offerId);

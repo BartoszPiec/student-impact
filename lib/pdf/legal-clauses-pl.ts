@@ -41,7 +41,7 @@ export const CONTRACT_A_CLAUSES = {
 
 3.1. Łączne wynagrodzenie za wykonanie przedmiotu umowy określone jest w Harmonogramie.
 
-3.2. Wynagrodzenie obejmuje prowizję platformy Student Impact w wysokości 5% wartości zlecenia.
+3.2. Wynagrodzenie obejmuje prowizję platformy Student Impact zgodną ze stawką przypisaną do danego rodzaju zlecenia i zaakceptowaną w platformie.
 
 3.3. Zleceniodawca zobowiązuje się do zasilenia depozytu zabezpieczającego (escrow) przed rozpoczęciem realizacji zlecenia. Środki są przechowywane na rachunku escrow do czasu akceptacji poszczególnych etapów.
 
@@ -115,7 +115,7 @@ export const CONTRACT_B_CLAUSES = {
 
   payment: `3. WYNAGRODZENIE
 
-3.1. Wynagrodzenie za wykonanie dzieła określone jest w Harmonogramie (kwoty netto — po potrąceniu prowizji platformy 5%).
+3.1. Wynagrodzenie za wykonanie dzieła określone jest w Harmonogramie (kwoty netto — po potrąceniu prowizji platformy zgodnej ze stawką przypisaną do danego rodzaju zlecenia).
 
 3.2. Wynagrodzenie za poszczególne etapy wypłacane jest po akceptacji danego etapu przez klienta końcowego lub po automatycznej akceptacji.
 

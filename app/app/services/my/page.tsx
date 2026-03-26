@@ -4,10 +4,19 @@ import { ServicePackage } from "@/lib/types/services";
 import ServiceActionsMenu from "./service-actions-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Plus, LayoutDashboard, Sparkles } from "lucide-react";
+import { ShieldCheck, Plus, LayoutDashboard, Sparkles, CheckCircle2 } from "lucide-react";
 
-export default async function MyServicesPage() {
+export default async function MyServicesPage({
+    searchParams,
+}: {
+    searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
     const supabase = await createClient();
+    const resolvedSearchParams = (await searchParams) ?? {};
+    const savedParam = Array.isArray(resolvedSearchParams.saved)
+        ? resolvedSearchParams.saved[0]
+        : resolvedSearchParams.saved;
+    const savedState = savedParam === "created" || savedParam === "updated" ? savedParam : null;
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -22,6 +31,29 @@ export default async function MyServicesPage() {
 
     return (
         <div className="space-y-12 pb-20">
+            {savedState ? (
+                <div className="rounded-[2rem] border border-emerald-200 bg-emerald-50 px-6 py-5 text-emerald-950 shadow-lg shadow-emerald-500/10">
+                    <div className="flex items-start gap-4">
+                        <div className="rounded-2xl bg-white p-2 text-emerald-600 shadow-sm">
+                            <CheckCircle2 className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">
+                                Zapisano pomyślnie
+                            </p>
+                            <h2 className="text-lg font-black">
+                                {savedState === "created"
+                                    ? "Twoja usługa została utworzona."
+                                    : "Zmiany w usłudze zostały zapisane."}
+                            </h2>
+                            <p className="text-sm font-medium text-emerald-800/80">
+                                Pakiet jest już widoczny na liście i możesz od razu wrócić do dalszej edycji lub dodać kolejną usługę.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
             {/* PREMIUM HEADER BANNER */}
             <div className="relative overflow-hidden rounded-[2.5rem] bg-slate-900 px-8 py-12 md:px-12 md:py-16 text-white shadow-2xl">
                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>

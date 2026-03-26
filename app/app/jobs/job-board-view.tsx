@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
+import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, MapPin, Filter, X, CheckCircle2, Briefcase, Zap } from "lucide-react";
+import { Search, Filter, X, CheckCircle2, Briefcase, Zap } from "lucide-react";
 import { JobCard, JobOffer } from "./job-card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -14,7 +15,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-export function JobBoardView({ initialOffers, initialCompanyId, appliedOfferIds }: { initialOffers: JobOffer[], initialCompanyId?: string, appliedOfferIds?: Set<string> }) {
+export function JobBoardView({
+    initialOffers,
+    initialCompanyId,
+    appliedOfferIds,
+    totalOffersCount,
+    currentPage = 1,
+}: {
+    initialOffers: JobOffer[],
+    initialCompanyId?: string,
+    appliedOfferIds?: Set<string>,
+    totalOffersCount?: number,
+    currentPage?: number,
+}) {
     const searchParams = useSearchParams();
     const companyIdFromUrl = searchParams.get("companyId");
 
@@ -39,16 +52,13 @@ export function JobBoardView({ initialOffers, initialCompanyId, appliedOfferIds 
     const [showApplied, setShowApplied] = useState(false); // New Filter: Show Applied
 
     const [companyIdFilter, setCompanyIdFilter] = useState(initialCompanyId || companyIdFromUrl || "");
-
-    // Sync companyId from params (for navigating from profile)
-    useEffect(() => {
-        const id = initialCompanyId || companyIdFromUrl;
-        if (id) {
-            setCompanyIdFilter(id);
-        }
-    }, [initialCompanyId, companyIdFromUrl]);
-
-    // ... (rest of the code)
+    const nextPageHref = useMemo(() => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("page", String(currentPage + 1));
+        const query = params.toString();
+        return query ? `/app/jobs?${query}` : "/app/jobs";
+    }, [currentPage, searchParams]);
+    const hasMoreServerOffers = typeof totalOffersCount === "number" && initialOffers.length < totalOffersCount;
 
     // Defined lists
     const POPULAR_CITIES = ["Warszawa", "Kraków", "Wrocław", "Poznań", "Gdańsk", "Łódź", "Katowice", "Lublin", "Bydgoszcz", "Szczecin"];
@@ -56,9 +66,8 @@ export function JobBoardView({ initialOffers, initialCompanyId, appliedOfferIds 
     const POPULAR_CONTRACTS = ["Umowa o pracę", "B2B", "Umowa zlecenie", "Umowa o dzieło", "Praktyki"];
 
     // Data Extraction based on ACTIVE MODE offers
-    const { locations, technologies, contracts, categories } = useMemo(() => {
+    const { locations, contracts, categories } = useMemo(() => {
         const locs = new Set<string>(POPULAR_CITIES);
-        const techs = new Set<string>();
         const conts = new Set<string>(POPULAR_CONTRACTS);
         const cats = new Set<string>(POPULAR_CATEGORIES);
 
@@ -72,7 +81,6 @@ export function JobBoardView({ initialOffers, initialCompanyId, appliedOfferIds 
             if (matchesMode) {
                 if (o.location) locs.add(o.location);
                 if (o.is_remote) locs.add("Remote");
-                o.technologies?.forEach(t => techs.add(t));
                 if (o.contract_type) conts.add(o.contract_type);
                 if (o.category) cats.add(o.category);
             }
@@ -80,11 +88,10 @@ export function JobBoardView({ initialOffers, initialCompanyId, appliedOfferIds 
 
         return {
             locations: Array.from(locs).sort(),
-            technologies: Array.from(techs).sort(),
             contracts: Array.from(conts).sort(),
             categories: Array.from(cats).sort()
         };
-    }, [offers, mode]);
+    }, [offers, mode, POPULAR_CATEGORIES, POPULAR_CITIES, POPULAR_CONTRACTS]);
 
     // Derived State: Filtered Offers
     const filtered = useMemo(() => {
@@ -181,7 +188,6 @@ export function JobBoardView({ initialOffers, initialCompanyId, appliedOfferIds 
     }, [offers, mode, search, locationFilter, techFilters, contractFilters, categoryFilter, salaryMin, salaryMax, budgetMin, budgetMax, subFilter, companyIdFilter, showApplied, appliedOfferIds]);
 
     // Handlers
-    const toggleTech = (t: string) => setTechFilters(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
     const toggleContract = (c: string) => setContractFilters(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
     const toggleCategory = (c: string) => setCategoryFilter(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
 
@@ -373,7 +379,7 @@ export function JobBoardView({ initialOffers, initialCompanyId, appliedOfferIds 
                         {mode === "micro" && (
                             <div className="space-y-3 animate-in zoom-in-95 duration-300">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Rodzaj zlecenia</label>
-                                <Tabs value={subFilter} onValueChange={(v) => setSubFilter(v as any)} className="w-full">
+                                <Tabs value={subFilter} onValueChange={(value) => setSubFilter(value as "all" | "platform" | "regular")} className="w-full">
                                     <TabsList className="grid w-full grid-cols-1 gap-2 bg-transparent h-auto p-0">
                                         {[
                                             { id: 'all', label: 'Wszystkie' },
@@ -423,7 +429,11 @@ export function JobBoardView({ initialOffers, initialCompanyId, appliedOfferIds 
                                     value={mode === "job" ? salaryMin : budgetMin}
                                     onChange={(e) => {
                                         const val = e.target.value ? Number(e.target.value) : "";
-                                        mode === "job" ? setSalaryMin(val) : setBudgetMin(val);
+                                        if (mode === "job") {
+                                            setSalaryMin(val);
+                                        } else {
+                                            setBudgetMin(val);
+                                        }
                                     }}
                                     className="h-11 bg-white border-slate-200 rounded-xl"
                                 />
@@ -433,7 +443,11 @@ export function JobBoardView({ initialOffers, initialCompanyId, appliedOfferIds 
                                     value={mode === "job" ? salaryMax : budgetMax}
                                     onChange={(e) => {
                                         const val = e.target.value ? Number(e.target.value) : "";
-                                        mode === "job" ? setSalaryMax(val) : setBudgetMax(val);
+                                        if (mode === "job") {
+                                            setSalaryMax(val);
+                                        } else {
+                                            setBudgetMax(val);
+                                        }
                                     }}
                                     className="h-11 bg-white border-slate-200 rounded-xl"
                                 />
@@ -507,15 +521,29 @@ export function JobBoardView({ initialOffers, initialCompanyId, appliedOfferIds 
                             </Button>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 gap-6 pb-20">
-                            {filtered.map((offer, idx) => (
-                                <div key={offer.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
-                                    <JobCard
-                                        offer={offer}
-                                        isApplied={appliedOfferIds?.has(offer.id)}
-                                    />
+                        <div className="space-y-8 pb-20">
+                            <div className="grid grid-cols-1 gap-6">
+                                {filtered.map((offer, idx) => (
+                                    <div key={offer.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
+                                        <JobCard
+                                            offer={offer}
+                                            isApplied={appliedOfferIds?.has(offer.id)}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+
+                            {hasMoreServerOffers && (
+                                <div className="flex flex-col items-center gap-3 rounded-[2rem] border border-slate-200 bg-white px-6 py-8 text-center shadow-sm">
+                                    <p className="text-sm font-semibold text-slate-500">
+                                        Pokazujemy <span className="font-extrabold text-slate-900">{initialOffers.length}</span> z{" "}
+                                        <span className="font-extrabold text-slate-900">{totalOffersCount}</span> ofert.
+                                    </p>
+                                    <Button asChild className="h-12 rounded-2xl bg-slate-900 px-6 font-bold text-white hover:bg-slate-800">
+                                        <Link href={nextPageHref}>Pokaż więcej ofert</Link>
+                                    </Button>
                                 </div>
-                            ))}
+                            )}
                         </div>
                     )}
                 </div>

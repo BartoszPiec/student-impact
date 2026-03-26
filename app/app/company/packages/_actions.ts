@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { resolveCommissionRate } from "@/lib/commission";
 
 export async function createOfferFromPackage(packageId: string) {
     const supabase = await createClient();
@@ -38,6 +39,11 @@ export async function createOfferFromPackage(packageId: string) {
             typ: isPlatformService ? "projekt" : "zlecenie",
             is_platform_service: isPlatformService,
             service_package_id: pkg.id,
+            commission_rate: resolveCommissionRate({
+                explicitRate: pkg.commission_rate ?? null,
+                sourceType: "service_order",
+                isPlatformService,
+            }),
             technologies: [],
             contract_type: "b2b",
             kategoria: pkg.category, // Pass category from package
@@ -203,6 +209,11 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
                 typ: "projekt",
                 is_platform_service: true,
                 service_package_id: pkg.id,
+                commission_rate: resolveCommissionRate({
+                    explicitRate: pkg.commission_rate ?? null,
+                    sourceType: "service_order",
+                    isPlatformService: true,
+                }),
                 technologies: [],
                 contract_type: "b2b",
                 kategoria: pkg.category,
@@ -254,6 +265,10 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
             is_private: true,
             service_package_id: pkg.id,
             typ: "zlecenie",
+            commission_rate: resolveCommissionRate({
+                explicitRate: pkg.commission_rate ?? null,
+                sourceType: "service_order",
+            }),
         })
         .select("id")
         .single();

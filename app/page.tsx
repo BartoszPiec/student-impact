@@ -3,12 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
-  ArrowRight,
   CheckCircle2,
-  Briefcase,
-  GraduationCap,
-  TrendingUp,
-  Search,
   Star,
   Globe,
   Video,
@@ -22,8 +17,6 @@ import {
   Scale,
   Database,
   Sparkles,
-  Menu,
-  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +30,7 @@ import { cn } from "@/lib/utils";
 
 // --- Types ---
 interface ServiceData {
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   description: string;
   stats: {
     price: string;
@@ -138,41 +131,14 @@ const SERVICE_DATA: Record<string, ServiceData> = {
 
 // --- Components ---
 
-function AnimatedCounter({ value, duration = 2000 }: { value: string, duration?: number }) {
-  const [current, setCurrent] = useState(0);
-  const nodeRef = useRef<HTMLSpanElement>(null);
+function AnimatedCounter({ value }: { value: string }) {
   const isDecimal = value.includes('.');
   const numericValue = parseFloat(value.replace(/[^0-9.]/g, ''));
   const suffix = value.replace(/[0-9.]/g, '');
 
-  useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        let start = 0;
-        const steps = 60;
-        const increment = numericValue / steps;
-        const interval = duration / steps;
-
-        const timer = setInterval(() => {
-          start += increment;
-          if (start >= numericValue) {
-            setCurrent(numericValue);
-            clearInterval(timer);
-          } else {
-            setCurrent(start);
-          }
-        }, interval);
-        observer.disconnect();
-      }
-    }, { threshold: 0.1 });
-
-    if (nodeRef.current) observer.observe(nodeRef.current);
-    return () => observer.disconnect();
-  }, [numericValue, duration]);
-
   return (
-    <span ref={nodeRef} className="stat-number">
-      {isDecimal ? current.toFixed(1) : Math.floor(current).toLocaleString('pl-PL')}
+    <span className="stat-number">
+      {isDecimal ? numericValue.toFixed(1) : Math.floor(numericValue).toLocaleString('pl-PL')}
       {suffix}
     </span>
   );
@@ -203,26 +169,37 @@ function RevealOnScroll({ children, className }: { children: React.ReactNode, cl
 
 export default function LandingPage() {
   const [activeModel, setActiveModel] = useState<"standard" | "longterm" | "services">("standard");
+  const collaborationModels: Array<{
+    id: string;
+    label: string;
+    value: "standard" | "longterm" | "services";
+  }> = [
+    { id: "standard", label: "📋 Zlecenie jednorazowe", value: "standard" },
+    { id: "longterm", label: "🤝 Współpraca długoterminowa", value: "longterm" },
+    { id: "services", label: "💼 Usługi studentów", value: "services" },
+  ];
 
   return (
     <div className="min-h-screen bg-white font-sans text-[#1a1a2e] overflow-x-hidden">
 
       {/* --- NAVIGATION --- */}
-      <nav className="fixed top-0 w-full z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200/60 shadow-sm flex justify-between items-center px-[5%] py-4">
-        <div className="text-xl md:text-2xl font-bold gradient-text">
-          <Link href="/">🎓 Student2Work</Link>
-        </div>
-        <div className="flex gap-2 md:gap-4">
-          <Link href="/auth">
-            <Button variant="outline" className="rounded-full border-[#667eea] text-[#667eea] hover:bg-[#667eea] hover:text-white transition-all px-4 md:px-6">
-              Logowanie
-            </Button>
-          </Link>
-          <Link href="/auth">
-            <Button className="rounded-full gradient-primary text-white shadow-primary hover:shadow-primary-lg transition-all px-4 md:px-6">
-              Dołącz teraz
-            </Button>
-          </Link>
+      <nav className="fixed top-0 z-50 w-full border-b border-slate-200/60 bg-white/90 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-[2000px] items-center justify-between px-[5%] py-4">
+          <div className="text-xl font-bold gradient-text md:text-2xl">
+            <Link href="/">🎓 Student2Work</Link>
+          </div>
+          <div className="flex gap-2 md:gap-4">
+            <Link href="/auth">
+              <Button variant="outline" className="rounded-full border-[#667eea]/40 bg-white/80 px-4 text-[#667eea] transition-all hover:bg-[#667eea] hover:text-white md:px-6">
+                Logowanie
+              </Button>
+            </Link>
+            <Link href="/auth?role=student">
+              <Button className="rounded-full px-4 text-white shadow-primary transition-all hover:shadow-primary-lg md:px-6 gradient-primary">
+                Dołącz teraz
+              </Button>
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -240,30 +217,30 @@ export default function LandingPage() {
           </svg>
         </div>
 
-        <div className="w-full max-w-[2000px] mx-auto text-center relative z-10">
-          <RevealOnScroll className="inline-block bg-white text-[#667eea] px-6 py-2 rounded-full font-bold shadow-soft mb-8 text-sm">
+        <div className="relative z-10 mx-auto w-full max-w-[2000px] text-center">
+          <RevealOnScroll className="mb-8 inline-block rounded-full border border-white/70 bg-white/90 px-6 py-2 text-sm font-bold text-[#667eea] shadow-soft">
             <span className="text-[#667eea] mr-2">●</span> Nowa era pracy dla studentów
           </RevealOnScroll>
 
-          <RevealOnScroll>
+          <RevealOnScroll className="mx-auto max-w-5xl">
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold leading-[1.1] mb-6">
               Połącz ambicję<br />
               <span className="gradient-text">z realnym biznesem</span>
             </h1>
-            <p className="text-lg md:text-xl text-[#5a5a7a] max-w-3xl mx-auto mb-10 leading-relaxed">
+            <p className="mx-auto mb-10 max-w-3xl text-lg leading-relaxed text-[#4f5b77] md:text-xl">
               Platforma, która zmienia zasady gry. Studenci zdobywają doświadczenie w komercyjnych projektach,
               a firmy zyskują dostęp do świeżych talentów.
             </p>
           </RevealOnScroll>
 
           <RevealOnScroll className="flex flex-wrap justify-center gap-4">
-            <Link href="/auth">
-              <Button className="h-14 px-10 rounded-full gradient-primary text-lg font-bold text-white shadow-primary animate-in zoom-in-50 duration-500">
+            <Link href="/auth?role=student">
+              <Button className="h-14 rounded-full px-10 text-lg font-bold text-white shadow-primary animate-in zoom-in-50 duration-500 gradient-primary">
                 Zacznij jako Student →
               </Button>
             </Link>
-            <Link href="/auth">
-              <Button variant="outline" className="h-14 px-10 rounded-full border-[#667eea] text-[#667eea] bg-white text-lg font-bold hover:bg-slate-50">
+            <Link href="/auth?role=company">
+              <Button variant="outline" className="h-14 rounded-full border-[#667eea]/30 bg-white/90 px-10 text-lg font-bold text-[#667eea] hover:bg-white">
                 Zatrudnij Studenta
               </Button>
             </Link>
@@ -276,8 +253,8 @@ export default function LandingPage() {
       </section>
 
       {/* --- STATS SECTION --- */}
-      <section className="py-20 px-[5%] bg-white">
-        <div className="w-full max-w-[2000px] mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <section className="bg-white px-[5%] py-20">
+        <div className="mx-auto grid w-full max-w-[2000px] grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard icon="🎓" label="Aktywnych studentów" sublabel="+234 w tym miesiącu" value="2847" />
           <StatCard icon="🏢" label="Firm partnerskich" sublabel="Z różnych branż" value="512" />
           <StatCard icon="✅" label="Zrealizowanych projektów" sublabel="Wartość 2.4M PLN" value="1429" />
@@ -294,20 +271,16 @@ export default function LandingPage() {
           </div>
 
           {/* Model Switcher */}
-          <div className="flex flex-wrap justify-center gap-4 mb-16">
-            {[
-              { id: 'standard', label: '📋 Zlecenie jednorazowe', value: 'standard' },
-              { id: 'longterm', label: '🤝 Współpraca długoterminowa', value: 'longterm' },
-              { id: 'services', label: '💼 Usługi studentów', value: 'services' }
-            ].map(m => (
+          <div className="mb-16 flex flex-wrap justify-center gap-4 rounded-full bg-slate-50/80 p-2 shadow-inner">
+            {collaborationModels.map((m) => (
               <button
                 key={m.id}
-                onClick={() => setActiveModel(m.value as any)}
+                onClick={() => setActiveModel(m.value)}
                 className={cn(
-                  "px-6 py-3 rounded-full font-bold transition-all border-2 text-sm",
+                  "rounded-full border-2 px-6 py-3 text-sm font-bold transition-all",
                   activeModel === m.value
-                    ? "gradient-primary text-white border-transparent shadow-md"
-                    : "bg-white border-slate-200 text-[#5a5a7a] hover:border-[#667eea] hover:text-[#667eea]"
+                    ? "border-transparent text-white shadow-md gradient-primary"
+                    : "border-transparent bg-transparent text-[#5a5a7a] hover:bg-white hover:text-[#667eea]"
                 )}
               >
                 {m.label}
@@ -318,7 +291,7 @@ export default function LandingPage() {
           {/* Timeline Content */}
           <div className="relative">
             {/* Central Line (Desktop) */}
-            <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-1 bg-gradient-to-b from-[#667eea] to-[#764ba2] translate-x-[-50%] z-0" />
+            <div className="absolute bottom-0 left-1/2 top-0 z-0 hidden w-1 -translate-x-[-50%] bg-gradient-to-b from-[#667eea] to-[#764ba2] lg:block" />
 
             {activeModel === 'standard' && (
               <div className="space-y-24">
@@ -443,14 +416,14 @@ export default function LandingPage() {
       </section>
 
       {/* --- SERVICES SECTION --- */}
-      <section className="py-24 px-[5%] bg-white">
+      <section className="bg-[linear-gradient(180deg,#ffffff_0%,#f8faff_100%)] px-[5%] py-24">
         <div className="w-full max-w-[2000px] mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Jakie <span className="gradient-text">usługi</span> znajdziesz?</h2>
             <p className="text-lg text-[#5a5a7a]">Szeroki wybór usług oferowanych przez utalentowanych studentów</p>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 md:grid-cols-3 gap-4 md:gap-6">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-6 lg:grid-cols-4">
             {Object.keys(SERVICE_DATA).map(name => (
               <ServiceDetailsModal key={name} name={name} />
             ))}
@@ -459,7 +432,7 @@ export default function LandingPage() {
       </section>
 
       {/* --- TESTIMONIALS SECTION --- */}
-      <section className="py-24 px-[5%] bg-slate-50">
+      <section className="bg-slate-50 px-[5%] py-24">
         <div className="w-full max-w-[2000px] mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Co mówią <span className="gradient-text">nasi użytkownicy?</span></h2>
@@ -490,21 +463,28 @@ export default function LandingPage() {
       </section>
 
       {/* --- CTA SECTION --- */}
-      <section className="py-24 px-[5%] bg-[#1a1a2e] text-white text-center">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl md:text-5xl font-bold mb-6">Gotowy na start?</h2>
-          <p className="text-lg text-white/80 mb-10">Dołącz do społeczności, która łączy edukację z biznesem na nowych zasadach.</p>
-          <Link href="/auth">
-            <Button className="h-16 px-12 rounded-full gradient-primary text-xl font-bold shadow-2xl hover:scale-105 transition-all">
-              Dołącz teraz za darmo
-            </Button>
-          </Link>
+      <section className="bg-[#1a1a2e] px-[5%] py-24 text-center text-white">
+        <div className="mx-auto max-w-5xl rounded-[2.5rem] border border-white/10 bg-white/[0.04] px-8 py-14 shadow-[0_30px_80px_rgba(0,0,0,0.18)] md:px-12">
+          <h2 className="mb-6 text-3xl font-bold md:text-5xl">Gotowy na start?</h2>
+          <p className="mx-auto mb-10 max-w-3xl text-lg text-white/80">Dołącz do społeczności, która łączy edukację z biznesem na nowych zasadach.</p>
+          <div className="flex flex-wrap justify-center gap-4">
+            <Link href="/auth?role=student">
+              <Button className="h-16 rounded-full px-12 text-xl font-bold shadow-2xl transition-all hover:scale-105 gradient-primary">
+                Dołącz jako student
+              </Button>
+            </Link>
+            <Link href="/auth?role=company">
+              <Button variant="outline" className="h-16 px-12 rounded-full border-white/20 bg-transparent text-xl font-bold text-white hover:bg-white/10">
+                Dołącz jako firma
+              </Button>
+            </Link>
+          </div>
         </div>
       </section>
 
       {/* --- FOOTER --- */}
-      <footer className="py-10 px-[5%] bg-[#1a1a2e] text-white/50 border-t border-white/5">
-        <div className="w-full max-w-[2000px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+      <footer className="border-t border-white/5 bg-[#1a1a2e] px-[5%] py-10 text-white/50">
+        <div className="mx-auto flex w-full max-w-[2000px] flex-col items-center justify-between gap-6 md:flex-row">
           <div className="text-xl font-bold text-white">🎓 Student2Work</div>
           <div className="text-sm">© {new Date().getFullYear()} Student2Work. All rights reserved.</div>
         </div>
@@ -517,7 +497,7 @@ export default function LandingPage() {
 
 function StatCard({ icon, value, label, sublabel }: { icon: string, value: string, label: string, sublabel: string }) {
   return (
-    <RevealOnScroll className="p-8 rounded-3xl bg-slate-50 text-center transition-all hover:-translate-y-2 hover:shadow-2xl hover:bg-white group cursor-default border-2 border-transparent hover:border-[#667eea]/20">
+    <RevealOnScroll className="group cursor-default rounded-3xl border border-slate-200/60 bg-gradient-to-b from-slate-50 to-white p-8 text-center transition-all hover:-translate-y-2 hover:border-[#667eea]/20 hover:shadow-2xl">
       <div className="text-4xl mb-4 transition-transform group-hover:scale-125 group-hover:rotate-12 duration-300">{icon}</div>
       <div className="text-4xl md:text-5xl font-extrabold gradient-text mb-2 transition-all">
         <AnimatedCounter value={value} />
@@ -540,14 +520,14 @@ function TimelineStep({ number, label, title, desc, visual, reverse, className }
   return (
     <div className={cn("relative z-10", className)}>
       {/* Circle with Number */}
-      <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full gradient-primary text-white items-center justify-center text-2xl font-bold shadow-primary z-20">
+      <div className="absolute left-1/2 top-1/2 z-20 hidden h-16 w-16 -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full text-2xl font-bold text-white shadow-primary lg:flex gradient-primary">
         {number}
       </div>
 
       <div className={cn("flex flex-col lg:flex-row items-center gap-16 xl:gap-24", reverse ? "lg:flex-row-reverse" : "")}>
         {/* Text */}
         <RevealOnScroll className={cn("flex-1 text-center", reverse ? "lg:text-left lg:pl-16" : "lg:text-right lg:pr-16")}>
-          <div className="inline-block bg-[#667eea]/10 text-[#667eea] px-4 py-1 rounded-full text-xs font-bold mb-4">
+          <div className="mb-4 inline-block rounded-full bg-[#667eea]/10 px-4 py-1 text-xs font-bold text-[#667eea]">
             {label}
           </div>
           <h3 className="text-2xl font-bold mb-4 text-[#1a1a2e] leading-tight">{title}</h3>
@@ -556,7 +536,7 @@ function TimelineStep({ number, label, title, desc, visual, reverse, className }
 
         {/* Visual */}
         <RevealOnScroll className="flex-1 flex justify-center">
-          <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
+          <div className="w-full max-w-sm rounded-3xl border border-slate-100 bg-white p-8 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
             {visual}
           </div>
         </RevealOnScroll>
@@ -567,10 +547,10 @@ function TimelineStep({ number, label, title, desc, visual, reverse, className }
 
 function TestimonialCard({ name, role, text, badge }: { name: string, role: string, text: string, badge: string }) {
   return (
-    <RevealOnScroll className="bg-white p-8 rounded-3xl shadow-lg border border-slate-100 relative group hover:-translate-y-2 transition-all">
-      <div className="text-[#fbbf24] text-xl mb-4 group-hover:animate-star-bounce">★★★★★</div>
+    <RevealOnScroll className="group relative rounded-3xl border border-slate-100 bg-white p-8 shadow-lg transition-all hover:-translate-y-2 hover:shadow-2xl">
+      <div className="mb-4 text-xl text-[#fbbf24] group-hover:animate-star-bounce">★★★★★</div>
       <p className="text-[#5a5a7a] leading-relaxed mb-6 italic overflow-hidden line-clamp-4">
-        "{text}"
+        &ldquo;{text}&rdquo;
       </p>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -582,7 +562,7 @@ function TestimonialCard({ name, role, text, badge }: { name: string, role: stri
             <div className="text-xs text-[#9ca3af]">{role}</div>
           </div>
         </div>
-        <div className="bg-[#667eea]/10 text-[#667eea] px-3 py-1 rounded-full text-[10px] font-bold uppercase">
+        <div className="rounded-full bg-[#667eea]/10 px-3 py-1 text-[10px] font-bold uppercase text-[#667eea]">
           {badge}
         </div>
       </div>
@@ -615,7 +595,7 @@ function ApplicationsVisual() {
   return (
     <div className="grid grid-cols-2 gap-3">
       {['Anna K.', 'Marcin B.', 'Kasia W.', 'Tomek N.'].map(name => (
-        <div key={name} className="p-3 bg-slate-50 rounded-2xl text-center border border-transparent hover:border-[#667eea] hover:bg-slate-100 transition-all cursor-pointer group">
+        <div key={name} className="group cursor-pointer rounded-2xl border border-transparent bg-slate-50 p-3 text-center transition-all hover:border-[#667eea] hover:bg-slate-100">
           <div className="w-10 h-10 rounded-full gradient-primary mx-auto mb-2 shadow-inner group-hover:scale-110 transition-transform" />
           <div className="text-[10px] font-bold truncate">{name}</div>
         </div>
@@ -682,14 +662,14 @@ function ServiceDetailsModal({ name }: { name: string }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <div className="p-6 rounded-3xl bg-slate-50 text-center border-2 border-transparent hover:border-[#667eea] hover:bg-white hover:-translate-y-2 transition-all cursor-pointer group">
+        <div className="group cursor-pointer rounded-3xl border border-slate-200/70 bg-white/70 p-6 text-center shadow-[0_12px_30px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-2 hover:border-[#667eea] hover:bg-white hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
           <div className="text-3xl mb-3 transition-transform group-hover:scale-125 group-hover:rotate-6 duration-300">
             <Icon className="w-8 h-8 mx-auto text-[#667eea]" />
           </div>
           <div className="font-bold text-sm md:text-base text-[#1a1a2e] group-hover:text-[#667eea] transition-colors">{name}</div>
         </div>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl rounded-[2rem] p-0 overflow-hidden border-none transition-all">
+      <DialogContent className="max-w-2xl overflow-hidden rounded-[2rem] border-none p-0 transition-all">
         <div className="relative p-8 md:p-12 bg-white">
           <DialogHeader className="mb-8">
             <div className="flex items-center gap-4">
@@ -702,10 +682,10 @@ function ServiceDetailsModal({ name }: { name: string }) {
 
           <div className="space-y-8">
             <p className="text-lg text-[#5a5a7a] leading-relaxed italic">
-              "{data.description}"
+              &ldquo;{data.description}&rdquo;
             </p>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <StatDetail label="Średnia cena" value={data.stats.price} />
               <StatDetail label="Czas realizacji" value={data.stats.time} />
               <StatDetail label="Projektów" value={data.stats.projects} />
@@ -716,7 +696,7 @@ function ServiceDetailsModal({ name }: { name: string }) {
               <h4 className="font-extrabold text-[#1a1a2e]">Przykładowe projekty:</h4>
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {data.examples.map(ex => (
-                  <li key={ex} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl text-sm text-[#5a5a7a] hover:bg-[#667eea]/5 transition-colors">
+                  <li key={ex} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 text-sm text-[#5a5a7a] transition-colors hover:bg-[#667eea]/5">
                     <CheckCircle2 className="w-4 h-4 text-[#667eea]" />
                     {ex}
                   </li>
@@ -724,12 +704,12 @@ function ServiceDetailsModal({ name }: { name: string }) {
               </ul>
             </div>
 
-            <div className="bg-[#667eea]/10 p-6 rounded-2xl border-l-4 border-[#667eea]">
+            <div className="rounded-2xl border-l-4 border-[#667eea] bg-[#667eea]/10 p-6">
               <div className="font-bold text-[#667eea] mb-1">💡 Ciekawostka</div>
               <p className="text-sm text-[#5a5a7a]">{data.funFact}</p>
             </div>
 
-            <Link href="/auth">
+            <Link href="/auth?role=company">
               <Button className="w-full h-14 rounded-full gradient-primary text-white font-bold text-lg shadow-primary mt-4">
                 Znajdź eksperta w tej kategorii →
               </Button>

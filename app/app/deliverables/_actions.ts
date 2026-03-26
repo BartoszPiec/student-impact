@@ -710,9 +710,17 @@ export async function reviewMilestoneAction(
         .maybeSingle();
 
       if (milestoneData) {
-        const amount = Number(milestoneData.amount);
-        const fee = Math.round(amount * 0.05 * 100) / 100;
-        const net = Math.round(amount * 0.95 * 100) / 100;
+        const { data: payoutData } = await supabase
+          .from("payouts")
+          .select("amount_gross, platform_fee, amount_net")
+          .eq("milestone_id", milestoneId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const amount = Number(payoutData?.amount_gross ?? milestoneData.amount);
+        const fee = Number(payoutData?.platform_fee ?? 0);
+        const net = Number(payoutData?.amount_net ?? Math.max(amount - fee, 0));
         await generateStudentInvoice(
           milestoneData.contract_id,
           milestoneId,
@@ -855,7 +863,7 @@ export async function generateContract(contractId: string, applicationId: string
   content += `HARMONOGRAM REALIZACJI I PŁATNOŚCI:\n\n`;
 
   let total = 0;
-  contractMilestones.forEach((m: any, i) => {
+  contractMilestones.forEach((m, i) => {
     const mAmount = Number(m.amount_minor) / 100 || Number(m.amount) || 0;
     content += `${i + 1}. ${m.title}\n`;
     content += `   Kwota: ${mAmount.toFixed(2)} PLN\n`;

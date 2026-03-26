@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { DEFAULT_JOB_COMMISSION_RATE, normalizeCommissionRate } from "@/lib/commission";
 
 // Lazy initialization to avoid build-time errors
 let _stripe: Stripe | null = null;
@@ -22,10 +23,11 @@ export const stripe = {
   get checkout() { return getStripe().checkout; },
 };
 
-// Platform fee percentage (5%)
-export const PLATFORM_FEE_PERCENT = Number(process.env.PLATFORM_FEE_PERCENT) || 5;
+// Legacy env fallback for flows that still do not pass an explicit commission rate.
+export const PLATFORM_FEE_PERCENT = Number(process.env.PLATFORM_FEE_PERCENT) || (DEFAULT_JOB_COMMISSION_RATE * 100);
 
-// Calculate platform fee in grosze
-export function calculatePlatformFee(amountInGrosze: number): number {
-  return Math.round(amountInGrosze * (PLATFORM_FEE_PERCENT / 100));
+// Calculate platform fee in grosze using a decimal commission rate (e.g. 0.15 = 15%).
+export function calculatePlatformFee(amountInGrosze: number, commissionRate?: number | null): number {
+  const normalizedRate = normalizeCommissionRate(commissionRate) ?? (PLATFORM_FEE_PERCENT / 100);
+  return Math.round(amountInGrosze * normalizedRate);
 }

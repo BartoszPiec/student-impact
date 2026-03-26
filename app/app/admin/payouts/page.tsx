@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCallback, useEffect, useState, useTransition } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,17 +41,20 @@ export default function AdminPayoutsPage() {
   const [isPending, startTransition] = useTransition();
   const [actionId, setActionId] = useState<string | null>(null);
 
-  const loadPayouts = async (statusFilter?: string) => {
+  const getErrorMessage = (error: unknown, fallback: string) =>
+    error instanceof Error ? error.message : fallback;
+
+  const loadPayouts = useCallback(async (statusFilter?: string) => {
     setLoading(true);
     try {
       const data = await getPayouts(statusFilter || filter);
-      setPayouts(data as any);
+      setPayouts(Array.isArray(data) ? data as PayoutRow[] : []);
     } catch (err: any) {
       toast.error(err.message || "Błąd ładowania wypłat");
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
 
   useEffect(() => {
     loadPayouts();
@@ -235,7 +238,7 @@ export default function AdminPayoutsPage() {
                     <th className="text-left p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Student</th>
                     <th className="text-left p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Zlecenie / Etap</th>
                     <th className="text-right p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Brutto</th>
-                    <th className="text-right p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Prowizja (5%)</th>
+                    <th className="text-right p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Prowizja platformy</th>
                     <th className="text-right p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Netto</th>
                     <th className="text-center p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                     <th className="text-left p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>

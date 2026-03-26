@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateCompanyInvoice } from "@/lib/pdf/generate-invoice";
+import { resolveCommissionRate } from "@/lib/commission";
 import Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -23,11 +24,20 @@ async function getRawBody(req: NextRequest): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+function resolveFeePln(session: Stripe.Checkout.Session, commissionRate: number): number {
+  if (session.metadata?.platform_fee) {
+    return Number(session.metadata.platform_fee) / 100;
+  }
+
+  const grossAmount = session.amount_total ? session.amount_total / 100 : 0;
+  return Math.round(grossAmount * commissionRate * 100) / 100;
+}
+
 export async function POST(req: NextRequest) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    console.error("❌ STRIPE_WEBHOOK_SECRET is not set — webhook processing disabled");
+    console.error("STRIPE_WEBHOOK_SECRET is not set");
     return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
   }
 
@@ -42,13 +52,12 @@ export async function POST(req: NextRequest) {
     }
 
     event = getStripe().webhooks.constructEvent(rawBody, signature, webhookSecret);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
     console.error("Webhook signature verification failed:", msg);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  // Handle the event
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -67,6 +76,7 @@ export async function POST(req: NextRequest) {
       await handleChargeRefunded(charge);
       break;
     }
+
     case "refund.created": {
       const refund = event.data.object as Stripe.Refund;
       await handleRefundCreated(refund);
@@ -101,14 +111,42 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
-  if (!UUID_RE.test(contractId) || (applicationId && !UUID_RE.test(applicationId)) || (serviceOrderId && !UUID_RE.test(serviceOrderId))) {
+  if (
+    !UUID_RE.test(contractId)
+    || (applicationId && !UUID_RE.test(applicationId))
+    || (serviceOrderId && !UUID_RE.test(serviceOrderId))
+  ) {
     console.error("Invalid UUID in session metadata:", { contractId, applicationId, serviceOrderId });
     return;
   }
 
-  // Idempotency: skip if already handled
-  const { data: pay } = await supabase.from("payments").select("status").eq("stripe_session_id", session.id).maybeSingle();
-  if (pay?.status === "completed") return;
+  const { data: pay } = await supabase
+    .from("payments")
+    .select("status")
+    .eq("stripe_session_id", session.id)
+    .maybeSingle();
+  if (pay?.status === "completed") {
+    return;
+  }
+
+  const { data: contractData } = await supabase
+    .from("contracts")
+    .select("commission_rate, student_id, applications!contracts_application_id_fkey(offers(tytul))")
+    .eq("id", contractId)
+    .maybeSingle();
+
+  const contract = contractData as {
+    commission_rate?: number | null;
+    student_id?: string | null;
+    applications?: { offers?: { tytul?: string | null } | null } | { offers?: { tytul?: string | null } | null }[] | null;
+  } | null;
+
+  const commissionRate = resolveCommissionRate({
+    explicitRate: contract?.commission_rate ?? (session.metadata?.commission_rate ? Number(session.metadata.commission_rate) : null),
+    sourceType: serviceOrderId ? "service_order" : "application",
+    isPlatformService: Boolean(serviceOrderId),
+  });
+  const resolvedFeePln = resolveFeePln(session, commissionRate);
 
   try {
     let milestoneIds: string[] = [];
@@ -120,7 +158,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       }
     }
 
-    // 1. Atomic Transaction via RPC (v4 with Accounting & Service Order support)
     const { error: rpcError } = await supabase.rpc("process_stripe_payment_v4", {
       p_session_id: session.id,
       p_payment_intent_id: session.payment_intent as string,
@@ -128,7 +165,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       p_application_id: applicationId || null,
       p_service_order_id: serviceOrderId || null,
       p_amount_pln: session.amount_total ? session.amount_total / 100 : 0,
-      p_fee_pln: session.metadata?.platform_fee ? Number(session.metadata.platform_fee) / 100 : 0,
+      p_fee_pln: resolvedFeePln,
       p_milestone_ids: milestoneIds,
       p_user_id: session.metadata?.user_id || null,
     });
@@ -138,35 +175,25 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       throw new Error("Failed to process payment atomically");
     }
 
-    console.log(`✅ Atomic processing successful for contract ${contractId}`);
-
-    // 2. Audit & Notifications (Non-blocking)
     try {
       await supabase.rpc("_audit", {
         p_entity: "contract",
         p_entity_id: contractId,
         p_action: "funded_via_stripe",
-        p_payload: { session_id: session.id },
+        p_payload: { session_id: session.id, commission_rate: commissionRate },
         p_actor: session.metadata?.user_id || null,
       });
     } catch {}
 
-    const { data: contract } = await supabase
-      .from("contracts")
-      .select("student_id, applications!contracts_application_id_fkey(offers(tytul))")
-      .eq("id", contractId)
-      .single();
+    const applications = Array.isArray(contract?.applications)
+      ? contract?.applications[0] ?? null
+      : contract?.applications ?? null;
+    const offerTitle = applications?.offers?.tytul || "Zlecenie";
 
-    const contractTyped = contract as unknown as { 
-      student_id: string, 
-      applications: { offers: { tytul: string } } 
-    };
-
-    if (contractTyped?.student_id) {
-      const offerTitle = contractTyped.applications?.offers?.tytul || "Zlecenie";
+    if (contract?.student_id) {
       try {
         await supabase.rpc("create_notification", {
-          p_user_id: contractTyped.student_id,
+          p_user_id: contract.student_id,
           p_typ: "contract_funded",
           p_payload: {
             contract_id: contractId,
@@ -177,15 +204,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       } catch {}
     }
 
-    // 3. Invoice Generation
     try {
       const amountPLN = session.amount_total ? session.amount_total / 100 : 0;
-      const feePLN = session.metadata?.platform_fee ? Number(session.metadata.platform_fee) / 100 : amountPLN * 0.05;
-      await generateCompanyInvoice(contractId, amountPLN, feePLN, "Stripe");
-    } catch (invoiceErr) {
-      console.error("Invoice generation failed:", invoiceErr);
+      await generateCompanyInvoice(contractId, amountPLN, resolvedFeePln, "Stripe");
+    } catch (error) {
+      console.error("Invoice generation failed:", error);
     }
-
   } catch (error) {
     console.error("Error processing checkout completion:", error);
     throw error;
@@ -202,12 +226,13 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
   const paymentIntentId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
   if (!paymentIntentId) return;
 
-  // Znajdź powiązaną płatność
-  const { data: payment } = await supabase.from("payments").select("contract_id").eq("stripe_payment_intent_id", paymentIntentId).maybeSingle();
+  const { data: payment } = await supabase
+    .from("payments")
+    .select("contract_id")
+    .eq("stripe_payment_intent_id", paymentIntentId)
+    .maybeSingle();
   if (!payment) return;
 
-  // Obsługa przez charge.refunded jest redundantna wobec refund.created, 
-  // ale przydatna jako zabezpieczenie. RPC v3 zapewnia idempotencję po refundId.
   for (const refund of charge.refunds?.data || []) {
     await supabase.rpc("process_stripe_refund_v4", {
       p_payment_intent_id: paymentIntentId,
@@ -224,7 +249,7 @@ async function handleRefundCreated(refund: Stripe.Refund) {
   const supabase = createAdminClient();
   const paymentIntentId = typeof refund.payment_intent === "string" ? refund.payment_intent : refund.payment_intent?.id;
   const chargeId = typeof refund.charge === "string" ? refund.charge : refund.charge?.id;
-  
+
   if (!paymentIntentId || !chargeId) return;
 
   await supabase.rpc("process_stripe_refund_v4", {

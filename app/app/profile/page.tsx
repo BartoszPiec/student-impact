@@ -19,8 +19,19 @@ import TaxDataSection from "./tax-data-section";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProfilePage() {
+type ProfilePageSearchParams = Record<string, string | string[] | undefined>;
+
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams?: Promise<ProfilePageSearchParams>;
+}) {
   const supabase = await createClient();
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const savedParam = Array.isArray(resolvedSearchParams.saved)
+    ? resolvedSearchParams.saved[0]
+    : resolvedSearchParams.saved;
+  const savedProfileType = savedParam === "student" || savedParam === "company" ? savedParam : null;
 
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
@@ -34,10 +45,19 @@ export default async function ProfilePage() {
 
   if (profErr) {
     return (
-      <main className="space-y-4">
-        <pre className="rounded-md border p-4 text-sm overflow-auto">
-          {JSON.stringify({ profErr }, null, 2)}
-        </pre>
+      <main className="min-h-screen bg-slate-50/50 p-6 md:p-10">
+        <div className="mx-auto max-w-2xl rounded-[2rem] border border-red-100 bg-white p-8 shadow-xl shadow-red-500/5">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-red-50 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-red-600">
+            Problem z profilem
+          </div>
+          <h1 className="text-2xl font-black text-slate-900">Nie udało się załadować Twojego profilu.</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Spróbuj odświeżyć stronę. Jeśli problem się powtórzy, skontaktuj się z zespołem wsparcia.
+          </p>
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
+            Szczegóły techniczne: {profErr.message}
+          </div>
+        </div>
       </main>
     );
   }
@@ -232,6 +252,29 @@ export default async function ProfilePage() {
       </div>
 
       <div className="w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 -mt-12 relative z-10 pb-12">
+        {savedProfileType && (
+          <div className="mb-8 rounded-[2rem] border border-emerald-200 bg-emerald-50 px-6 py-5 text-emerald-900 shadow-lg shadow-emerald-500/10">
+            <div className="flex items-start gap-4">
+              <div className="rounded-2xl bg-white p-2 text-emerald-600 shadow-sm">
+                <CheckCircle className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">
+                  Zapisano pomyślnie
+                </p>
+                <h2 className="text-lg font-black text-emerald-950">
+                  {savedProfileType === "student"
+                    ? "Twój profil studenta został zaktualizowany."
+                    : "Profil firmy został zaktualizowany."}
+                </h2>
+                <p className="text-sm font-medium text-emerald-800/80">
+                  Zmiany są już widoczne w aplikacji. W razie potrzeby możesz od razu wrócić do edycji i dopracować kolejne sekcje.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Mobile Progress Bar (visible only on small screens) */}
         <div className="md:hidden mb-8 bg-white p-5 rounded-3xl shadow-lg shadow-indigo-500/10 border border-indigo-50">
           <div className="flex justify-between items-center mb-2">

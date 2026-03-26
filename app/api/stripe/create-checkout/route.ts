@@ -1,12 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, calculatePlatformFee } from "@/lib/stripe";
+import { resolveCommissionRate } from "@/lib/commission";
+
+type ContractRow = {
+  id: string;
+  company_id: string;
+  application_id: string | null;
+  total_amount: number | null;
+  commission_rate: number | null;
+  status: string | null;
+  terms_status: string | null;
+  company_contract_accepted_at: string | null;
+  student_contract_accepted_at: string | null;
+  milestones: { id: string; title: string }[] | null;
+};
+
+type ExistingPaymentRow = {
+  stripe_session_id: string;
+};
+
+type ApplicationInfo = {
+  offers: {
+    tytul: string | null;
+    is_platform_service: boolean | null;
+    typ?: string | null;
+    commission_rate?: number | null;
+  } | null;
+};
+
+type ServiceOrderInfo = {
+  title: string | null;
+  package_id?: string | null;
+};
+
+type ServicePackageInfo = {
+  commission_rate?: number | null;
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // Verify user is authenticated
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,22 +55,24 @@ export async function POST(req: NextRequest) {
     if (!contractId || (!applicationId && !serviceOrderId)) {
       return NextResponse.json(
         { error: "Missing required fields: contractId, and either applicationId or serviceOrderId" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Walidacja UUID
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!UUID_RE.test(contractId) || (applicationId && !UUID_RE.test(applicationId)) || (serviceOrderId && !UUID_RE.test(serviceOrderId))) {
-      return NextResponse.json({ error: "Nieprawidłowe ID" }, { status: 400 });
+    if (
+      !UUID_RE.test(contractId)
+      || (applicationId && !UUID_RE.test(applicationId))
+      || (serviceOrderId && !UUID_RE.test(serviceOrderId))
+    ) {
+      return NextResponse.json({ error: "Nieprawidlowe ID" }, { status: 400 });
     }
 
-    // Verify contract exists and user is the company
-    const { data: contract, error: contractError } = await supabase
+    const { data: contractData, error: contractError } = await supabase
       .from("contracts")
-      .select("id, company_id, student_id, application_id, total_amount, status, terms_status, company_contract_accepted_at, student_contract_accepted_at, milestones(id, title, amount, status)")
+      .select("id, company_id, application_id, total_amount, commission_rate, status, terms_status, company_contract_accepted_at, student_contract_accepted_at, milestones(id, title, amount, status)")
       .eq("id", contractId)
       .single();
+    const contract = contractData as ContractRow | null;
 
     if (contractError || !contract) {
       return NextResponse.json({ error: "Contract not found" }, { status: 404 });
@@ -43,9 +82,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Not authorized to fund this contract" }, { status: 403 });
     }
 
-    // P1: Twarda walidacja powiązania aplikacji lub service_order z kontraktem
     if (applicationId && contract.application_id !== applicationId) {
-      return NextResponse.json({ error: "Nieprawidłowe powiązanie aplikacji z kontraktem" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Nieprawidlowe powiazanie aplikacji z kontraktem" },
+        { status: 400 },
+      );
     }
 
     if (serviceOrderId) {
@@ -54,9 +95,12 @@ export async function POST(req: NextRequest) {
         .select("id, contract_id")
         .eq("id", serviceOrderId)
         .single();
-      
+
       if (!serviceOrder || serviceOrder.contract_id !== contractId) {
-        return NextResponse.json({ error: "Nieprawidłowe powiązanie Service Order z kontraktem" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Nieprawidlowe powiazanie Service Order z kontraktem" },
+          { status: 400 },
+        );
       }
     }
 
@@ -64,33 +108,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Contract terms not yet agreed" }, { status: 400 });
     }
 
-    // Get service/application info for description + platform service check
     let offerTitle = "Zlecenie";
     let isPlatformService = false;
+    let offerType: string | null = null;
+    let sourceCommissionRate: number | null = null;
 
     if (applicationId) {
       const { data: application } = await supabase
         .from("applications")
-        .select("offers(tytul, is_platform_service)")
+        .select("offers(tytul, is_platform_service, typ, commission_rate)")
         .eq("id", applicationId)
         .single();
-      const applicationTyped = application as unknown as { offers: { tytul: string, is_platform_service: boolean } };
+      const applicationTyped = application as ApplicationInfo | null;
+
       offerTitle = applicationTyped?.offers?.tytul || "Zlecenie";
       isPlatformService = applicationTyped?.offers?.is_platform_service === true;
+      offerType = applicationTyped?.offers?.typ ?? null;
+      sourceCommissionRate = applicationTyped?.offers?.commission_rate ?? null;
     } else if (serviceOrderId) {
-      const { data: serviceOrder } = await supabase
+      const { data: serviceOrderData } = await supabase
         .from("service_orders")
-        .select("title")
+        .select("title, package_id")
         .eq("id", serviceOrderId)
         .single();
-      offerTitle = serviceOrder?.title || "Usługa serwisowa";
-      isPlatformService = true; // Service orders are treated as platform services (pre-funded/pre-agreed)
+      const serviceOrder = serviceOrderData as ServiceOrderInfo | null;
+
+      offerTitle = serviceOrder?.title || "Usluga serwisowa";
+      isPlatformService = true;
+
+      if (serviceOrder?.package_id) {
+        const { data: servicePackageData } = await supabase
+          .from("service_packages")
+          .select("commission_rate")
+          .eq("id", serviceOrder.package_id)
+          .maybeSingle();
+        const servicePackage = servicePackageData as ServicePackageInfo | null;
+        sourceCommissionRate = servicePackage?.commission_rate ?? null;
+      }
     }
 
-    // Require both parties to accept contract documents before payment
-    // Exception: platform services skip the signing step (contract is auto-agreed)
     if (!isPlatformService && (!contract.company_contract_accepted_at || !contract.student_contract_accepted_at)) {
-      return NextResponse.json({ error: "Obie strony muszą zaakceptować umowę przed płatnością" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Obie strony musza zaakceptowac umowe przed platnoscia" },
+        { status: 400 },
+      );
     }
 
     const allowedStatuses = ["awaiting_funding", "draft"];
@@ -98,8 +159,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Contract already funded or in invalid state" }, { status: 400 });
     }
 
-    // OBS-02: Guard against duplicate checkout sessions by re-using open ones
-    const { data: existingPayment, error: existingPaymentError } = await supabase
+    const { data: existingPaymentData, error: existingPaymentError } = await supabase
       .from("payments")
       .select("stripe_session_id")
       .eq("contract_id", contractId)
@@ -107,6 +167,7 @@ export async function POST(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    const existingPayment = existingPaymentData as ExistingPaymentRow | null;
 
     if (!existingPaymentError && existingPayment) {
       try {
@@ -115,44 +176,48 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({
             url: existingSession.url,
             sessionId: existingSession.id,
-            reused: true
+            reused: true,
           });
         }
-      } catch (e) {
-        console.warn("[OBS-02] Could not retrieve existing session, creating new one:", e);
+      } catch (error) {
+        console.warn("[checkout] Could not reuse existing session:", error);
       }
     }
 
-    // Get milestone titles for description
-    const milestones = (contract.milestones || []) as { id: string, title: string }[];
-    const milestoneIds = milestones.map(m => m.id);
-    const milestoneTitles = milestones.map(m => m.title).join(", ");
+    const milestones = (contract.milestones || []) as { id: string; title: string }[];
+    const milestoneIds = milestones.map((milestone) => milestone.id);
+    const milestoneTitles = milestones.map((milestone) => milestone.title).join(", ");
 
-    // Kwota pochodzi wyłącznie z bazy — nigdy z żądania klienta (zabezpieczenie przed payment bypass)
     const parsedAmount = Number(contract.total_amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      return NextResponse.json({ error: "Nieprawidłowa kwota kontraktu w bazie" }, { status: 400 });
+      return NextResponse.json({ error: "Nieprawidlowa kwota kontraktu w bazie" }, { status: 400 });
     }
+
     if (parsedAmount > 500_000) {
       return NextResponse.json({ error: "Kwota kontraktu przekracza dozwolony limit" }, { status: 400 });
     }
 
-    // Amount in grosze (PLN smallest unit)
     const amountInGrosze = Math.round(parsedAmount * 100);
-    const platformFee = calculatePlatformFee(amountInGrosze);
+    const commissionRate = resolveCommissionRate({
+      explicitRate: contract.commission_rate ?? sourceCommissionRate,
+      sourceType: serviceOrderId ? "service_order" : "application",
+      offerType,
+      isPlatformService,
+    });
+    const platformFee = calculatePlatformFee(amountInGrosze, commissionRate);
 
-    // Build success and cancel URLs
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || `${req.nextUrl.protocol}//${req.headers.get('host')}`;
+      || `${req.nextUrl.protocol}//${req.headers.get("host")}`;
+
     if (!baseUrl) {
       console.error("Could not determine base URL");
       return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
     }
+
     const successUrl = `${baseUrl}/app/deliverables/${applicationId || serviceOrderId}?payment=success&session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${baseUrl}/app/deliverables/${applicationId || serviceOrderId}?payment=cancelled`;
 
-    // Create Stripe Checkout Session
     const session = await getStripe().checkout.sessions.create({
       payment_method_types: ["card", "p24", "blik"],
       mode: "payment",
@@ -175,18 +240,16 @@ export async function POST(req: NextRequest) {
         service_order_id: serviceOrderId || "",
         milestone_ids: JSON.stringify(milestoneIds),
         platform_fee: platformFee.toString(),
+        commission_rate: commissionRate.toString(),
         user_id: user.id,
       },
       success_url: successUrl,
       cancel_url: cancelUrl,
       locale: "pl",
-      // Optional: collect billing address for invoicing
       billing_address_collection: "auto",
-      // Expiry after 30 minutes
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     });
 
-    // Create pending payment record
     const { error: paymentError } = await supabase.from("payments").insert({
       contract_id: contractId,
       stripe_session_id: session.id,
@@ -197,8 +260,6 @@ export async function POST(req: NextRequest) {
 
     if (paymentError) {
       console.error("Failed to create payment record:", paymentError);
-      // Continue anyway - Stripe session was already created
-      // The webhook will still process the payment
     }
 
     return NextResponse.json({
