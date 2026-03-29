@@ -132,7 +132,7 @@ export default async function RealizationWorkspace({
         const { data: serviceOrder } = await supabase
             .from("service_orders")
             .select(`
-                id, status, student_id, company_id, amount, amount_minor, created_at, package_id,
+                id, status, student_id, company_id, amount, created_at, package_id,
                 package:service_packages( title, type )
             `)
             .eq("id", applicationId)
@@ -319,6 +319,9 @@ export default async function RealizationWorkspace({
     const myReview = reviews.find((review) => review.reviewer_id === user.id);
     const theirReview = reviews.find((review) => review.reviewer_id !== user.id);
     const agreedAmount = fromMinorUnits(appRow.agreed_stawka_minor) ?? appRow.agreed_stawka ?? offer?.stawka ?? null;
+    const backHref = isServiceOrder
+        ? (isCompany ? "/app/company/orders" : "/app/services/dashboard")
+        : (isCompany ? "/app/company/offers" : "/app/applications");
 
     return (
         <main className="min-h-screen bg-[#f8fafc]">
@@ -332,7 +335,7 @@ export default async function RealizationWorkspace({
                 <div className="container mx-auto max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
                     <div className="flex flex-col gap-6">
                         <Link
-                            href={isCompany ? "/app/company/offers" : "/app/applications"}
+                            href={backHref}
                             className="group flex items-center gap-2 text-slate-400 hover:text-white transition-all w-fit px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/5"
                         >
                             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
@@ -356,6 +359,7 @@ export default async function RealizationWorkspace({
                                                     status === 'delivered' ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
                                                         "bg-indigo-500/20 text-indigo-400 border-indigo-500/30"
                                             )}>
+                                                {status === 'pending' && "Oczekuje"}
                                                 {status === 'in_progress' && "W trakcie"}
                                                 {status === 'delivered' && "W trakcie odbioru"}
                                                 {status === 'completed' && "Zakończone"}
