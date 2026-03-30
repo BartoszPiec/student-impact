@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     // P1: Twarda walidacja powiązania aplikacji lub service_order z kontraktem
-    if (applicationId && contract.application_id !== applicationId) {
+    if (applicationId && contract.application_id && contract.application_id !== applicationId) {
       return NextResponse.json({ error: "Nieprawidłowe powiązanie aplikacji z kontraktem" }, { status: 400 });
     }
 

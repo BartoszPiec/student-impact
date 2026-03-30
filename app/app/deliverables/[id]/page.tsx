@@ -425,6 +425,7 @@ export default async function RealizationWorkspace({
                                 isStudent={isStudent}
                                 isCompany={isCompany}
                                 applicationId={applicationId}
+                                isServiceOrder={isServiceOrder}
                                 currentDeliv={currentDeliv}
                                 deliverables={deliverables ?? []}
                                 myReview={myReview}

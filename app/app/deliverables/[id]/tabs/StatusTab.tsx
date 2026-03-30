@@ -50,6 +50,7 @@ export function StatusTab({
     isPlatformService = false,
     studentInstructions = null,
     contractDocuments = [],
+    isServiceOrder = false,
 }: any) {
     // State for Payment Modal
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -142,6 +143,7 @@ export function StatusTab({
 
     // Show if: Company AND No Review AND (Explicit Status OR Implicit Status)
     const showReviewModal = isCompany && !myReview && isContractDone;
+    const canFundWithoutContractSignatures = isPlatformService || isServiceOrder;
 
     // Counter Logic
     const completedCount = milestones.filter((m: any) => ['released', 'accepted', 'completed'].includes(m.status)).length;
@@ -173,7 +175,8 @@ export function StatusTab({
                     amount={fundingMode === "full" ? (contractBudget > 0 ? contractBudget : totalAmount) : Number((nextToFund?.amount_minor ? nextToFund.amount_minor / 100 : nextToFund?.amount) ?? 0)}
                     title={fundingMode === "full" ? `Zasilenie Depozytu (Cały Projekt)` : `Zasilenie Depozytu (Następny etap)`}
                     contractId={contract.id}
-                    applicationId={applicationId}
+                    applicationId={isServiceOrder ? undefined : applicationId}
+                    serviceOrderId={isServiceOrder ? applicationId : undefined}
                     useStripe={true}
                 />
             )}
@@ -270,7 +273,7 @@ export function StatusTab({
                         </div>
 
                         {/* Payment Button — platform services skip contract signing, standard flow requires both acceptances */}
-                        {isCompany && !isEscrowReady && contract?.terms_status === 'agreed' && (isPlatformService || (contract?.company_contract_accepted_at && contract?.student_contract_accepted_at)) && (
+                        {isCompany && !isEscrowReady && contract?.terms_status === 'agreed' && (canFundWithoutContractSignatures || (contract?.company_contract_accepted_at && contract?.student_contract_accepted_at)) && (
                             <Button
                                 size="lg"
                                 onClick={() => setIsPaymentModalOpen(true)}
@@ -281,7 +284,7 @@ export function StatusTab({
                             </Button>
                         )}
 
-                        {isStudent && !isEscrowReady && contract?.terms_status === 'agreed' && (isPlatformService || (contract?.company_contract_accepted_at && contract?.student_contract_accepted_at)) && (
+                        {isStudent && !isEscrowReady && contract?.terms_status === 'agreed' && (canFundWithoutContractSignatures || (contract?.company_contract_accepted_at && contract?.student_contract_accepted_at)) && (
                             <div className="relative z-10 px-5 py-3 bg-white border border-slate-200 rounded-none text-slate-500 text-sm font-medium flex items-center gap-3 shadow-sm">
                                 <div className="p-1.5 bg-amber-50 rounded-full">
                                     <Clock className="w-4 h-4 text-amber-500" />
