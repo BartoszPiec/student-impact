@@ -54,6 +54,13 @@ export default function ServiceActionsMenu({ serviceId, currentStatus }: Service
                     </Link>
                 </DropdownMenuItem>
 
+                <DropdownMenuItem asChild>
+                    <Link href={`/app/services/proposals/new?packageId=${serviceId}`} className="flex items-center gap-2 cursor-pointer">
+                        <Edit className="h-4 w-4" />
+                        <span>Zaproponuj firmie</span>
+                    </Link>
+                </DropdownMenuItem>
+
                 <DropdownMenuItem
                     onClick={handleToggleStatus}
                     disabled={pending}

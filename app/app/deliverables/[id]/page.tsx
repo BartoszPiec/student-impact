@@ -11,6 +11,7 @@ import { StatusTab } from "./tabs/StatusTab";
 import { FilesTab } from "./tabs/FilesTab";
 import { SecretsTab } from "./tabs/SecretsTab";
 import { ChatTab } from "./tabs/ChatTab"; // We might embed Chat or just link
+import { findConversationForServiceOrder } from "@/lib/services/service-order-conversations";
 
 export const dynamic = "force-dynamic";
 
@@ -260,16 +261,12 @@ export default async function RealizationWorkspace({
             .maybeSingle();
         conversation = convData as ConversationMatch | null;
     } else if (servicePackageId && studentId && companyId) {
-        const { data: latestConv } = await supabase
-            .from("conversations")
-            .select("id")
-            .eq("package_id", servicePackageId)
-            .eq("company_id", companyId)
-            .eq("student_id", studentId)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        conversation = latestConv as ConversationMatch | null;
+        conversation = await findConversationForServiceOrder(supabase, {
+            serviceOrderId: applicationId,
+            companyId,
+            studentId,
+            packageId: servicePackageId,
+        });
     }
     // 6. [Realization Guard] Contract & Milestones
     // Try by Application ID first, then Service Order ID

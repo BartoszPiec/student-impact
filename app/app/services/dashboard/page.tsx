@@ -20,8 +20,13 @@ export default async function ServiceDashboardPage() {
             id,
             created_at,
             status,
+            entry_point,
+            initiated_by,
             amount,
+            counter_amount,
             requirements,
+            request_snapshot,
+            quote_snapshot,
             company_id,
             package:service_packages!service_orders_package_id_fkey(
                 id,
