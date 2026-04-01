@@ -40,7 +40,9 @@ export function ChatSidebar({
 
     if (isSystem) {
         title = packageData?.title || "Pakiet Systemowy";
-        subtitle = "Zlecenie systemowe";
+        subtitle = serviceOrder?.entry_point === "student_private_proposal"
+            ? "Prywatna propozycja"
+            : "Zlecenie systemowe";
         price = serviceOrder?.amount || packageData?.price;
         statusRaw = serviceOrder?.status || 'nowe';
 
