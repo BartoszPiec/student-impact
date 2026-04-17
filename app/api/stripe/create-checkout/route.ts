@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, calculatePlatformFee } from "@/lib/stripe";
 import { resolveCommissionRate } from "@/lib/commission";
+import { buildRateLimitKey, enforceRateLimit, getRequestIp } from "@/lib/rate-limit";
+
+export const maxDuration = 10;
 
 type ContractRow = {
   id: string;
@@ -49,6 +52,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const ip = getRequestIp(req);
+    const limitResult = await enforceRateLimit(
+      "checkout",
+      buildRateLimitKey(["checkout", user.id, ip]),
+    );
+    if (!limitResult.success) {
+      return NextResponse.json(
+        { error: "Zbyt wiele prob utworzenia platnosci. Sprobuj ponownie za chwile." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.max(Math.ceil((limitResult.reset - Date.now()) / 1000), 1)),
+          },
+        },
+      );
+    }
+
     const body = await req.json();
     const { contractId, applicationId, serviceOrderId } = body;
 
@@ -82,7 +102,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Not authorized to fund this contract" }, { status: 403 });
     }
 
-    if (applicationId && contract.application_id !== applicationId) {
+    if (applicationId && contract.application_id && contract.application_id !== applicationId) {
       return NextResponse.json(
         { error: "Nieprawidlowe powiazanie aplikacji z kontraktem" },
         { status: 400 },

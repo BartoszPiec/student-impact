@@ -188,6 +188,52 @@ export default async function OfferDetailsPage({
   const gradient = isPlatformService ? "from-amber-600 to-orange-600" 
     : isJob ? "from-blue-600 to-indigo-700" 
     : "from-violet-600 to-purple-700";
+  const briefSections = [
+    {
+      label: "Cel wspolpracy",
+      value: (offer as any).cel_wspolpracy,
+      tone: "bg-blue-50 border-blue-100 text-blue-700",
+    },
+    {
+      label: "Oczekiwany rezultat",
+      value: (offer as any).oczekiwany_rezultat,
+      tone: "bg-emerald-50 border-emerald-100 text-emerald-700",
+    },
+    {
+      label: "Kryteria akceptacji",
+      value: (offer as any).kryteria_akceptacji,
+      tone: "bg-amber-50 border-amber-100 text-amber-700",
+    },
+  ].filter((item) => Boolean(item.value));
+  const collaborationMeta = [
+    (offer as any).osoba_prowadzaca
+      ? { label: "Osoba prowadzaca", value: (offer as any).osoba_prowadzaca }
+      : null,
+    (offer as any).planowany_start
+      ? {
+          label: "Planowany start",
+          value: new Date((offer as any).planowany_start).toLocaleDateString("pl-PL"),
+        }
+      : null,
+    offer.czas ? { label: "Czas realizacji", value: offer.czas } : null,
+    (offer as any).tryb_pracy
+      ? {
+          label: "Tryb pracy",
+          value:
+            (offer as any).tryb_pracy === "remote"
+              ? "Remote"
+              : (offer as any).tryb_pracy === "hybrid"
+                ? "Hybrydowo"
+                : "Na miejscu",
+        }
+      : null,
+  ].filter(Boolean);
+  const formalSignals = [
+    (offer as any).wymagana_poufnosc ? "Poufnosc wymagana" : null,
+    (offer as any).przeniesienie_praw_autorskich ? "Przeniesienie praw autorskich" : null,
+    (offer as any).portfolio_dozwolone ? "Portfolio dozwolone" : "Portfolio wymaga uzgodnienia",
+    (offer as any).materialy_legalnie_udostepnione ? "Materialy firmy zweryfikowane" : null,
+  ].filter(Boolean);
 
   return (
     <main className="min-h-screen bg-slate-50/50 pb-20 font-sans">
@@ -281,6 +327,64 @@ export default async function OfferDetailsPage({
                 {descriptionMain}
               </div>
             </section>
+
+            {(briefSections.length > 0 || collaborationMeta.length > 0 || formalSignals.length > 0) && (
+              <section className="bg-white/80 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
+                  <span className="w-8 h-1 bg-blue-500 rounded-full"></span>
+                  Brief wspolpracy
+                </h3>
+
+                {briefSections.length > 0 && (
+                  <div className="grid gap-6">
+                    {briefSections.map((section) => (
+                      <div key={section.label} className="rounded-[1.75rem] border border-slate-100 bg-white p-6 shadow-sm">
+                        <div className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${section.tone}`}>
+                          {section.label}
+                        </div>
+                        <p className="mt-4 whitespace-pre-line text-base font-medium leading-8 text-slate-700">
+                          {section.value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(collaborationMeta.length > 0 || formalSignals.length > 0) && (
+                  <div className="mt-8 grid gap-6 md:grid-cols-2">
+                    {collaborationMeta.length > 0 && (
+                      <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-6">
+                        <p className="mb-4 text-xs font-black uppercase tracking-widest text-slate-400">Ustalenia operacyjne</p>
+                        <div className="grid gap-3">
+                          {collaborationMeta.map((item: any) => (
+                            <div key={item.label} className="rounded-2xl border border-white bg-white px-4 py-4 shadow-sm">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                              <p className="mt-2 text-sm font-bold text-slate-900">{item.value}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {formalSignals.length > 0 && (
+                      <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-6">
+                        <p className="mb-4 text-xs font-black uppercase tracking-widest text-slate-400">Sygaly formalne</p>
+                        <div className="flex flex-wrap gap-3">
+                          {formalSignals.map((signal) => (
+                            <Badge
+                              key={signal}
+                              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-700 shadow-sm"
+                            >
+                              {signal}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
 
             {/* Custom Details for System Offers */}
             {customDetails.length > 0 && (

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { buildRateLimitKey, enforceRateLimit, getRequestIp } from "@/lib/rate-limit";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+const supabaseAdmin = createAdminClient();
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const WEBHOOK_SECRET = process.env.NOTIFICATIONS_WEBHOOK_SECRET;
@@ -27,39 +26,55 @@ type NotificationWebhookBody = {
   record?: NotificationRecord | null;
 };
 
+function escapeHtml(value: string | null | undefined) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function getEmailContent(type: string, payload: NotificationPayload = {}) {
+  const safePayload = {
+    cancelled_by: escapeHtml(payload.cancelled_by),
+    milestone_title: escapeHtml(payload.milestone_title),
+    offer_title: escapeHtml(payload.offer_title),
+    snippet: escapeHtml(payload.snippet),
+  };
+
   let subject = "Nowe powiadomienie - Student2Work";
   let html = "<p>Masz nowe powiadomienie w aplikacji Student2Work.</p>";
 
   switch (type) {
     case "cooperation_cancelled":
-      subject = `Zlecenie anulowane: ${payload.offer_title || "Nieznane zlecenie"}`;
+      subject = `Zlecenie anulowane: ${safePayload.offer_title || "Nieznane zlecenie"}`;
       html = `
         <h2>Zlecenie zostalo anulowane</h2>
-        <p>Uzytkownik (${payload.cancelled_by || "druga strona"}) anulowal zlecenie <strong>${payload.offer_title || ""}</strong>.</p>
-        <p>Szczegoly: ${payload.snippet || ""}</p>
+        <p>Uzytkownik (${safePayload.cancelled_by || "druga strona"}) anulowal zlecenie <strong>${safePayload.offer_title || ""}</strong>.</p>
+        <p>Szczegoly: ${safePayload.snippet || ""}</p>
       `;
       break;
     case "deliverable_submitted":
-      subject = `Nowe pliki do weryfikacji: ${payload.milestone_title || "Etap"}`;
+      subject = `Nowe pliki do weryfikacji: ${safePayload.milestone_title || "Etap"}`;
       html = `
         <h2>Student przeslal pliki!</h2>
-        <p>Przeslano nowe pliki do weryfikacji w ramach etapu: <strong>${payload.milestone_title || ""}</strong>.</p>
+        <p>Przeslano nowe pliki do weryfikacji w ramach etapu: <strong>${safePayload.milestone_title || ""}</strong>.</p>
         <p>Zaloguj sie do panelu realizacji, aby je sprawdzic i zaakceptowac lub odrzucic.</p>
       `;
       break;
     case "deliverable_accepted":
-      subject = `Pliki zaakceptowane: ${payload.milestone_title || "Etap"}`;
+      subject = `Pliki zaakceptowane: ${safePayload.milestone_title || "Etap"}`;
       html = `
         <h2>Dobra robota!</h2>
-        <p>Firma zaakceptowala pliki z etapu: <strong>${payload.milestone_title || ""}</strong>.</p>
+        <p>Firma zaakceptowala pliki z etapu: <strong>${safePayload.milestone_title || ""}</strong>.</p>
       `;
       break;
     case "deliverable_rejected":
-      subject = `Poprawki wymagane: ${payload.milestone_title || "Etap"}`;
+      subject = `Poprawki wymagane: ${safePayload.milestone_title || "Etap"}`;
       html = `
         <h2>Firma poprosila o poprawki</h2>
-        <p>Pliki w etapie <strong>${payload.milestone_title || ""}</strong> zostaly odrzucone. Zaloguj sie, aby przeczytac komentarz i wgrac poprawiona wersje.</p>
+        <p>Pliki w etapie <strong>${safePayload.milestone_title || ""}</strong> zostaly odrzucone. Zaloguj sie, aby przeczytac komentarz i wgrac poprawiona wersje.</p>
       `;
       break;
     case "escrow_funded":
@@ -81,14 +96,14 @@ function getEmailContent(type: string, payload: NotificationPayload = {}) {
       html = `
         <h2>Otrzymales nowa wiadomosc</h2>
         <p>Masz nowa nieodczytana wiadomosc w czacie projektu.</p>
-        <p><em>${payload.snippet || ""}</em></p>
+        <p><em>${safePayload.snippet || ""}</em></p>
       `;
       break;
     case "offer_accepted":
       subject = "Twoja aplikacja zostala zaakceptowana!";
       html = `
         <h2>Gratulacje!</h2>
-        <p>Firma zaakceptowala Twoja aplikacje na zlecenie <strong>${payload.offer_title || ""}</strong>.</p>
+        <p>Firma zaakceptowala Twoja aplikacje na zlecenie <strong>${safePayload.offer_title || ""}</strong>.</p>
         <p>Zaloguj sie do platformy, aby sprawdzic szczegoly i warunki wspolpracy.</p>
       `;
       break;
@@ -100,6 +115,7 @@ function getEmailContent(type: string, payload: NotificationPayload = {}) {
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getRequestIp(req);
     const authHeader = req.headers.get("x-webhook-secret");
     if (authHeader !== WEBHOOK_SECRET) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -114,6 +130,12 @@ export async function POST(req: NextRequest) {
     const record = body.record;
     if (!record?.user_id) {
       return NextResponse.json({ error: "Missing record data" }, { status: 400 });
+    }
+
+    const rateKey = buildRateLimitKey(["notifications_webhook", ip, record.user_id, record.typ]);
+    const rateLimitResult = await enforceRateLimit("notifications", rateKey);
+    if (!rateLimitResult.success) {
+      return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
     }
 
     const { data: userData, error: userErr } =

@@ -1,6 +1,6 @@
 -- 20260216_fix_payouts_and_fee.sql
 -- Fix: review_delivery_v2 and auto_accept_due_milestones_v2 now create payout records
--- with 5% platform fee when milestones are accepted/auto-accepted.
+-- with contract-level platform fee when milestones are accepted/auto-accepted.
 -- Previously these functions did NOT create payout records at all.
 
 -- ============================================================
@@ -22,6 +22,7 @@ DECLARE
     v_latest_deliv_id UUID;
     v_next uuid;
     v_platform_fee numeric;
+    v_commission_rate numeric;
     v_net_amount numeric;
 BEGIN
     SELECT * INTO v_milestone FROM public.milestones WHERE id = p_milestone_id FOR UPDATE;
@@ -63,9 +64,10 @@ BEGIN
           AND status = 'pending'
           AND id != COALESCE(v_latest_deliv_id, '00000000-0000-0000-0000-000000000000'::uuid);
 
-        -- *** NEW: Create payout record with 5% platform fee ***
-        v_platform_fee := ROUND(v_milestone.amount * 0.05, 2);
-        v_net_amount := ROUND(v_milestone.amount * 0.95, 2);
+        -- *** NEW: Create payout record with contract-level platform fee ***
+        v_commission_rate := COALESCE(v_contract.commission_rate, public.default_commission_rate(v_contract.source_type, NULL, false));
+        v_platform_fee := ROUND(v_milestone.amount * v_commission_rate, 2);
+        v_net_amount := ROUND(v_milestone.amount - v_platform_fee, 2);
 
         INSERT INTO public.payouts(milestone_id, contract_id, amount_gross, platform_fee, amount_net, status)
         VALUES (p_milestone_id, v_contract.id, v_milestone.amount, v_platform_fee, v_net_amount, 'pending');
@@ -89,7 +91,8 @@ BEGIN
                     realization_status = 'completed',
                     updated_at = now()
                 WHERE id = v_contract.application_id
-                  AND status IN ('accepted', 'in_progress');
+                  AND status <> 'completed'
+                  AND status IN ('accepted', 'in_progress', 'delivered');
             END IF;
         END IF;
 
@@ -169,11 +172,18 @@ DECLARE
   v_latest_deliv_id uuid;
   v_milestone_amount numeric;
   v_platform_fee numeric;
+  v_commission_rate numeric;
   v_net_amount numeric;
 BEGIN
   FOR v_row IN
-    SELECT m.id as milestone_id, m.contract_id, m.amount as milestone_amount
+    SELECT
+      m.id as milestone_id,
+      m.contract_id,
+      m.amount as milestone_amount,
+      c.commission_rate,
+      c.source_type
     FROM public.milestones m
+    JOIN public.contracts c ON c.id = m.contract_id
     WHERE m.status = 'delivered'
       AND m.auto_accept_at IS NOT NULL
       AND m.auto_accept_at <= now()
@@ -212,10 +222,11 @@ BEGIN
       AND status = 'pending'
       AND id != COALESCE(v_latest_deliv_id, '00000000-0000-0000-0000-000000000000'::uuid);
 
-    -- *** NEW: Create payout record with 5% platform fee ***
+    -- *** NEW: Create payout record with contract-level platform fee ***
     v_milestone_amount := COALESCE(v_row.milestone_amount, 0);
-    v_platform_fee := ROUND(v_milestone_amount * 0.05, 2);
-    v_net_amount := ROUND(v_milestone_amount * 0.95, 2);
+    v_commission_rate := COALESCE(v_row.commission_rate, public.default_commission_rate(v_row.source_type, NULL, false));
+    v_platform_fee := ROUND(v_milestone_amount * v_commission_rate, 2);
+    v_net_amount := ROUND(v_milestone_amount - v_platform_fee, 2);
 
     INSERT INTO public.payouts(milestone_id, contract_id, amount_gross, platform_fee, amount_net, status)
     VALUES (v_row.milestone_id, v_row.contract_id, v_milestone_amount, v_platform_fee, v_net_amount, 'pending');
@@ -239,7 +250,8 @@ BEGIN
           realization_status = 'completed',
           updated_at = now()
       WHERE id = (SELECT application_id FROM public.contracts WHERE id = v_row.contract_id)
-        AND status IN ('accepted', 'in_progress');
+        AND status <> 'completed'
+        AND status IN ('accepted', 'in_progress', 'delivered');
     END IF;
 
     v_done := v_done + 1;

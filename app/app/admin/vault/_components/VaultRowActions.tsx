@@ -1,59 +1,73 @@
 "use client";
 
-import { useState } from "react";
+import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { FileText, Loader2, Download } from "lucide-react";
-import { getContractDocuments } from "../_actions";
-import { toast } from "sonner";
+import { Download, FileText } from "lucide-react";
+import { repairSingleContractPdf } from "../_actions";
 
 interface VaultRowActionsProps {
   contractId: string;
+  documents: Array<{ id: string; name: string; type: string; url: string | null }>;
 }
 
-export function VaultRowActions({ contractId }: VaultRowActionsProps) {
-  const [loading, setLoading] = useState(false);
+function getDocumentLabel(type: string) {
+  if (type === "contract_a") return "Umowa A";
+  if (type === "contract_b") return "Umowa B";
+  return "Dokument";
+}
 
-  const handleDownload = async () => {
-    setLoading(true);
-    try {
-      const documents = await getContractDocuments(contractId);
-      
-      if (documents.length === 0) {
-        toast.error("Nie znaleziono dokumentów PDF dla tej umowy.");
-        return;
-      }
+export function VaultRowActions({ contractId, documents }: VaultRowActionsProps) {
+  const availableDocuments = documents.filter((document) => Boolean(document.url));
 
-      // Open each document in a new tab
-      documents.forEach((doc) => {
-        if (doc.url) {
-          window.open(doc.url, "_blank");
-        }
-      });
-      
-      toast.success(`Otwarto ${documents.length} dokument(y) PDF.`);
-    } catch (error) {
-      console.error("Vault download error:", error);
-      toast.error("Błąd podczas pobierania dokumentów.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  return (
+    <div className="flex flex-col items-end gap-2">
+      {availableDocuments.length === 0 ? (
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-2 border-white/10 px-3 text-xs font-bold text-slate-500 shadow-sm"
+            disabled
+          >
+            <FileText className="h-3.5 w-3.5 text-slate-600" />
+            <span>Brak umow PDF</span>
+          </Button>
+          <form action={repairSingleContractPdf.bind(null, contractId)}>
+            <RepairButton />
+          </form>
+        </>
+      ) : (
+        availableDocuments.map((document) => (
+          <a
+            key={document.id}
+            href={document.url || undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-8 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 text-xs font-bold text-slate-200 shadow-sm transition-all hover:bg-white/10 hover:text-white"
+            title={`${getDocumentLabel(document.type)} | ${contractId}`}
+          >
+            <FileText className="h-3.5 w-3.5 text-indigo-400" />
+            <span>{getDocumentLabel(document.type)}</span>
+            <Download className="h-3 w-3 opacity-40" />
+          </a>
+        ))
+      )}
+    </div>
+  );
+}
+
+function RepairButton() {
+  const { pending } = useFormStatus();
 
   return (
     <Button
-      variant="outline"
+      type="submit"
       size="sm"
-      className="gap-2 h-8 px-3 text-xs font-bold border-white/10 hover:bg-white/5 text-slate-300 hover:text-white transition-all shadow-sm"
-      onClick={handleDownload}
-      disabled={loading}
+      className="h-8 gap-2 bg-indigo-500 px-3 text-xs font-bold text-white hover:bg-indigo-400"
+      disabled={pending}
     >
-      {loading ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <FileText className="h-3.5 w-3.5 text-indigo-400" />
-      )}
-      <span>Dokumenty PDF</span>
-      <Download className="h-3 w-3 opacity-30" />
+      <FileText className="h-3.5 w-3.5" />
+      <span>{pending ? "Naprawianie..." : "Napraw PDF"}</span>
     </Button>
   );
 }

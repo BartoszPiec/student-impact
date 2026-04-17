@@ -1,24 +1,21 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import Link from "next/link";
+import { useDeferredValue, useMemo, useState, useTransition } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
-  Receipt,
+  Calendar,
   CheckCircle2,
   Clock,
-  DollarSign,
+  Receipt,
+  Search,
   Users,
-  Calendar,
-  ArrowUpDown,
-  Filter,
 } from "lucide-react";
-import { markPitPaid, markPitBatchPaid } from "../_actions";
 import { toast } from "sonner";
-import { PremiumPageHeader } from "@/components/ui/premium-page-header";
-import { PageContainer } from "@/components/ui/page-container";
+import { markPitBatchPaid, markPitPaid } from "../_actions";
 
 interface PitWithholding {
   id: string;
@@ -42,43 +39,77 @@ interface Props {
   withholdings: PitWithholding[];
 }
 
+type PitFilter = "all" | "pending" | "paid";
+
+function formatMoney(value: number) {
+  return Number(value || 0).toLocaleString("pl-PL", {
+    style: "currency",
+    currency: "PLN",
+  });
+}
+
 export default function PitDashboard({ withholdings }: Props) {
-  const [filter, setFilter] = useState<"all" | "pending" | "paid">("all");
+  const [filter, setFilter] = useState<PitFilter>("all");
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search.trim().toLowerCase());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
 
-  // Group by tax_period (YYYY-MM)
+  const filteredWithholdings = useMemo(() => {
+    return withholdings.filter((withholding) => {
+      if (filter === "pending" && withholding.status !== "pending") {
+        return false;
+      }
+
+      if (filter === "paid" && withholding.status !== "paid") {
+        return false;
+      }
+
+      if (!deferredSearch) {
+        return true;
+      }
+
+      const searchable = [
+        withholding.student_name,
+        withholding.contract_id,
+        withholding.tax_period || "",
+        withholding.status,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(deferredSearch);
+    });
+  }, [deferredSearch, filter, withholdings]);
+
   const grouped = useMemo(() => {
-    const filtered = withholdings.filter((w) => {
-      if (filter === "pending") return w.status === "pending";
-      if (filter === "paid") return w.status === "paid";
-      return true;
-    });
-
     const groups: Record<string, PitWithholding[]> = {};
-    filtered.forEach((w) => {
-      const period = w.tax_period || "Brak okresu";
+
+    filteredWithholdings.forEach((withholding) => {
+      const period = withholding.tax_period || "Brak okresu";
       if (!groups[period]) groups[period] = [];
-      groups[period].push(w);
+      groups[period].push(withholding);
     });
 
-    // Sort periods descending
-    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [withholdings, filter]);
+    return Object.entries(groups).sort((left, right) => right[0].localeCompare(left[0]));
+  }, [filteredWithholdings]);
 
-  // Stats
+  const visiblePendingIds = filteredWithholdings
+    .filter((withholding) => withholding.status === "pending")
+    .map((withholding) => withholding.id);
+
   const totalPending = withholdings
-    .filter((w) => w.status === "pending")
-    .reduce((sum, w) => sum + Number(w.pit_amount), 0);
+    .filter((withholding) => withholding.status === "pending")
+    .reduce((sum, withholding) => sum + Number(withholding.pit_amount || 0), 0);
   const totalPaid = withholdings
-    .filter((w) => w.status === "paid")
-    .reduce((sum, w) => sum + Number(w.pit_amount), 0);
-  const pendingCount = withholdings.filter((w) => w.status === "pending").length;
-  const uniqueStudents = new Set(withholdings.map((w) => w.student_id)).size;
+    .filter((withholding) => withholding.status === "paid")
+    .reduce((sum, withholding) => sum + Number(withholding.pit_amount || 0), 0);
+  const pendingCount = withholdings.filter((withholding) => withholding.status === "pending").length;
+  const uniqueStudents = new Set(withholdings.map((withholding) => withholding.student_id)).size;
 
   const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
@@ -86,267 +117,355 @@ export default function PitDashboard({ withholdings }: Props) {
   };
 
   const selectAllPending = () => {
-    const pendingIds = withholdings
-      .filter((w) => w.status === "pending")
-      .map((w) => w.id);
-    if (selectedIds.size === pendingIds.length) {
+    if (visiblePendingIds.length === 0) {
       setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(pendingIds));
+      return;
     }
+
+    const allVisiblePendingSelected = visiblePendingIds.every((id) => selectedIds.has(id));
+
+    if (allVisiblePendingSelected) {
+      setSelectedIds((previous) => {
+        const next = new Set(previous);
+        visiblePendingIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      return;
+    }
+
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      visiblePendingIds.forEach((id) => next.add(id));
+      return next;
+    });
   };
 
   const handleMarkPaid = (id: string) => {
     startTransition(async () => {
       try {
         await markPitPaid(id);
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
+        setSelectedIds((previous) => {
+          const next = new Set(previous);
           next.delete(id);
           return next;
         });
-        toast.success("Oznaczono jako opłacone!");
-      } catch (err: any) {
-        toast.error("Błąd: " + (err?.message || "Nieznany błąd"));
+        toast.success("Oznaczono jako oplacone.");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Nieznany blad";
+        toast.error(`Blad: ${message}`);
       }
     });
   };
 
   const handleBatchPaid = () => {
     if (selectedIds.size === 0) return;
+
     startTransition(async () => {
       try {
         await markPitBatchPaid(Array.from(selectedIds));
+        const count = selectedIds.size;
         setSelectedIds(new Set());
-        toast.success(`Oznaczono ${selectedIds.size} pozycji jako opłacone!`);
-      } catch (err: any) {
-        toast.error("Błąd: " + (err?.message || "Nieznany błąd"));
+        toast.success(`Oznaczono ${count} pozycji jako oplacone.`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Nieznany blad";
+        toast.error(`Blad: ${message}`);
       }
     });
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white">
-      <PremiumPageHeader
-        icon={<Receipt className="w-6 h-6" />}
-        title="Zaliczki PIT"
-        description="Panel administracyjny zarządzania zaliczkami na podatek dochodowy"
-      />
-
-      <PageContainer>
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 -mt-8 relative z-10 mb-8">
-          <Card className="bg-white border-none shadow-xl shadow-slate-200/40 rounded-2xl">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-100 text-amber-600 rounded-xl">
-                  <Clock className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Do zapłaty</div>
-                  <div className="text-xl font-black text-slate-800">{totalPending.toFixed(2)} zł</div>
-                </div>
+    <div className="space-y-8 pb-12">
+      <div className="relative overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-900/50 p-8 shadow-2xl">
+        <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-500/30 bg-amber-500/20">
+                <Receipt className="h-6 w-6 text-amber-400" />
               </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white border-none shadow-xl shadow-slate-200/40 rounded-2xl">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Opłacone</div>
-                  <div className="text-xl font-black text-slate-800">{totalPaid.toFixed(2)} zł</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white border-none shadow-xl shadow-slate-200/40 rounded-2xl">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-100 text-indigo-600 rounded-xl">
-                  <Receipt className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Oczekujące</div>
-                  <div className="text-xl font-black text-slate-800">{pendingCount}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white border-none shadow-xl shadow-slate-200/40 rounded-2xl">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-purple-100 text-purple-600 rounded-xl">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Studentów</div>
-                  <div className="text-xl font-black text-slate-800">{uniqueStudents}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Filter Bar */}
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
-            {(["all", "pending", "paid"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                  filter === f
-                    ? "bg-white text-slate-800 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {f === "all" ? "Wszystkie" : f === "pending" ? "Oczekujące" : "Opłacone"}
-              </button>
-            ))}
+              <span className="text-xs font-black uppercase tracking-[0.2em] text-amber-400/80">
+                Finance
+              </span>
+            </div>
+            <h1 className="mb-3 text-4xl font-black leading-none tracking-tight text-white md:text-5xl">
+              Zaliczki PIT
+            </h1>
+            <p className="max-w-2xl font-medium leading-relaxed text-slate-400">
+              Operacyjny panel zaliczek podatkowych. Pozwala wyszukiwac studentow,
+              grupowac rekordy po okresie i zamykac platnosci do urzedu bez nowych migracji.
+            </p>
           </div>
+        </div>
+      </div>
 
-          {selectedIds.size > 0 && (
-            <Button
-              onClick={handleBatchPaid}
-              disabled={isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-200 ml-auto"
-            >
-              <CheckCircle2 className="w-4 h-4 mr-2" />
-              Oznacz {selectedIds.size} jako opłacone
-            </Button>
-          )}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="rounded-3xl border border-white/5 bg-slate-950/40 p-5">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-500">
+            Do zaplaty
+          </div>
+          <div className="mt-2 text-3xl font-black text-white">{formatMoney(totalPending)}</div>
+          <div className="mt-1 text-sm text-slate-400">Suma oczekujacych zaliczek</div>
+        </div>
+        <div className="rounded-3xl border border-white/5 bg-slate-950/40 p-5">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-500">
+            Oplacone
+          </div>
+          <div className="mt-2 text-3xl font-black text-white">{formatMoney(totalPaid)}</div>
+          <div className="mt-1 text-sm text-slate-400">Suma zamknietych zaliczek</div>
+        </div>
+        <div className="rounded-3xl border border-white/5 bg-slate-950/40 p-5">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-500">
+            Oczekujace
+          </div>
+          <div className="mt-2 text-3xl font-black text-white">{pendingCount}</div>
+          <div className="mt-1 text-sm text-slate-400">Pozycje gotowe do rozliczenia</div>
+        </div>
+        <div className="rounded-3xl border border-white/5 bg-slate-950/40 p-5">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-500">
+            Studentow
+          </div>
+          <div className="mt-2 text-3xl font-black text-white">{uniqueStudents}</div>
+          <div className="mt-1 text-sm text-slate-400">Unikalne osoby w widoku PIT</div>
+        </div>
+      </div>
 
-          {pendingCount > 0 && (
-            <Button
-              variant="outline"
-              onClick={selectAllPending}
-              className="rounded-xl border-slate-200 text-slate-600"
-            >
-              {selectedIds.size === pendingCount ? "Odznacz wszystkie" : "Zaznacz wszystkie oczekujące"}
-            </Button>
-          )}
+      <div className="overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/40 shadow-xl backdrop-blur-sm">
+        <div className="border-b border-white/5 bg-white/5 p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-bold text-slate-400">
+                Rekordow: {filteredWithholdings.length} / {withholdings.length}
+              </span>
+              {(["all", "pending", "paid"] as const).map((value) => (
+                <Button
+                  key={value}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFilter(value)}
+                  className={
+                    filter === value
+                      ? "border-amber-400/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/15"
+                      : "border-white/10 bg-transparent text-slate-400 hover:bg-white/5 hover:text-white"
+                  }
+                >
+                  {value === "all" && "Wszystkie"}
+                  {value === "pending" && "Oczekujace"}
+                  {value === "paid" && "Oplacone"}
+                </Button>
+              ))}
+            </div>
+
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Szukaj po studencie, kontrakcie lub okresie"
+                  className="h-10 min-w-[280px] border-white/10 bg-slate-900/60 pl-9 text-white placeholder:text-slate-500"
+                />
+              </div>
+
+              {selectedIds.size > 0 ? (
+                <Button
+                  onClick={handleBatchPaid}
+                  disabled={isPending}
+                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Oznacz {selectedIds.size} jako oplacone
+                </Button>
+              ) : null}
+
+              {visiblePendingIds.length > 0 ? (
+                <Button
+                  variant="outline"
+                  onClick={selectAllPending}
+                  className="border-white/10 bg-transparent text-slate-300 hover:bg-white/5 hover:text-white"
+                >
+                  {visiblePendingIds.every((id) => selectedIds.has(id))
+                    ? "Odznacz widoczne"
+                    : "Zaznacz widoczne oczekujace"}
+                </Button>
+              ) : null}
+            </div>
+          </div>
         </div>
 
-        {/* Grouped Table */}
         {grouped.length === 0 ? (
-          <Card className="bg-white border-none shadow-lg rounded-2xl">
-            <CardContent className="p-12 text-center">
-              <Receipt className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <div className="text-lg font-bold text-slate-400">Brak zaliczek PIT</div>
-              <div className="text-sm text-slate-400 mt-1">
-                Zaliczki pojawią się automatycznie po zatwierdzeniu kamieni milowych.
+          <div className="py-20 text-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/5">
+                <Receipt className="h-8 w-8 text-slate-700" />
               </div>
-            </CardContent>
-          </Card>
+              <p className="font-bold text-slate-500">
+                {deferredSearch
+                  ? "Brak zaliczek PIT pasujacych do wyszukiwania."
+                  : "Brak zaliczek PIT do wyswietlenia."}
+              </p>
+            </div>
+          </div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-8 p-6">
             {grouped.map(([period, items]) => {
-              const periodTotal = items.reduce((s, w) => s + Number(w.pit_amount), 0);
-              const pendingInPeriod = items.filter((w) => w.status === "pending").length;
+              const periodTotal = items.reduce(
+                (sum, withholding) => sum + Number(withholding.pit_amount || 0),
+                0,
+              );
+              const pendingInPeriod = items.filter((withholding) => withholding.status === "pending").length;
 
               return (
-                <Card key={period} className="bg-white border-none shadow-xl shadow-slate-200/40 rounded-2xl overflow-hidden">
-                  <CardHeader className="bg-slate-50 border-b border-slate-100 py-4 px-6">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-3 text-sm font-black text-slate-700">
-                        <Calendar className="w-4 h-4 text-indigo-500" />
-                        Okres: {period}
-                      </CardTitle>
+                <div
+                  key={period}
+                  className="overflow-hidden rounded-[2rem] border border-white/5 bg-slate-900/40"
+                >
+                  <div className="border-b border-white/5 bg-slate-950/20 px-6 py-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="flex items-center gap-3 text-sm font-black text-slate-200">
+                        <Calendar className="h-4 w-4 text-amber-400" />
+                        <span>Okres: {period}</span>
+                      </div>
+
                       <div className="flex items-center gap-3">
-                        {pendingInPeriod > 0 && (
-                          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200">
-                            {pendingInPeriod} oczekujące
+                        {pendingInPeriod > 0 ? (
+                          <Badge className="border border-amber-500/20 bg-amber-500/10 text-amber-300 hover:bg-amber-500/10">
+                            <Clock className="mr-1 h-3 w-3" />
+                            {pendingInPeriod} oczekujace
+                          </Badge>
+                        ) : (
+                          <Badge className="border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/10">
+                            <CheckCircle2 className="mr-1 h-3 w-3" />
+                            Okres zamkniety
                           </Badge>
                         )}
-                        <Badge variant="outline" className="font-mono text-slate-600">
-                          Suma PIT: {periodTotal.toFixed(2)} zł
+
+                        <Badge className="border border-white/10 bg-slate-950/40 font-mono text-slate-300 hover:bg-slate-950/40">
+                          Suma PIT: {formatMoney(periodTotal)}
                         </Badge>
                       </div>
                     </div>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-slate-100">
-                            <th className="p-3 text-left w-10"></th>
-                            <th className="p-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Student</th>
-                            <th className="p-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Brutto</th>
-                            <th className="p-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">KUP</th>
-                            <th className="p-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Podstawa</th>
-                            <th className="p-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stawka</th>
-                            <th className="p-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">PIT</th>
-                            <th className="p-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Netto</th>
-                            <th className="p-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                            <th className="p-3 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Akcja</th>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left">
+                      <thead>
+                        <tr className="border-b border-white/5 bg-slate-950/10">
+                          <th className="w-10 px-3 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500"></th>
+                          <th className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Student
+                          </th>
+                          <th className="px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Brutto
+                          </th>
+                          <th className="px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            KUP
+                          </th>
+                          <th className="px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Podstawa
+                          </th>
+                          <th className="px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Stawka
+                          </th>
+                          <th className="px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            PIT
+                          </th>
+                          <th className="px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Netto
+                          </th>
+                          <th className="px-3 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Status
+                          </th>
+                          <th className="px-3 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Akcja
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {items.map((withholding) => (
+                          <tr
+                            key={withholding.id}
+                            className={
+                              selectedIds.has(withholding.id)
+                                ? "bg-emerald-500/5 transition-colors"
+                                : "transition-colors hover:bg-white/5"
+                            }
+                          >
+                            <td className="px-3 py-3 text-center">
+                              {withholding.status === "pending" ? (
+                                <Checkbox
+                                  checked={selectedIds.has(withholding.id)}
+                                  onCheckedChange={() => toggleSelect(withholding.id)}
+                                  className="border-white/20 data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-500"
+                                />
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="text-sm font-semibold text-slate-200">
+                                {withholding.student_name}
+                              </div>
+                              <div className="font-mono text-[10px] text-slate-500">
+                                <Link
+                                  href={`/app/admin/contracts/${withholding.contract_id}`}
+                                  className="transition-colors hover:text-emerald-300"
+                                >
+                                  {withholding.contract_id.slice(0, 8)}...
+                                </Link>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono text-sm text-slate-300">
+                              {Number(withholding.amount_gross || 0).toFixed(2)}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono text-sm text-slate-400">
+                              {(Number(withholding.kup_rate || 0) * 100).toFixed(0)}%
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono text-sm text-slate-300">
+                              {Number(withholding.taxable_base || 0).toFixed(2)}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono text-sm text-slate-400">
+                              {(Number(withholding.pit_rate || 0) * 100).toFixed(0)}%
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono text-sm font-bold text-white">
+                              {Number(withholding.pit_amount || 0).toFixed(2)}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono text-sm text-slate-300">
+                              {Number(withholding.amount_net || 0).toFixed(2)}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {withholding.status === "paid" ? (
+                                <Badge className="border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/10">
+                                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                                  Oplacone
+                                </Badge>
+                              ) : (
+                                <Badge className="border border-amber-500/20 bg-amber-500/10 text-amber-300 hover:bg-amber-500/10">
+                                  <Clock className="mr-1 h-3 w-3" />
+                                  Oczekujace
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {withholding.status === "pending" ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-emerald-400/20 bg-emerald-500/10 text-xs text-emerald-300 hover:bg-emerald-500/15 hover:text-white"
+                                  onClick={() => handleMarkPaid(withholding.id)}
+                                  disabled={isPending}
+                                >
+                                  Oplac
+                                </Button>
+                              ) : null}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {items.map((w) => (
-                            <tr
-                              key={w.id}
-                              className={`border-b border-slate-50 transition-colors ${
-                                selectedIds.has(w.id) ? "bg-emerald-50/50" : "hover:bg-slate-50/50"
-                              }`}
-                            >
-                              <td className="p-3 text-center">
-                                {w.status === "pending" && (
-                                  <Checkbox
-                                    checked={selectedIds.has(w.id)}
-                                    onCheckedChange={() => toggleSelect(w.id)}
-                                    className="border-slate-300 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
-                                  />
-                                )}
-                              </td>
-                              <td className="p-3">
-                                <div className="font-semibold text-sm text-slate-700">{w.student_name}</div>
-                                <div className="text-[10px] text-slate-400 font-mono">{w.contract_id.slice(0, 8)}…</div>
-                              </td>
-                              <td className="p-3 text-right font-mono text-sm text-slate-600">{Number(w.amount_gross).toFixed(2)}</td>
-                              <td className="p-3 text-right font-mono text-sm text-slate-500">{(Number(w.kup_rate) * 100).toFixed(0)}%</td>
-                              <td className="p-3 text-right font-mono text-sm text-slate-600">{Number(w.taxable_base).toFixed(2)}</td>
-                              <td className="p-3 text-right font-mono text-sm text-slate-500">{(Number(w.pit_rate) * 100).toFixed(0)}%</td>
-                              <td className="p-3 text-right font-mono text-sm font-bold text-slate-800">{Number(w.pit_amount).toFixed(2)}</td>
-                              <td className="p-3 text-right font-mono text-sm text-slate-600">{Number(w.amount_net).toFixed(2)}</td>
-                              <td className="p-3 text-center">
-                                {w.status === "paid" ? (
-                                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200">
-                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Opłacone
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200">
-                                    <Clock className="w-3 h-3 mr-1" /> Oczekujące
-                                  </Badge>
-                                )}
-                              </td>
-                              <td className="p-3 text-center">
-                                {w.status === "pending" && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="rounded-lg border-emerald-200 text-emerald-600 hover:bg-emerald-50 text-xs"
-                                    onClick={() => handleMarkPaid(w.id)}
-                                    disabled={isPending}
-                                  >
-                                    Opłać
-                                  </Button>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               );
             })}
           </div>
         )}
-      </PageContainer>
+      </div>
     </div>
   );
 }

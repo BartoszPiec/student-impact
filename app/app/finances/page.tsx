@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { PageContainer } from "@/components/ui/page-container";
+import StudentDocumentsPanel from "./student-documents-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -350,6 +351,8 @@ export default async function FinancesPage() {
                     </Card>
                 </div>
             </div>
+
+            <StudentDocumentsPanel />
             </PageContainer>
         </main>
     );

@@ -9,6 +9,8 @@ import { renderPdfToBuffer } from "@/lib/pdf/render";
 import { ContractADocument } from "@/lib/pdf/contract-a-template";
 import { ContractBDocument } from "@/lib/pdf/contract-b-template";
 import { generateStudentInvoice } from "@/lib/pdf/generate-invoice";
+import { resolveCommissionRate } from "@/lib/commission";
+import { trySendNotification } from "@/lib/notifications/server";
 import type { ContractData } from "@/lib/pdf/types";
 
 type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -22,6 +24,7 @@ type OfferSummaryRow = {
 
 type PackageSummaryRow = {
   title: string | null;
+  type?: string | null;
 };
 
 type OfferDetailRow = {
@@ -44,6 +47,7 @@ type ContractWithMilestonesRow = {
   student_id: string;
   application_id: string | null;
   service_order_id: string | null;
+  commission_rate?: number | string | null;
   total_amount: number | string | null;
   total_amount_minor?: number | string | null;
   currency: string | null;
@@ -101,6 +105,10 @@ type ApplicationOfferDetailsRow = {
   offers: RelationValue<OfferDetailRow>;
 };
 
+type ServiceOrderOfferDetailsRow = {
+  package: RelationValue<PackageSummaryRow>;
+};
+
 type ServiceOrderNotificationRow = {
   company_id: string | null;
   package: RelationValue<PackageSummaryRow>;
@@ -148,20 +156,12 @@ function unwrapRelation<T>(value: RelationValue<T>): T | null {
 }
 
 async function notifyUser(
-  supabase: AppSupabaseClient,
+  _supabase: AppSupabaseClient,
   userId: string,
   typ: string,
   payload: JsonPayload = {},
 ) {
-  try {
-    await supabase.rpc("create_notification", {
-      p_user_id: userId,
-      p_typ: typ,
-      p_payload: payload,
-    });
-  } catch (err: unknown) {
-    console.error("notifyUser error:", err);
-  }
+  await trySendNotification(userId, typ, payload);
 }
 
 
@@ -471,11 +471,15 @@ export async function submitReview(applicationId: string, rating: number, commen
   if (sourceType === 'application') {
     await supabase.from("applications")
       .update({ status: 'completed', realization_status: 'completed' })
-      .eq("id", applicationId);
+      .eq("id", applicationId)
+      .neq("status", "completed")
+      .in("status", ["accepted", "in_progress", "delivered"]);
   } else if (sourceType === 'service_order') {
     await supabase.from("service_orders")
       .update({ status: 'completed' })
-      .eq("id", applicationId);
+      .eq("id", applicationId)
+      .neq("status", "completed")
+      .in("status", ["accepted", "active", "in_progress", "revision", "delivered"]);
   }
 
   revalidatePath(`/app/deliverables/${applicationId}`);
@@ -916,6 +920,8 @@ export async function generateContractDocuments(contractId: string, applicationI
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect("/auth");
 
+  return generateContractDocumentsInternal(contractId, userData.user.id);
+
   // 1. Fetch contract with milestones
   const { data: contract, error: contractError } = await supabase
     .from("contracts")
@@ -969,8 +975,13 @@ export async function generateContractDocuments(contractId: string, applicationI
     .sort((a, b) => (a.idx || 0) - (b.idx || 0));
 
   const totalAmount = Number(contract.total_amount_minor) / 100 || Number(contract.total_amount) || 0;
-  const platformFeePercent = 5;
-  const platformFee = Math.round(totalAmount * platformFeePercent) / 100;
+  const commissionRate = resolveCommissionRate({
+    explicitRate: Number(typedContract.commission_rate ?? null),
+    sourceType: typedContract.service_order_id ? "service_order" : "application",
+    isPlatformService: false,
+  });
+  const platformFeePercent = Math.round(commissionRate * 100);
+  const platformFee = Math.round(totalAmount * commissionRate * 100) / 100;
   const netAmount = totalAmount - platformFee;
   const dateStr = new Date().toLocaleDateString("pl-PL");
 
@@ -1019,7 +1030,7 @@ export async function generateContractDocuments(contractId: string, applicationI
 
   if (uploadErrorA) {
     console.error("Upload Contract A Error:", uploadErrorA);
-    throw new Error("Błąd wgrywania Umowy A: " + uploadErrorA.message);
+    throw new Error("Błąd wgrywania Umowy A: " + (uploadErrorA?.message || "unknown error"));
   }
 
   // 8. Upload Contract B
@@ -1030,7 +1041,7 @@ export async function generateContractDocuments(contractId: string, applicationI
 
   if (uploadErrorB) {
     console.error("Upload Contract B Error:", uploadErrorB);
-    throw new Error("Błąd wgrywania Umowy B: " + uploadErrorB.message);
+    throw new Error("Błąd wgrywania Umowy B: " + (uploadErrorB?.message || "unknown error"));
   }
 
   // 9. Insert contract_documents records (use admin client to bypass RLS)
@@ -1042,20 +1053,20 @@ export async function generateContractDocuments(contractId: string, applicationI
         document_type: "contract_a",
         storage_path: pathA,
         file_name: `Umowa_o_Swiadczenie_Uslugi_${dateStr}.pdf`,
-        generated_by: userData.user.id,
+        generated_by: userData.user?.id || "",
       },
       {
         contract_id: contractId,
         document_type: "contract_b",
         storage_path: pathB,
         file_name: `Umowa_o_Dzielo_${dateStr}.pdf`,
-        generated_by: userData.user.id,
+        generated_by: userData.user?.id || "",
       },
     ]);
 
   if (docInsertError) {
     console.error("Insert contract_documents Error:", docInsertError);
-    throw new Error("Błąd zapisu dokumentów: " + docInsertError.message);
+    throw new Error("Błąd zapisu dokumentów: " + (docInsertError?.message || "unknown error"));
   }
 
   // 10. Update contract — mark documents as generated (use admin to bypass RLS)
@@ -1067,6 +1078,246 @@ export async function generateContractDocuments(contractId: string, applicationI
   revalidatePath(`/app/deliverables/${applicationId}`);
 
   return { success: true, pathA, pathB };
+}
+
+async function generateContractDocumentsInternal(contractId: string, actorUserId: string) {
+  const admin = createAdminClient();
+
+  const { data: contract, error: contractError } = await admin
+    .from("contracts")
+    .select(
+      "id, company_id, student_id, application_id, service_order_id, commission_rate, total_amount, total_amount_minor, currency, review_window_days, documents_generated_at",
+    )
+    .eq("id", contractId)
+    .maybeSingle();
+
+  if (contractError || !contract) {
+    throw new Error("Nie znaleziono kontraktu: " + (contractError?.message || ""));
+  }
+
+  const { data: milestonesData, error: milestonesError } = await admin
+    .from("milestones")
+    .select("idx, title, amount, amount_minor, acceptance_criteria, due_at, status")
+    .eq("contract_id", contractId)
+    .order("idx", { ascending: true });
+
+  if (milestonesError) {
+    console.error("Milestones load error:", milestonesError);
+    throw new Error("Nie udalo sie pobrac etapow kontraktu.");
+  }
+
+  const typedContract = {
+    ...(contract as Omit<ContractWithMilestonesRow, "milestones">),
+    milestones: (milestonesData || []) as ContractMilestoneRow[],
+  } as ContractWithMilestonesRow;
+  const deliverableId = typedContract.application_id || typedContract.service_order_id || null;
+
+  const { data: existingDocuments, error: existingDocumentsError } = await admin
+    .from("contract_documents")
+    .select("id, document_type, storage_path")
+    .eq("contract_id", contractId)
+    .in("document_type", ["contract_a", "contract_b"]);
+
+  if (existingDocumentsError) {
+    console.error("Contract document guard error:", existingDocumentsError);
+    throw new Error("Nie udalo sie sprawdzic istniejacych dokumentow kontraktu.");
+  }
+
+  const existingTypes = new Set(
+    (existingDocuments || [])
+      .filter((document) => Boolean(document.storage_path))
+      .map((document) => document.document_type),
+  );
+
+  const needsContractA = !existingTypes.has("contract_a");
+  const needsContractB = !existingTypes.has("contract_b");
+
+  if (!needsContractA && !needsContractB) {
+    if (!contract.documents_generated_at) {
+      const { error: syncGeneratedAtError } = await admin
+        .from("contracts")
+        .update({ documents_generated_at: new Date().toISOString() })
+        .eq("id", contractId);
+
+      if (syncGeneratedAtError) {
+        console.error("documents_generated_at sync error:", syncGeneratedAtError);
+      }
+    }
+
+    if (deliverableId) {
+      revalidatePath(`/app/deliverables/${deliverableId}`);
+    }
+
+    return { success: true, skipped: true, generated: [] as string[] };
+  }
+
+  const { data: companyProfile } = await admin
+    .from("company_profiles")
+    .select("nazwa, nip, address, city, osoba_kontaktowa")
+    .eq("user_id", contract.company_id)
+    .single();
+
+  const { data: studentProfile } = await admin
+    .from("student_profiles")
+    .select("public_name")
+    .eq("user_id", contract.student_id)
+    .single();
+
+  const { data: studentAuth } = await admin.auth.admin.getUserById(contract.student_id);
+  const studentEmail = studentAuth?.user?.email || "brak@email.com";
+
+  let offerTitle = "Zlecenie";
+  let offerDescription = "";
+
+  if (typedContract.application_id) {
+    const { data: appData } = await admin
+      .from("applications")
+      .select("offers(tytul, opis)")
+      .eq("id", typedContract.application_id)
+      .single();
+
+    const app = appData as ApplicationOfferDetailsRow | null;
+    const offer = unwrapRelation(app?.offers ?? null);
+    offerTitle = offer?.tytul || offerTitle;
+    offerDescription = offer?.opis || "";
+  } else if (typedContract.service_order_id) {
+    const { data: serviceOrderData } = await admin
+      .from("service_orders")
+      .select("package:service_packages(title, type)")
+      .eq("id", typedContract.service_order_id)
+      .single();
+
+    const serviceOrder = serviceOrderData as ServiceOrderOfferDetailsRow | null;
+    const servicePackage = unwrapRelation(serviceOrder?.package ?? null);
+    offerTitle = servicePackage?.title || offerTitle;
+  }
+
+  const milestones = (typedContract.milestones || []).sort((a, b) => (a.idx || 0) - (b.idx || 0));
+  const totalAmount = Number(contract.total_amount_minor) / 100 || Number(contract.total_amount) || 0;
+  const commissionRate = resolveCommissionRate({
+    explicitRate: Number(typedContract.commission_rate ?? null),
+    sourceType: typedContract.service_order_id ? "service_order" : "application",
+    isPlatformService: servicePackage?.type === "platform_service",
+  });
+  const platformFeePercent = Math.round(commissionRate * 100);
+  const platformFee = Math.round(totalAmount * commissionRate * 100) / 100;
+  const netAmount = totalAmount - platformFee;
+  const dateStr = new Date().toLocaleDateString("pl-PL");
+
+  const contractData: ContractData = {
+    contractId,
+    createdAt: dateStr,
+    companyName: companyProfile?.nazwa || "Firma",
+    companyNip: companyProfile?.nip || "",
+    companyAddress: companyProfile?.address || "",
+    companyCity: companyProfile?.city || "",
+    companyContactPerson: companyProfile?.osoba_kontaktowa || "",
+    studentName: studentProfile?.public_name || "Student",
+    studentEmail,
+    offerTitle,
+    offerDescription,
+    milestones: milestones.map((milestone, index) => ({
+      idx: milestone.idx || index + 1,
+      title: milestone.title || `Etap ${index + 1}`,
+      criteria: milestone.acceptance_criteria || "",
+      amount: Number(milestone.amount_minor) / 100 || Number(milestone.amount) || 0,
+      dueAt: milestone.due_at ? new Date(milestone.due_at).toLocaleDateString("pl-PL") : null,
+    })),
+    totalAmount,
+    platformFeePercent,
+    platformFee,
+    netAmount,
+    currency: contract.currency || "PLN",
+    reviewWindowDays: contract.review_window_days || 8,
+  };
+
+  const [pdfA, pdfB] = await Promise.all([
+    renderPdfToBuffer(React.createElement(ContractADocument, { data: contractData })),
+    renderPdfToBuffer(React.createElement(ContractBDocument, { data: contractData })),
+  ]);
+
+  const timestamp = Date.now();
+  const documentsToInsert: Array<{
+    contract_id: string;
+    document_type: string;
+    storage_path: string;
+    file_name: string;
+    generated_by: string;
+  }> = [];
+  const generated: string[] = [];
+
+  if (needsContractA) {
+    const pathA = `contracts/${contractId}/Umowa_A_Firma_${timestamp}.pdf`;
+    const { error: uploadErrorA } = await admin.storage
+      .from("deliverables")
+      .upload(pathA, pdfA, { contentType: "application/pdf" });
+
+    if (uploadErrorA) {
+      console.error("Upload Contract A Error:", uploadErrorA);
+      throw new Error("Nie udalo sie wgrac Umowy A: " + (uploadErrorA?.message || "unknown error"));
+    }
+
+    documentsToInsert.push({
+      contract_id: contractId,
+      document_type: "contract_a",
+      storage_path: pathA,
+      file_name: `Umowa_o_Swiadczenie_Uslugi_${dateStr}.pdf`,
+      generated_by: actorUserId,
+    });
+    generated.push("contract_a");
+  }
+
+  if (needsContractB) {
+    const pathB = `contracts/${contractId}/Umowa_B_Student_${timestamp}.pdf`;
+    const { error: uploadErrorB } = await admin.storage
+      .from("deliverables")
+      .upload(pathB, pdfB, { contentType: "application/pdf" });
+
+    if (uploadErrorB) {
+      console.error("Upload Contract B Error:", uploadErrorB);
+      throw new Error("Nie udalo sie wgrac Umowy B: " + (uploadErrorB?.message || "unknown error"));
+    }
+
+    documentsToInsert.push({
+      contract_id: contractId,
+      document_type: "contract_b",
+      storage_path: pathB,
+      file_name: `Umowa_o_Dzielo_${dateStr}.pdf`,
+      generated_by: actorUserId,
+    });
+    generated.push("contract_b");
+  }
+
+  if (documentsToInsert.length > 0) {
+    const { error: docInsertError } = await admin
+      .from("contract_documents")
+      .insert(documentsToInsert);
+
+    if (docInsertError) {
+      console.error("Insert contract_documents Error:", docInsertError);
+      throw new Error("Nie udalo sie zapisac dokumentow kontraktu: " + (docInsertError?.message || "unknown error"));
+    }
+  }
+
+  const { error: contractUpdateError } = await admin
+    .from("contracts")
+    .update({ documents_generated_at: new Date().toISOString() })
+    .eq("id", contractId);
+
+  if (contractUpdateError) {
+    console.error("documents_generated_at update error:", contractUpdateError);
+    throw new Error("Dokumenty powstaly, ale nie udalo sie zapisac znacznika generacji.");
+  }
+
+  if (deliverableId) {
+    revalidatePath(`/app/deliverables/${deliverableId}`);
+  }
+
+  return { success: true, skipped: false, generated };
+}
+
+export async function generateContractDocumentsForAdmin(contractId: string, actorUserId: string) {
+  return generateContractDocumentsInternal(contractId, actorUserId);
 }
 
 // --- ACCEPT CONTRACT DOCUMENT ---

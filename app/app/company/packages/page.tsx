@@ -284,7 +284,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
           <div className="absolute bottom-20 left-1/3 w-3 h-3 bg-white/20 rounded-full animate-bounce" style={{ animationDuration: '2.7s', animationDelay: '0.5s' }}></div>
         </div>
 
-        <div className="relative z-10 px-8 py-20 md:py-32">
+        <div className="relative z-10 px-4 sm:px-8 py-16 md:py-32">
           <div className="max-w-6xl mx-auto text-center md:text-left">
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-black text-white mb-8 leading-[0.9] tracking-tighter">
               Transformuj swój <br/>
@@ -636,7 +636,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
                             <Link
                               href={`/app/company/packages/${pkg.id}`}
                               className={`
-                                width-full group/btn flex items-center justify-center gap-3 py-5 rounded-2xl font-black text-white text-lg
+                                w-full group/btn flex items-center justify-center gap-3 py-5 rounded-2xl font-black text-white text-lg
                                 bg-gradient-to-r ${config.gradient}
                                 shadow-[0_10px_30px_-5px_rgba(99,102,241,0.3)]
                                 hover:shadow-[0_15px_40px_-5px_rgba(99,102,241,0.4)] hover:scale-[1.02]
@@ -676,7 +676,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
             {/* STUDENT SERVICES VIEW (Optional, keeping consistent) */}
             {activeType === 'student' && (
               <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                <div className="flex flex-col md:flex-row items-center justify-between bg-white/60 backdrop-blur-xl p-10 rounded-[3.5rem] border border-white/50 shadow-2xl shadow-slate-200/40 gap-8">
+                <div className="flex flex-col md:flex-row items-center justify-between bg-white/60 backdrop-blur-xl p-6 md:p-10 rounded-[2.5rem] md:rounded-[3.5rem] border border-white/50 shadow-2xl shadow-slate-200/40 gap-6 md:gap-8">
                   <div className="flex items-center gap-8">
                     <div className="relative">
                       <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20"></div>
@@ -796,7 +796,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
         </div>
 
         {/* BOTTOM CTA: FULL WIDTH VIBRANT BANNER */}
-        <div className="group mt-32 relative overflow-hidden bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 rounded-[4rem] p-16 md:p-24 shadow-[0_50px_100px_-20px_rgba(99,102,241,0.3)]">
+        <div className="group mt-16 md:mt-32 relative overflow-hidden bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 rounded-[2rem] md:rounded-[4rem] p-8 md:p-16 xl:p-24 shadow-[0_50px_100px_-20px_rgba(99,102,241,0.3)]">
           <div className="absolute inset-0 opacity-20 group-hover:opacity-40 transition-opacity duration-1000">
             <div className="absolute top-0 left-0 w-full h-full bg-[url('/grid-pattern.svg')] bg-repeat opacity-30"></div>
             <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-indigo-500 rounded-full blur-[150px] animate-pulse"></div>
@@ -818,9 +818,9 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
             
             <Link
               href="/app/company/jobs/new"
-              className="group/cta inline-flex items-center justify-center gap-4 px-12 py-8 bg-white text-slate-950 rounded-[2rem] font-black shadow-2xl hover:bg-indigo-50 hover:scale-105 transition-all text-2xl whitespace-nowrap active:scale-95"
+              className="group/cta inline-flex items-center justify-center gap-3 px-8 py-5 md:px-12 md:py-8 bg-white text-slate-950 rounded-[1.5rem] md:rounded-[2rem] font-black shadow-2xl hover:bg-indigo-50 hover:scale-105 transition-all text-lg md:text-2xl whitespace-nowrap active:scale-95"
             >
-              <Rocket className="w-8 h-8 text-indigo-600 group-hover/cta:animate-bounce" />
+              <Rocket className="w-6 h-6 md:w-8 md:h-8 text-indigo-600 group-hover/cta:animate-bounce" />
               Dodaj własne zlecenie
             </Link>
           </div>

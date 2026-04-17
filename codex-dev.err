@@ -1,0 +1,9 @@
+⚠ Port 3000 is in use by process 31020, using available port 3001 instead.
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3000
+- PID:          31020
+- Dir:          C:\Users\Bartosz i Natalia\Desktop\Student-impact-antygraviti
+- Log:          .next\dev\logs\next-development.log
+
+Run taskkill /PID 31020 /F to stop it.

@@ -1,148 +1,182 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, FileSpreadsheet, Calendar } from "lucide-react";
+import { Calendar, Download, FileSpreadsheet, FileText } from "lucide-react";
+import { toast } from "sonner";
+
+type DownloadSetter = (value: boolean) => void;
+
+async function readErrorMessage(response: Response) {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    const payload = await response.json().catch(() => null);
+    return payload?.message || payload?.error || "Blad pobierania pliku.";
+  }
+
+  const text = await response.text().catch(() => "");
+  return text.trim() || "Blad pobierania pliku.";
+}
 
 export default function AdminExportsPage() {
-  const currentMonth = new Date().toISOString().slice(0, 7); // "2026-03"
+  const currentMonth = new Date().toISOString().slice(0, 7);
   const [month, setMonth] = useState(currentMonth);
   const [loadingPit, setLoadingPit] = useState(false);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
 
-  async function downloadFile(url: string, filename: string, setLoading: (v: boolean) => void) {
+  async function downloadFile(url: string, filename: string, setLoading: DownloadSetter) {
     setLoading(true);
+
     try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Błąd pobierania pliku" }));
-        alert(err.message ?? err.error ?? "Błąd pobierania pliku");
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        toast.error(await readErrorMessage(response));
         return;
       }
-      const blob = await res.blob();
+
+      const blob = await response.blob();
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = filename;
       link.click();
       URL.revokeObjectURL(link.href);
-    } catch (e: any) {
-      alert("Błąd: " + e.message);
+      toast.success(`Pobrano ${filename}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Nieznany blad pobierania.";
+      toast.error(`Blad: ${message}`);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-12 space-y-8">
-      <div>
-        <h1 className="text-3xl font-black text-slate-900 tracking-tight">Eksporty Księgowe</h1>
-        <p className="text-slate-500 mt-1">Pobierz dane finansowe do rozliczeń podatkowych i księgowości.</p>
+    <div className="space-y-8 pb-12">
+      <div className="relative overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-900/50 p-8 shadow-2xl">
+        <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-indigo-500/30 bg-indigo-500/20">
+                <FileSpreadsheet className="h-6 w-6 text-indigo-400" />
+              </div>
+              <span className="text-xs font-black uppercase tracking-[0.2em] text-indigo-400/80">
+                Finance
+              </span>
+            </div>
+            <h1 className="mb-3 text-4xl font-black leading-none tracking-tight text-white md:text-5xl">
+              Eksporty
+            </h1>
+            <p className="max-w-2xl font-medium leading-relaxed text-slate-400">
+              Pobieraj gotowe eksporty CSV dla rozliczen podatkowych i ksiegowosci.
+              Ten panel odzwierciedla aktualny stan endpointow eksportowych bez obiecywania
+              nieistniejacych jeszcze paczek PDF.
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Month Picker */}
-      <Card className="bg-white rounded-2xl border-slate-100 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2 text-slate-700">
-            <Calendar className="w-4 h-4" /> Wybierz okres rozliczeniowy
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="rounded-[2.5rem] border border-white/5 bg-slate-950/40 p-6 shadow-xl backdrop-blur-sm">
+        <div className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-300">
+          <Calendar className="h-4 w-4 text-slate-500" />
+          <span>Wybierz okres rozliczeniowy</span>
+        </div>
+
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <input
             type="month"
             value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            onChange={(event) => setMonth(event.target.value)}
+            className="h-11 rounded-xl border border-white/10 bg-slate-900/60 px-4 text-sm font-bold text-white outline-none focus:border-indigo-400/40"
           />
-          <p className="text-xs text-slate-400 mt-2">Eksporty obejmą wszystkie transakcje z wybranego miesiąca.</p>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* PIT-11 CSV */}
-        <Card className="bg-white rounded-2xl border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2 text-slate-800">
-              <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-              CSV dla PIT-11
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-slate-500">
-              Zestawienie wypłat studentów z podziałem na kwotę brutto, prowizję platformy i kwotę netto.
-              Gotowe do importu do Optimy lub przekazania księgowej.
-            </p>
-            <ul className="text-xs text-slate-400 space-y-1 list-disc list-inside">
-              <li>Imię i nazwisko, PESEL, data urodzenia</li>
-              <li>Rezydencja podatkowa PL, zwolnienie PIT u26</li>
-              <li>Kwota brutto / prowizja / netto (PLN)</li>
-              <li>ID kontraktu</li>
-            </ul>
-            <Button
-              onClick={() =>
-                downloadFile(
-                  `/api/admin/export/pit-csv?month=${month}`,
-                  `pit11_${month}.csv`,
-                  setLoadingPit
-                )
-              }
-              disabled={loadingPit}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {loadingPit ? "Pobieranie..." : `Pobierz PIT-11 CSV — ${month}`}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Faktury CSV */}
-        <Card className="bg-white rounded-2xl border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2 text-slate-800">
-              <FileText className="w-5 h-5 text-indigo-600" />
-              Rejestr Faktur (CSV)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-slate-500">
-              Zestawienie wszystkich płatności Stripe i prowizji platformy za wybrany miesiąc.
-              Numer faktury, dane firmy, kwota, ID transakcji Stripe.
-            </p>
-            <ul className="text-xs text-slate-400 space-y-1 list-disc list-inside">
-              <li>Numer faktury FV/YYYY-MM/NNNN</li>
-              <li>Firma — nazwa, NIP, adres</li>
-              <li>Stripe Session ID, Payment Intent ID</li>
-              <li>Kwota, typ (płatność / prowizja)</li>
-            </ul>
-            <Button
-              onClick={() =>
-                downloadFile(
-                  `/api/admin/export/invoices-zip?month=${month}`,
-                  `faktury_${month}.csv`,
-                  setLoadingInvoices
-                )
-              }
-              disabled={loadingInvoices}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {loadingInvoices ? "Pobieranie..." : `Pobierz Rejestr Faktur — ${month}`}
-            </Button>
-          </CardContent>
-        </Card>
+          <p className="text-sm text-slate-500">
+            Eksporty obejmuja dane tylko z wybranego miesiaca.
+          </p>
+        </div>
       </div>
 
-      {/* Info box */}
-      <Card className="bg-amber-50 border-amber-200 rounded-2xl">
-        <CardContent className="p-5">
-          <p className="text-sm text-amber-800 font-medium">
-            📌 <strong>Uwaga:</strong> Eksport CSV zawiera dane z tabeli{" "}
-            <code className="bg-amber-100 px-1 rounded text-xs">financial_ledger</code>.
-            Upewnij się, że webhook Stripe jest aktywny i wszystkie transakcje zostały zarejestrowane.
-            Faktury PDF (ZIP) zostaną dodane w Sprint #2.
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="rounded-[2.5rem] border border-white/5 bg-slate-950/40 p-6 shadow-xl backdrop-blur-sm">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10">
+              <FileSpreadsheet className="h-5 w-5 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-white">PIT-11 CSV</h2>
+              <p className="text-sm text-slate-400">Eksport danych do rozliczen podatkowych studentow.</p>
+            </div>
+          </div>
+
+          <p className="text-sm leading-relaxed text-slate-400">
+            Plik zawiera dane osobowe i podatkowe potrzebne do przygotowania zestawienia PIT-11:
+            brutto, zaliczke PIT, netto oraz identyfikator kontraktu.
           </p>
-        </CardContent>
-      </Card>
+
+          <ul className="mt-4 space-y-1 text-xs text-slate-500">
+            <li>Imie i nazwisko, PESEL, data urodzenia</li>
+            <li>Rezydencja podatkowa PL i zwolnienie PIT u26</li>
+            <li>Kwota brutto, zaliczka PIT i kwota netto</li>
+            <li>ID kontraktu dla latwego powiazania z operacjami</li>
+          </ul>
+
+          <Button
+            onClick={() =>
+              downloadFile(`/api/admin/export/pit-csv?month=${month}`, `pit11_${month}.csv`, setLoadingPit)
+            }
+            disabled={loadingPit}
+            className="mt-6 w-full bg-emerald-600 text-white hover:bg-emerald-700"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {loadingPit ? "Pobieranie..." : `Pobierz PIT-11 CSV - ${month}`}
+          </Button>
+        </div>
+
+        <div className="rounded-[2.5rem] border border-white/5 bg-slate-950/40 p-6 shadow-xl backdrop-blur-sm">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-indigo-500/20 bg-indigo-500/10">
+              <FileText className="h-5 w-5 text-indigo-300" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-white">Rejestr faktur CSV</h2>
+              <p className="text-sm text-slate-400">Eksport danych platnosci Stripe i prowizji platformy.</p>
+            </div>
+          </div>
+
+          <p className="text-sm leading-relaxed text-slate-400">
+            Ten eksport zwraca obecnie plik CSV z danymi faktur i wpisow finansowych za wybrany miesiac.
+            Endpoint nadal nazywa sie `invoices-zip`, ale aktualny output jest CSV.
+          </p>
+
+          <ul className="mt-4 space-y-1 text-xs text-slate-500">
+            <li>Numer faktury i data wystawienia</li>
+            <li>Dane firmy i dane studenta</li>
+            <li>Stripe Session ID oraz Payment Intent ID</li>
+            <li>Kwota i typ wpisu finansowego</li>
+          </ul>
+
+          <Button
+            onClick={() =>
+              downloadFile(
+                `/api/admin/export/invoices-zip?month=${month}`,
+                `faktury_${month}.csv`,
+                setLoadingInvoices,
+              )
+            }
+            disabled={loadingInvoices}
+            className="mt-6 w-full bg-indigo-600 text-white hover:bg-indigo-700"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {loadingInvoices ? "Pobieranie..." : `Pobierz rejestr faktur - ${month}`}
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-[2.5rem] border border-amber-500/15 bg-amber-500/5 p-6">
+        <p className="text-sm font-medium leading-relaxed text-amber-200">
+          Uwaga: eksporty korzystaja z aktualnych danych finansowych zapisanych w bazie i webhookach Stripe.
+          Jesli dane miesiaca wygladaja niepelnie, najpierw sprawdz przeplyw webhookow i wpisy w panelach finansowych.
+        </p>
+      </div>
     </div>
   );
 }

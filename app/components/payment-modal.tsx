@@ -15,6 +15,7 @@ interface PaymentModalProps {
     // Stripe integration props
     contractId?: string;
     applicationId?: string;
+    serviceOrderId?: string;
     useStripe?: boolean; // Toggle between mock and real Stripe
 }
 
@@ -26,6 +27,7 @@ export function PaymentModal({
     title,
     contractId,
     applicationId,
+    serviceOrderId,
     useStripe = true // Default to Stripe in production
 }: PaymentModalProps) {
     const [step, setStep] = useState<'confirm' | 'processing' | 'success' | 'error'>('confirm');
@@ -105,7 +107,7 @@ export function PaymentModal({
     }, []);
 
     const handleStripePayment = async () => {
-        if (!contractId || !applicationId) {
+        if (!contractId || (!applicationId && !serviceOrderId)) {
             toast.error("Brak wymaganych danych do płatności");
             return;
         }
@@ -121,6 +123,7 @@ export function PaymentModal({
                 body: JSON.stringify({
                     contractId,
                     applicationId,
+                    serviceOrderId,
                     amount,
                 }),
             });
@@ -166,7 +169,7 @@ export function PaymentModal({
     };
 
     const handlePay = () => {
-        if (useStripe && contractId && applicationId) {
+        if (useStripe && contractId && (applicationId || serviceOrderId)) {
             handleStripePayment();
         } else {
             handleMockPayment();

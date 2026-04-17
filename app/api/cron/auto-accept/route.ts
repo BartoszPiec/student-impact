@@ -3,6 +3,27 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+type ContractApplicationRow = {
+  application_id: string | null;
+};
+
+type ApplicationOfferRow = {
+  offer_id: string | null;
+};
+
+type ContractOfferRelation = {
+  application_id: string | null;
+  applications: ApplicationOfferRow | ApplicationOfferRow[] | null;
+};
+
+function extractOfferId(value: ApplicationOfferRow | ApplicationOfferRow[] | null): string | null {
+  if (Array.isArray(value)) {
+    return value[0]?.offer_id ?? null;
+  }
+
+  return value?.offer_id ?? null;
+}
+
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
@@ -37,12 +58,15 @@ export async function GET(req: NextRequest) {
       .not("application_id", "is", null);
 
     if (staleApps && staleApps.length > 0) {
-      const appIds = staleApps.map((c: any) => c.application_id);
+      const appIds = (staleApps as ContractApplicationRow[])
+        .map((contract) => contract.application_id)
+        .filter((id): id is string => Boolean(id));
       await supabase
         .from("applications")
         .update({ status: "completed", realization_status: "completed" })
         .in("id", appIds)
-        .in("status", ["accepted", "in_progress"]);
+        .neq("status", "completed")
+        .in("status", ["accepted", "in_progress", "delivered"]);
     }
 
     // 3. Sync: active contracts → in_progress applications
@@ -53,7 +77,9 @@ export async function GET(req: NextRequest) {
       .not("application_id", "is", null);
 
     if (activeContracts && activeContracts.length > 0) {
-      const activeAppIds = activeContracts.map((c: any) => c.application_id);
+      const activeAppIds = (activeContracts as ContractApplicationRow[])
+        .map((contract) => contract.application_id)
+        .filter((id): id is string => Boolean(id));
       await supabase
         .from("applications")
         .update({ status: "in_progress" })
@@ -69,7 +95,13 @@ export async function GET(req: NextRequest) {
       .in("status", ["accepted", "in_progress"]);
 
     if (acceptedApps && acceptedApps.length > 0) {
-      const offerIds = [...new Set(acceptedApps.map((a: any) => a.offer_id))];
+      const offerIds = [
+        ...new Set(
+          (acceptedApps as ApplicationOfferRow[])
+            .map((application) => application.offer_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
       await supabase
         .from("offers")
         .update({ status: "in_progress" })
@@ -84,9 +116,9 @@ export async function GET(req: NextRequest) {
       .eq("status", "completed");
 
     if (completedContracts && completedContracts.length > 0) {
-      const completedOfferIds = completedContracts
-        .map((c: any) => (c.applications as any)?.offer_id)
-        .filter(Boolean);
+      const completedOfferIds = (completedContracts as ContractOfferRelation[])
+        .map((contract) => extractOfferId(contract.applications))
+        .filter((id): id is string => Boolean(id));
       if (completedOfferIds.length > 0) {
         await supabase
           .from("offers")

@@ -1,10 +1,23 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { sendNotification } from "@/lib/notifications/server";
+import { buildRateLimitKey, enforceRateLimit } from "@/lib/rate-limit";
 
 // --- EXISTING FUNCTIONS (KEPT FOR ROUTING/INIT) ---
+
+type OfferRelation = { company_id: string } | null;
+
+type ApplicationForChat = {
+  id: string;
+  student_id: string;
+  offer_id: string;
+  message_to_company: string | null;
+  offers: OfferRelation | OfferRelation[];
+};
 
 export async function openChatForApplication(applicationId: string) {
   const supabase = await createClient();
@@ -20,10 +33,11 @@ export async function openChatForApplication(applicationId: string) {
 
   if (appErr || !appRow) throw new Error(appErr?.message ?? "Brak aplikacji");
 
-  const offer = Array.isArray((appRow as any).offers) ? (appRow as any).offers[0] : (appRow as any).offers;
+  const typedRow = appRow as ApplicationForChat;
+  const offer = Array.isArray(typedRow.offers) ? typedRow.offers[0] : typedRow.offers;
   const companyId = offer?.company_id as string | undefined;
-  const studentId = appRow.student_id as string;
-  const offerId = appRow.offer_id as string;
+  const studentId = typedRow.student_id;
+  const offerId = typedRow.offer_id;
 
   if (!companyId) throw new Error("Brak company_id w ofercie");
 
@@ -52,7 +66,7 @@ export async function openChatForApplication(applicationId: string) {
   if (createErr || !created) throw new Error(createErr?.message ?? "Nie udało się utworzyć rozmowy");
 
   // Initial message from app
-  let first = String((appRow as any).message_to_company ?? "").trim();
+  let first = String(typedRow.message_to_company ?? "").trim();
   if (!first) {
     first = "Zainteresowała mnie ta oferta, chciałbym zgłosić swoją kandydaturę.";
   }
@@ -150,8 +164,21 @@ async function validateParticipant(conversationId: string) {
   return { supabase, user, conv };
 }
 
+async function enforceMessageRateLimit(userId: string, action: string, conversationId: string) {
+  const headerStore = await headers();
+  const forwarded = headerStore.get("x-forwarded-for");
+  const ip = forwarded?.split(",")[0]?.trim() || headerStore.get("x-real-ip") || "unknown";
+
+  const rateKey = buildRateLimitKey(["chat", action, userId, ip, conversationId]);
+  const rateLimitResult = await enforceRateLimit("message", rateKey);
+  if (!rateLimitResult.success) {
+    throw new Error("Zbyt wiele wiadomosci. Sprobuj ponownie za chwile.");
+  }
+}
+
 export async function sendTextMessage(conversationId: string, content: string) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
+  await enforceMessageRateLimit(user.id, "text", conversationId);
   if (!content.trim()) return;
   if (content.length > 10000) throw new Error("Wiadomość jest za długa (max 10 000 znaków)");
 
@@ -165,13 +192,9 @@ export async function sendTextMessage(conversationId: string, content: string) {
 
   // Notify
   const targetUserId = user.id === conv.company_id ? conv.student_id : conv.company_id;
-  await supabase.rpc("create_notification", {
-    p_user_id: targetUserId,
-    p_typ: "message_new",
-    p_payload: {
-      conversation_id: conversationId,
-      snippet: content.slice(0, 80)
-    }
+  await sendNotification(targetUserId, "message_new", {
+    conversation_id: conversationId,
+    snippet: content.slice(0, 80)
   });
 
   revalidatePath(`/app/chat/${conversationId}`);
@@ -179,6 +202,7 @@ export async function sendTextMessage(conversationId: string, content: string) {
 
 export async function sendFileMessage(conversationId: string, fileName: string, fileUrl: string, fileType: string) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
+  await enforceMessageRateLimit(user.id, "file", conversationId);
 
   // Walidacja URL pliku — musi być ścieżką Supabase Storage (relatywna) lub https://
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -201,20 +225,22 @@ export async function sendFileMessage(conversationId: string, fileName: string, 
   });
 
   const targetUserId = user.id === conv.company_id ? conv.student_id : conv.company_id;
-  await supabase.rpc("create_notification", {
-    p_user_id: targetUserId,
-    p_typ: "message_new",
-    p_payload: {
-      conversation_id: conversationId,
-      snippet: "[Plik] " + fileName
-    }
+  await sendNotification(targetUserId, "message_new", {
+    conversation_id: conversationId,
+    snippet: "[Plik] " + fileName
   });
 
   revalidatePath(`/app/chat/${conversationId}`);
 }
 
-export async function sendEventMessage(conversationId: string, event: string, payload: any, content: string = "") {
+export async function sendEventMessage(
+  conversationId: string,
+  event: string,
+  payload: Record<string, unknown>,
+  content: string = "",
+) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
+  await enforceMessageRateLimit(user.id, "event", conversationId);
 
   await supabase.from("messages").insert({
     conversation_id: conversationId,
@@ -225,13 +251,9 @@ export async function sendEventMessage(conversationId: string, event: string, pa
   });
 
   const targetUserId = user.id === conv.company_id ? conv.student_id : conv.company_id;
-  await supabase.rpc("create_notification", {
-    p_user_id: targetUserId,
-    p_typ: "message_new",
-    p_payload: {
-      conversation_id: conversationId,
-      snippet: content || "[Wydarzenie]"
-    }
+  await sendNotification(targetUserId, "message_new", {
+    conversation_id: conversationId,
+    snippet: content || "[Wydarzenie]"
   });
 
   revalidatePath(`/app/chat/${conversationId}`);
@@ -277,7 +299,10 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
       .single();
 
     if (appData) {
-      const offerRow: any = Array.isArray(appData.offers) ? appData.offers[0] : appData.offers;
+      const offerRow = (Array.isArray(appData.offers) ? appData.offers[0] : appData.offers) as {
+        is_platform_service?: boolean;
+        typ?: string | null;
+      };
       const isMultiInstance = offerRow.is_platform_service === true ||
         (offerRow.typ && (offerRow.typ.toLowerCase().includes("micro") || offerRow.typ.toLowerCase().includes("mikro")));
 

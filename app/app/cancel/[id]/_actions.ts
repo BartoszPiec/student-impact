@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { trySendNotification } from "@/lib/notifications/server";
 
 export async function cancelCooperation(applicationId: string, formData: FormData) {
   const supabase = await createClient();
@@ -105,15 +106,11 @@ export async function cancelCooperation(applicationId: string, formData: FormDat
       const recipientId = user.id === companyId ? studentId : companyId;
       const cancelledBy = user.id === companyId ? "firma" : "student";
       if (recipientId) {
-        await supabase.rpc("create_notification", {
-          p_user_id: recipientId,
-          p_typ: "cooperation_cancelled",
-          p_payload: {
+        await trySendNotification(recipientId, "cooperation_cancelled", {
             application_id: applicationId,
             offer_title: offerTitle,
             cancelled_by: cancelledBy,
             snippet: `Zlecenie "${offerTitle ?? "zlecenie"}" zostało anulowane przez ${cancelledBy}.`,
-          },
         });
       }
     }

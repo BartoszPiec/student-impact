@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { applyToOffer } from "./_actions";
 import { Loader2, CheckCircle2, AlertCircle, Banknote, UploadCloud, FileText, X, Zap, ArrowLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/browser";
+import { createClient } from "@/lib/supabase/client";
 import { ApplySheet } from "@/app/app/jobs/apply-sheet";
 import { JobOffer } from "@/app/app/jobs/job-card";
 import { cn } from "@/lib/utils";

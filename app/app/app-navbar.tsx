@@ -15,13 +15,12 @@ import {
   MessageSquare,
   PlusCircle,
   Search,
-  ShieldCheck,
   Sparkles,
   User,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AdminNav } from "@/components/admin/admin-nav";
 import NotificationsBell from "@/components/notifications-bell";
 import { Button } from "@/components/ui/button";
 import {
@@ -105,7 +104,7 @@ export function AppNavbar({
     <header className="sticky top-0 z-50 w-full bg-slate-950/95 backdrop-blur-xl">
       <div className="mx-auto w-full max-w-[2000px] px-4 md:px-8 xl:px-12 py-2.5">
         <div className="h-14 flex items-center gap-4 px-3 rounded-2xl bg-slate-950/95 backdrop-blur-xl shadow-[0_8px_32px_-8px_rgba(0,0,0,0.4)] border border-white/5">
-          <div className="flex items-center gap-3 mr-auto">
+          <div className="flex shrink-0 items-center gap-3">
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
               <SheetTrigger asChild>
                 <Button
@@ -149,6 +148,12 @@ export function AppNavbar({
                       <AppNavLink href="/app/company/offers" icon={LayoutGrid} onClick={() => setIsOpen(false)} pathname={pathname}>
                         Moje ogloszenia
                       </AppNavLink>
+                      <AppNavLink href="/app/company/documents" icon={FileText} onClick={() => setIsOpen(false)} pathname={pathname}>
+                        Dokumenty
+                      </AppNavLink>
+                      <AppNavLink href="/app/company/orders" icon={Briefcase} onClick={() => setIsOpen(false)} pathname={pathname}>
+                        Zamowienia uslug
+                      </AppNavLink>
                       <AppNavLink href="/app/chat" icon={MessageSquare} onClick={() => setIsOpen(false)} pathname={pathname}>
                         Wiadomosci
                         {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
@@ -181,6 +186,14 @@ export function AppNavbar({
                         {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
                       </AppNavLink>
                     </>
+                  )}
+
+                  {role === "admin" && (
+                    <AdminNav
+                      pathname={pathname}
+                      mobile
+                      onNavigate={() => setIsOpen(false)}
+                    />
                   )}
                 </div>
 
@@ -221,7 +234,7 @@ export function AppNavbar({
             </Sheet>
 
             <Link
-              href={role === "student" ? "/app/jobs" : "/app"}
+              href={role === "student" ? "/app/jobs" : role === "admin" ? "/app/admin" : "/app"}
               className="flex items-center gap-2.5 group"
             >
               <div className="relative">
@@ -238,7 +251,7 @@ export function AppNavbar({
             </Link>
           </div>
 
-          <nav className="hidden md:flex items-center gap-0.5">
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 px-3 md:flex">
             {role === "company" && (
               <>
                 <AppNavLink href="/app/company/packages" icon={Search} pathname={pathname}>
@@ -246,6 +259,12 @@ export function AppNavbar({
                 </AppNavLink>
                 <AppNavLink href="/app/company/offers" icon={LayoutGrid} pathname={pathname}>
                   Moje ogloszenia
+                </AppNavLink>
+                <AppNavLink href="/app/company/documents" icon={FileText} pathname={pathname}>
+                  Dokumenty
+                </AppNavLink>
+                <AppNavLink href="/app/company/orders" icon={Briefcase} pathname={pathname}>
+                  Zamowienia uslug
                 </AppNavLink>
                 <AppNavLink href="/app/chat" icon={MessageSquare} pathname={pathname}>
                   Wiadomosci
@@ -288,23 +307,7 @@ export function AppNavbar({
             )}
 
             {role === "admin" && (
-              <>
-                <AppNavLink href="/app/admin/analytics" icon={Activity} pathname={pathname}>
-                  Analityka
-                </AppNavLink>
-                <AppNavLink href="/app/admin/offers" icon={LayoutGrid} pathname={pathname}>
-                  Oferty (Admin)
-                </AppNavLink>
-                <AppNavLink href="/app/admin/payouts" icon={Wallet} pathname={pathname}>
-                  Wyplaty (Admin)
-                </AppNavLink>
-                <AppNavLink href="/app/admin/exports" icon={FileText} pathname={pathname}>
-                  Eksporty Ksiegowe
-                </AppNavLink>
-                <AppNavLink href="/app/admin/vault" icon={ShieldCheck} pathname={pathname}>
-                  Legal Vault
-                </AppNavLink>
-              </>
+              <AdminNav pathname={pathname} />
             )}
           </nav>
 

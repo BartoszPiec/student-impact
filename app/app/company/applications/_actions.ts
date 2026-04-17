@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { trySendNotification } from "@/lib/notifications/server";
 
 interface OfferRow {
   id: string;
@@ -37,20 +38,12 @@ function isMultiInstanceOffer(offer: OfferRow): boolean {
 }
 
 async function notifyUser(
-  supabase: any,
+  _supabase: any,
   userId: string,
   typ: string,
   payload: Record<string, any> = {}
 ) {
-  try {
-    await supabase.rpc("create_notification", {
-      p_user_id: userId,
-      p_typ: typ,
-      p_payload: payload,
-    });
-  } catch (err) {
-    console.error("notifyUser error:", err);
-  }
+  await trySendNotification(userId, typ, payload);
 }
 
 async function ensureConversationForApplication(

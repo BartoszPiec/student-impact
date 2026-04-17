@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { trySendNotification } from "@/lib/notifications/server";
 
 function toNumber(v: any): number | null {
   const n = Number(v);
@@ -10,17 +11,13 @@ function toNumber(v: any): number | null {
 }
 
 async function notifyUser(
-  supabase: any,
+  _supabase: any,
   userId: string,
   typ: string,
   payload: Record<string, any> = {}
 ) {
   try {
-    await supabase.rpc("create_notification", {
-      p_user_id: userId,
-      p_typ: typ,
-      p_payload: payload,
-    });
+    await trySendNotification(userId, typ, payload);
   } catch {
     // MVP: nie psujemy flow jeśli notif padnie
   }

@@ -1,15 +1,30 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { format } from "date-fns";
-import { pl } from "date-fns/locale";
-import { ShieldAlert, FileText, Search, DownloadCloud } from "lucide-react";
-import { VaultRowActions } from "./_components/VaultRowActions";
+import Link from "next/link";
+import { DownloadCloud, FileText, ShieldAlert } from "lucide-react";
+import { VaultTable } from "@/components/admin/vault-table";
+import { Button } from "@/components/ui/button";
+import { backfillMissingContractPdfs } from "./_actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function LegalVaultPage() {
-  const supabase = createAdminClient();
+type LegalVaultPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
 
-  // Fetch all contracts with related profiles and offer titles
+export default async function LegalVaultPage({ searchParams }: LegalVaultPageProps) {
+  const supabase = createAdminClient();
+  const resolvedSearchParams = (await searchParams) || {};
+  const pdfRepairDone = resolvedSearchParams.pdfRepair === "done";
+  const singleRepairDone = resolvedSearchParams.pdfRepair === "single";
+  const targeted = Number(resolvedSearchParams.targeted || 0);
+  const repaired = Number(resolvedSearchParams.repaired || 0);
+  const failed = Number(resolvedSearchParams.failed || 0);
+  const singleContractId = typeof resolvedSearchParams.contractId === "string" ? resolvedSearchParams.contractId : null;
+  const errorMessage =
+    typeof resolvedSearchParams.errorMessage === "string"
+      ? decodeURIComponent(resolvedSearchParams.errorMessage)
+      : null;
+
   const { data: contracts, error } = await supabase
     .from("contracts")
     .select(`
@@ -18,6 +33,9 @@ export default async function LegalVaultPage() {
       total_amount,
       currency,
       status,
+      documents_generated_at,
+      company_contract_accepted_at,
+      student_contract_accepted_at,
       student_id,
       company_id,
       student:student_profiles(public_name),
@@ -28,132 +46,203 @@ export default async function LegalVaultPage() {
 
   if (error) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center min-h-[400px] border border-red-500/20 bg-red-500/5 rounded-3xl">
-        <ShieldAlert className="h-12 w-12 text-red-500 mb-4" />
-        <h2 className="text-xl font-black text-white">Błąd bazy danych</h2>
-        <p className="text-slate-400 mt-2">{error.message}</p>
+      <div className="flex min-h-[400px] flex-col items-center justify-center rounded-3xl border border-red-500/20 bg-red-500/5 p-8">
+        <ShieldAlert className="mb-4 h-12 w-12 text-red-500" />
+        <h2 className="text-xl font-black text-white">Blad bazy danych</h2>
+        <p className="mt-2 text-slate-400">{error.message}</p>
       </div>
     );
   }
 
+  const contractRows = ((contracts || []) as any[]) || [];
+  const contractIds = contractRows.map((contract) => contract.id).filter(Boolean);
+
+  let documentCountByContract = new Map<string, number>();
+  let invoiceSummaryByContract = new Map<string, { total: number; paid: number }>();
+  let legalDocumentsByContract = new Map<
+    string,
+    Array<{ id: string; name: string; type: string; url: string | null }>
+  >();
+
+  if (contractIds.length > 0) {
+    const [{ data: documents }, { data: invoices }] = await Promise.all([
+      supabase
+        .from("contract_documents")
+        .select("id, contract_id, document_type, file_name, storage_path")
+        .in("contract_id", contractIds),
+      supabase
+        .from("invoices")
+        .select("contract_id, status")
+        .in("contract_id", contractIds),
+    ]);
+
+    documentCountByContract = (documents || []).reduce((map, document: any) => {
+      const contractId = document.contract_id;
+      if (!contractId) return map;
+      map.set(contractId, (map.get(contractId) || 0) + 1);
+      return map;
+    }, new Map<string, number>());
+
+    const legalDocumentsWithUrls = await Promise.all(
+      (documents || [])
+        .filter((document: any) =>
+          document.document_type === "contract_a" || document.document_type === "contract_b",
+        )
+        .map(async (document: any) => {
+          const { data } = document.storage_path
+            ? await supabase.storage
+                .from("deliverables")
+                .createSignedUrl(document.storage_path, 60 * 60)
+            : { data: null };
+
+          return {
+            contract_id: document.contract_id,
+            id: document.id,
+            name: document.file_name || document.document_type,
+            type: document.document_type,
+            url: data?.signedUrl || null,
+          };
+        }),
+    );
+
+    legalDocumentsByContract = legalDocumentsWithUrls.reduce((map, document) => {
+      if (!document.contract_id) return map;
+      const current = map.get(document.contract_id) || [];
+      current.push({
+        id: document.id,
+        name: document.name,
+        type: document.type,
+        url: document.url,
+      });
+      map.set(document.contract_id, current);
+      return map;
+    }, new Map<string, Array<{ id: string; name: string; type: string; url: string | null }>>());
+
+    invoiceSummaryByContract = (invoices || []).reduce(
+      (map, invoice: any) => {
+        const contractId = invoice.contract_id;
+        if (!contractId) return map;
+        const current = map.get(contractId) || { total: 0, paid: 0 };
+        current.total += 1;
+        if (invoice.status === "paid") {
+          current.paid += 1;
+        }
+        map.set(contractId, current);
+        return map;
+      },
+      new Map<string, { total: number; paid: number }>(),
+    );
+  }
+
+  const contractsWithSummary = contractRows.map((contract) => {
+    const invoiceSummary = invoiceSummaryByContract.get(contract.id) || { total: 0, paid: 0 };
+
+    return {
+      ...contract,
+      document_count: documentCountByContract.get(contract.id) || 0,
+      invoice_count: invoiceSummary.total,
+      paid_invoice_count: invoiceSummary.paid,
+      legal_documents: legalDocumentsByContract.get(contract.id) || [],
+    };
+  });
+
+  const singleRepairContract = singleContractId
+    ? contractsWithSummary.find((contract) => contract.id === singleContractId) || null
+    : null;
+  const singleRepairHasDocuments = Boolean(
+    singleRepairContract?.legal_documents?.some(
+      (document: { id: string; name: string; type: string; url: string | null }) => document.id,
+    ),
+  );
+  const showSingleRepairFailure = singleRepairDone && failed > 0 && !singleRepairHasDocuments;
+  const showSingleRepairSuccess =
+    singleRepairDone && !showSingleRepairFailure && (repaired > 0 || singleRepairHasDocuments);
+
   return (
     <div className="space-y-8 pb-12">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 p-8 rounded-[2.5rem] bg-slate-900/50 border border-white/5 shadow-2xl overflow-hidden relative group">
-        <div className="absolute top-0 right-0 p-12 opacity-5 group-hover:opacity-10 transition-opacity">
+      <div className="group relative flex flex-col gap-6 overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-900/50 p-8 shadow-2xl md:flex-row md:items-end md:justify-between">
+        <div className="absolute right-0 top-0 p-12 opacity-5 transition-opacity group-hover:opacity-10">
           <DownloadCloud className="h-32 w-32 text-indigo-400" />
         </div>
-        
+
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-12 w-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-indigo-500/30 bg-indigo-500/20">
               <FileText className="h-6 w-6 text-indigo-400" />
             </div>
-            <span className="text-xs font-black text-indigo-400/80 uppercase tracking-[0.2em]">Księgowość & Audyt</span>
+            <span className="text-xs font-black uppercase tracking-[0.2em] text-indigo-400/80">
+              Ksiegowosc i audyt
+            </span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight leading-none mb-3">
+          <h1 className="mb-3 text-4xl font-black leading-none tracking-tight text-white md:text-5xl">
             Legal <span className="text-indigo-500">Vault</span>
           </h1>
-          <p className="text-slate-400 max-w-xl font-medium leading-relaxed">
-            Centralne repozytorium wszystkich zawartych umów. Pobieraj podpisane dokumenty PDF do celów księgowych i prawnych.
+          <p className="max-w-xl font-medium leading-relaxed text-slate-400">
+            Centralne repozytorium wszystkich zawartych umow. Pobieraj podpisane
+            dokumenty PDF do celow ksiegowych i prawnych.
           </p>
         </div>
+
+        <form action={backfillMissingContractPdfs} className="relative z-10">
+          <Button
+            type="submit"
+            className="h-11 rounded-xl bg-indigo-500 px-5 text-sm font-bold text-white hover:bg-indigo-400"
+          >
+            Napraw brakujace PDF
+          </Button>
+        </form>
       </div>
 
-      {/* Main Content */}
-      <div className="rounded-[2.5rem] bg-slate-950/40 border border-white/5 shadow-xl overflow-hidden backdrop-blur-sm">
-        <div className="p-6 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/5">
-          <div className="flex items-center gap-2">
-            <Search className="h-4 w-4 text-slate-500" />
-            <span className="text-sm font-bold text-slate-400">Wykaz wszystkich zawartych umów ({contracts?.length || 0})</span>
+      {pdfRepairDone ? (
+        <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/10 px-5 py-4 text-sm text-slate-200">
+          Backfill PDF zakonczony. Sprawdzone kontrakty: <span className="font-bold text-white">{targeted}</span>,
+          naprawione: <span className="font-bold text-emerald-300">{repaired}</span>,
+          bledy: <span className="font-bold text-rose-300">{failed}</span>.
+        </div>
+      ) : null}
+
+      {singleRepairDone ? (
+        <div
+          className={`rounded-2xl px-5 py-4 text-sm ${
+            showSingleRepairFailure
+              ? "border border-rose-500/20 bg-rose-500/10 text-rose-100"
+              : "border border-emerald-500/20 bg-emerald-500/10 text-emerald-100"
+          }`}
+        >
+          {showSingleRepairFailure
+            ? "Naprawa pojedynczego PDF nie powiodla sie"
+            : showSingleRepairSuccess
+              ? "Naprawa pojedynczego PDF zakonczona"
+              : "Stan naprawy pojedynczego PDF zaktualizowany"}
+          {singleContractId ? (
+            <>
+              {" "}dla kontraktu <span className="font-bold text-white">{singleContractId.slice(0, 8)}...</span>.
+            </>
+          ) : (
+            "."
+          )}
+          {showSingleRepairFailure && errorMessage ? (
+            <div className="mt-2 text-rose-200/90">
+              Powod: <span className="font-semibold text-white">{errorMessage}</span>
+            </div>
+          ) : null}
+          {!showSingleRepairFailure && singleRepairHasDocuments ? (
+            <div className="mt-2 text-emerald-200/90">
+              Dokumenty umowy sa juz dostepne w Legal Vault.
+            </div>
+          ) : null}
+          <div className="mt-3">
+            <Link
+              href="/app/admin/vault"
+              className="text-xs font-bold uppercase tracking-wider text-slate-300 underline underline-offset-4 hover:text-white"
+            >
+              Wyczysc komunikat
+            </Link>
           </div>
         </div>
+      ) : null}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-white/5 bg-slate-950/20">
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Data zawarcia</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Zlecenie / Przedmiot</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Strony umowy</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Status</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Wartość BRUTTO</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Akcje prawne</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {contracts.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-20 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center">
-                        <FileText className="h-8 w-8 text-slate-700" />
-                      </div>
-                      <p className="text-slate-500 font-bold">Brak zawartych umów w systemie.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                contracts.map((contract) => {
-                  const offerTitle = (contract.applications as any)?.offers?.tytul || "Zlecenie bezpośrednie";
-                  const studentName = (contract.student as any)?.public_name || "Brak danych";
-                  const companyName = (contract.company as any)?.nazwa || "Brak danych";
-                  
-                  return (
-                    <tr key={contract.id} className="hover:bg-white/5 transition-colors group">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-bold text-slate-300">
-                          {format(new Date(contract.created_at), "d MMM yyyy", { locale: pl })}
-                        </span>
-                        <div className="text-[10px] text-slate-500 mt-0.5">
-                          {format(new Date(contract.created_at), "HH:mm")}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-bold text-white line-clamp-1">{offerTitle}</div>
-                        <div className="text-[10px] text-slate-500 mt-0.5 font-mono">ID: {contract.id.slice(0, 8)}...</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black text-indigo-400 bg-indigo-500/10 px-1.5 rounded uppercase">Firma</span>
-                            <span className="text-sm font-medium text-slate-300">{companyName}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 rounded uppercase">Student</span>
-                            <span className="text-sm font-medium text-slate-300">{studentName}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex">
-                          {contract.status === "active" ? (
-                            <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">Aktywna</span>
-                          ) : contract.status === "completed" ? (
-                            <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wider">Zakończona</span>
-                          ) : contract.status === "cancelled" ? (
-                             <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-red-500/10 text-red-500 border border-red-500/20 uppercase tracking-wider">Anulowana</span>
-                          ) : (
-                            <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-slate-500/10 text-slate-400 border border-white/10 uppercase tracking-wider">{contract.status}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-black text-white">
-                          {Number(contract.total_amount).toLocaleString('pl-PL', { style: 'currency', currency: contract.currency || 'PLN' })}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <VaultRowActions contractId={contract.id} />
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <VaultTable contracts={contractsWithSummary} />
     </div>
   );
 }

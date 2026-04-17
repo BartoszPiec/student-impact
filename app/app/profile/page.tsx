@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
-import { Building, MapPin, Briefcase, User, Globe, Linkedin, Star, CheckCircle, Wallet, Trophy, Clock, GraduationCap, Edit, Share2, Sparkles, Percent } from "lucide-react";
+import { Building, MapPin, Briefcase, User, Globe, Linkedin, Star, CheckCircle, Wallet, Trophy, Clock, GraduationCap, Edit, Share2, Sparkles, Percent, FileText } from "lucide-react";
 import { saveCompanyProfile, saveStudentProfile } from "./_actions";
 import ExperienceSection from "./experience-section";
 import ReviewsSection from "./reviews-section";
@@ -369,6 +369,26 @@ export default async function ProfilePage({
                         </a>
                       )}
                     </div>
+
+                    <Link
+                      href="/app/company/documents"
+                      className="flex items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-4 text-indigo-900 transition-all hover:border-indigo-200 hover:bg-indigo-100"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-xl bg-white p-2 text-indigo-600 shadow-sm">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black uppercase tracking-widest text-indigo-500">
+                            Dokumenty firmy
+                          </div>
+                          <div className="text-sm font-bold">
+                            Umowy A i faktury do pobrania
+                          </div>
+                        </div>
+                      </div>
+                      <Share2 className="h-4 w-4 text-indigo-500" />
+                    </Link>
                   </div>
                 )}
               </CardContent>
@@ -561,6 +581,15 @@ export default async function ProfilePage({
                       <div className="space-y-2">
                         <Label className="font-bold">Strona WWW</Label>
                         <Input name="website" className="h-11 rounded-xl bg-slate-50 border-slate-200" defaultValue={(company as any)?.website ?? ""} />
+                      </div>
+                      <div className="md:col-span-2 space-y-2">
+                        <Label className="font-bold">LinkedIn</Label>
+                        <Input
+                          name="linkedin_url"
+                          className="h-11 rounded-xl bg-slate-50 border-slate-200"
+                          defaultValue={(company as any)?.linkedin_url ?? ""}
+                          placeholder="https://linkedin.com/company/..."
+                        />
                       </div>
                     </div>
                     <div className="flex justify-end pt-6 border-t border-slate-100">

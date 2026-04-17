@@ -68,7 +68,19 @@ These are currently non-blocking and should not be escalated as product regressi
 - Ignore `.claude/worktrees/` as non-product workspace noise.
 - Prefer verification of DB apply / environment parity over rewriting already-closed UI polish work.
 
-## 7. Recommended Starting Point for the New Sprint
+## 7. Dual Contract Flow (Product Decision)
+
+Both lifecycle paths are valid and must stay explicit in code and docs:
+
+- `application` contracts use milestone negotiation FSM (`S0` to `S4`) before funding.
+- `service_order` contracts are intentionally single-milestone by design and skip `S0` to `S4` (`terms_status='agreed'`).
+
+UI guard expectation:
+
+- Milestone draft negotiator must never render for `service_order` contracts.
+- Any "add milestone" UI in service-order flow is a bug and should be tracked in a separate ticket.
+
+## 8. Recommended Starting Point for the New Sprint
 
 Start from one of these, in order:
 

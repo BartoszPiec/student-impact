@@ -1,8 +1,11 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { trySendNotification } from "@/lib/notifications/server";
+import { buildRateLimitKey, enforceRateLimit } from "@/lib/rate-limit";
 
 type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type JsonPayload = Record<string, unknown>;
@@ -98,20 +101,12 @@ function isMultiInstanceOffer(offer: OfferRecord): boolean {
 }
 
 async function notifyUser(
-  supabase: AppSupabaseClient,
+  _supabase: AppSupabaseClient,
   userId: string,
   typ: string,
   payload: JsonPayload = {},
 ) {
-  try {
-    await supabase.rpc("create_notification", {
-      p_user_id: userId,
-      p_typ: typ,
-      p_payload: payload,
-    });
-  } catch (err: unknown) {
-    console.error("notifyUser error:", err);
-  }
+  await trySendNotification(userId, typ, payload);
 }
 
 function toNumber(value: FormDataEntryValue | null): number | null {
@@ -124,6 +119,18 @@ function toNumber(value: FormDataEntryValue | null): number | null {
 function toMinorUnits(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value)) return null;
   return Math.round(value * 100);
+}
+
+async function enforceApplicationsRateLimit(userId: string, action: string, targetId: string) {
+  const headerStore = await headers();
+  const forwarded = headerStore.get("x-forwarded-for");
+  const ip = forwarded?.split(",")[0]?.trim() || headerStore.get("x-real-ip") || "unknown";
+
+  const rateKey = buildRateLimitKey(["applications", action, userId, ip, targetId]);
+  const rateLimitResult = await enforceRateLimit("apply", rateKey);
+  if (!rateLimitResult.success) {
+    throw new Error("Zbyt wiele operacji na aplikacjach. Sprobuj ponownie za chwile.");
+  }
 }
 
 async function ensureConversationForApplication(
@@ -187,6 +194,7 @@ export async function acceptCounterAsStudent(applicationId: string) {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  await enforceApplicationsRateLimit(user.id, "accept_counter", applicationId);
 
   const { data, error } = await supabase
     .from("applications")
@@ -285,6 +293,7 @@ export async function acceptProposalAsStudent(applicationId: string) {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  await enforceApplicationsRateLimit(user.id, "accept_proposal", applicationId);
 
   const { data, error } = await supabase
     .from("applications")
@@ -381,6 +390,7 @@ export async function rejectProposalAsStudent(applicationId: string) {
   const { data: authData } = await supabase.auth.getUser();
   const user = authData.user;
   if (!user) redirect("/auth");
+  await enforceApplicationsRateLimit(user.id, "reject_proposal", applicationId);
 
   const { data, error } = await supabase
     .from("applications")
@@ -442,6 +452,7 @@ export async function rejectCounterAsStudent(applicationId: string) {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  await enforceApplicationsRateLimit(user.id, "reject_counter", applicationId);
 
   const { data, error } = await supabase
     .from("applications")
@@ -507,6 +518,7 @@ export async function proposeNewPriceAsStudent(
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  await enforceApplicationsRateLimit(user.id, "propose_new_price", applicationId);
 
   const proposed = toNumber(formData.get("proposed_stawka"));
   if (proposed == null || proposed <= 0) {
@@ -592,6 +604,7 @@ export async function withdrawApplication(
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  await enforceApplicationsRateLimit(user.id, "withdraw", applicationId);
 
   const { data, error } = await supabase
     .from("applications")
@@ -679,6 +692,7 @@ export async function submitQuoteProposal(
   const { data: authData } = await supabase.auth.getUser();
   const user = authData.user;
   if (!user) throw new Error("Musisz byc zalogowany.");
+  await enforceApplicationsRateLimit(user.id, "submit_quote", offerId);
 
   const { data } = await supabase
     .from("conversations")

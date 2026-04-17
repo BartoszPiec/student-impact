@@ -1,24 +1,13 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/admin/auth";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { parseCommissionRateInput, resolveCommissionRate } from "@/lib/commission";
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Nieautoryzowany");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single();
-
-  if (profile?.role !== "admin") throw new Error("Brak uprawnień administratora");
-  return { supabase, user };
-}
+import {
+    isAllowedCommissionRate,
+    parseCommissionRateInput,
+    resolveCommissionRate,
+} from "@/lib/commission";
 
 export async function createSystemService(formData: FormData) {
     const { supabase } = await requireAdmin();
@@ -36,10 +25,10 @@ export async function createSystemService(formData: FormData) {
         isPlatformService: true,
     });
 
-    if (!title || !description) throw new Error("Tytuł i opis są wymagane");
-    if (title.length > 200) throw new Error("Tytuł jest za długi (max 200 znaków)");
-    if (description.length > 5000) throw new Error("Opis jest za długi (max 5000 znaków)");
-    if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidłowa cena");
+    if (!title || !description) throw new Error("Tytul i opis sa wymagane");
+    if (title.length > 200) throw new Error("Tytul jest za dlugi (max 200 znakow)");
+    if (description.length > 5000) throw new Error("Opis jest za dlugi (max 5000 znakow)");
+    if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidlowa cena");
 
     const { error } = await supabase.from("service_packages").insert({
         title,
@@ -49,8 +38,8 @@ export async function createSystemService(formData: FormData) {
         price,
         commission_rate,
         locked_content,
-        type: 'platform_service',
-        status: 'active'
+        type: "platform_service",
+        status: "active",
     });
 
     if (error) throw new Error(error.message);
@@ -76,10 +65,10 @@ export async function updateSystemService(offerId: string, formData: FormData) {
         isPlatformService: true,
     });
 
-    if (!title || !description) throw new Error("Tytuł i opis są wymagane");
-    if (title.length > 200) throw new Error("Tytuł jest za długi (max 200 znaków)");
-    if (description.length > 5000) throw new Error("Opis jest za długi (max 5000 znaków)");
-    if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidłowa cena");
+    if (!title || !description) throw new Error("Tytul i opis sa wymagane");
+    if (title.length > 200) throw new Error("Tytul jest za dlugi (max 200 znakow)");
+    if (description.length > 5000) throw new Error("Opis jest za dlugi (max 5000 znakow)");
+    if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidlowa cena");
 
     const { error } = await supabase
         .from("service_packages")
@@ -113,4 +102,28 @@ export async function deleteSystemService(serviceId: string) {
 
     revalidatePath("/app/admin/system-services");
     revalidatePath("/app/company/packages");
+}
+
+export async function updateSystemServiceCommission(serviceId: string, commissionRateInput: string) {
+    const { supabase } = await requireAdmin();
+    const commissionRate = parseCommissionRateInput(commissionRateInput);
+
+    if (!isAllowedCommissionRate(commissionRate)) {
+        return { error: "Dozwolone stawki to auto, 10%, 15% lub 20%." };
+    }
+
+    const { error } = await supabase
+        .from("service_packages")
+        .update({ commission_rate: commissionRate })
+        .eq("id", serviceId)
+        .eq("type", "platform_service");
+
+    if (error) {
+        return { error: error.message };
+    }
+
+    revalidatePath("/app/admin/system-services");
+    revalidatePath("/app/company/packages");
+
+    return { success: true };
 }

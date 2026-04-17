@@ -1,22 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
-  Wallet,
-  Clock,
-  CheckCircle2,
-  Loader2,
   ArrowRight,
+  CheckCircle2,
   DollarSign,
-  Filter,
+  Loader2,
   RefreshCw,
-  AlertCircle,
+  Search,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getPayouts, markPayoutProcessing, markPayoutPaid } from "./_actions";
+import { getPayouts, markPayoutPaid, markPayoutProcessing } from "./_actions";
 
 type PayoutRow = {
   id: string;
@@ -34,41 +32,119 @@ type PayoutRow = {
   milestoneIdx: number;
 };
 
+type PayoutStatusFilter = "all" | "pending" | "processing" | "paid";
+type PayoutSortOption =
+  | "created_desc"
+  | "created_asc"
+  | "net_desc"
+  | "net_asc";
+
+function formatMoney(value: number) {
+  return Number(value || 0).toLocaleString("pl-PL", {
+    style: "currency",
+    currency: "PLN",
+  });
+}
+
+function getStatusBadge(status: string) {
+  if (status === "pending") {
+    return "rounded-lg border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-400";
+  }
+
+  if (status === "processing") {
+    return "rounded-lg border border-blue-500/20 bg-blue-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-blue-400";
+  }
+
+  if (status === "paid") {
+    return "rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-400";
+  }
+
+  return "rounded-lg border border-white/10 bg-slate-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400";
+}
+
+function getStatusLabel(status: string) {
+  if (status === "pending") return "Oczekuje";
+  if (status === "processing") return "Przetwarzane";
+  if (status === "paid") return "Wyplacone";
+  return status;
+}
+
 export default function AdminPayoutsPage() {
   const [payouts, setPayouts] = useState<PayoutRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState<PayoutStatusFilter>("all");
+  const [sortBy, setSortBy] = useState<PayoutSortOption>("created_desc");
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search.trim().toLowerCase());
   const [isPending, startTransition] = useTransition();
   const [actionId, setActionId] = useState<string | null>(null);
 
-  const getErrorMessage = (error: unknown, fallback: string) =>
-    error instanceof Error ? error.message : fallback;
-
-  const loadPayouts = useCallback(async (statusFilter?: string) => {
+  const loadPayouts = useCallback(async (statusFilter: PayoutStatusFilter) => {
     setLoading(true);
     try {
-      const data = await getPayouts(statusFilter || filter);
-      setPayouts(Array.isArray(data) ? data as PayoutRow[] : []);
-    } catch (err: any) {
-      toast.error(err.message || "Błąd ładowania wypłat");
+      const data = await getPayouts(statusFilter);
+      setPayouts(Array.isArray(data) ? (data as PayoutRow[]) : []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Blad ladowania wyplat";
+      toast.error(message);
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, []);
 
   useEffect(() => {
-    loadPayouts();
-  }, [filter]);
+    loadPayouts(filter);
+  }, [filter, loadPayouts]);
+
+  const visiblePayouts = useMemo(() => {
+    return [...payouts]
+      .filter((payout) => {
+        if (!deferredSearch) {
+          return true;
+        }
+
+        const searchable = [
+          payout.id,
+          payout.contract_id,
+          payout.studentName,
+          payout.offerTitle,
+          payout.milestoneTitle,
+          payout.status,
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        return searchable.includes(deferredSearch);
+      })
+      .sort((left, right) => {
+        if (sortBy === "created_desc") {
+          return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+        }
+
+        if (sortBy === "created_asc") {
+          return new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+        }
+
+        const leftNet = Number(left.amount_net || 0);
+        const rightNet = Number(right.amount_net || 0);
+        return sortBy === "net_asc" ? leftNet - rightNet : rightNet - leftNet;
+      });
+  }, [deferredSearch, payouts, sortBy]);
+
+  const handleRefresh = () => {
+    loadPayouts(filter);
+  };
 
   const handleMarkProcessing = (payoutId: string) => {
     setActionId(payoutId);
     startTransition(async () => {
       try {
         await markPayoutProcessing(payoutId);
-        toast.success("Oznaczono jako przetwarzane");
-        await loadPayouts();
-      } catch (err: any) {
-        toast.error(err.message);
+        toast.success("Oznaczono jako przetwarzane.");
+        await loadPayouts(filter);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Blad aktualizacji statusu.";
+        toast.error(message);
       } finally {
         setActionId(null);
       }
@@ -76,256 +152,310 @@ export default function AdminPayoutsPage() {
   };
 
   const handleMarkPaid = (payoutId: string) => {
-    if (!confirm("Potwierdzasz, że środki zostały przelane do studenta?")) return;
+    if (!confirm("Potwierdzasz, ze srodki zostaly przelane do studenta?")) return;
+
     setActionId(payoutId);
     startTransition(async () => {
       try {
         await markPayoutPaid(payoutId);
-        toast.success("Oznaczono jako wypłacone!");
-        await loadPayouts();
-      } catch (err: any) {
-        toast.error(err.message);
+        toast.success("Oznaczono jako wyplacone.");
+        await loadPayouts(filter);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Blad zatwierdzenia wyplaty.";
+        toast.error(message);
       } finally {
         setActionId(null);
       }
     });
   };
 
-  // Summary stats
-  const pendingCount = payouts.filter((p) => p.status === "pending").length;
+  const pendingCount = payouts.filter((payout) => payout.status === "pending").length;
   const pendingTotal = payouts
-    .filter((p) => p.status === "pending")
-    .reduce((sum, p) => sum + Number(p.amount_net), 0);
-  const processingCount = payouts.filter((p) => p.status === "processing").length;
+    .filter((payout) => payout.status === "pending")
+    .reduce((sum, payout) => sum + Number(payout.amount_net || 0), 0);
+  const processingCount = payouts.filter((payout) => payout.status === "processing").length;
   const paidTotal = payouts
-    .filter((p) => p.status === "paid")
-    .reduce((sum, p) => sum + Number(p.amount_net), 0);
-  const feeTotal = payouts.reduce((sum, p) => sum + Number(p.platform_fee), 0);
-
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case "pending":
-        return (
-          <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
-            <Clock className="w-3 h-3 mr-1" /> Oczekuje
-          </Badge>
-        );
-      case "processing":
-        return (
-          <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-50">
-            <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Przetwarzane
-          </Badge>
-        );
-      case "paid":
-        return (
-          <Badge variant="outline" className="border-emerald-300 text-emerald-700 bg-emerald-50">
-            <CheckCircle2 className="w-3 h-3 mr-1" /> Wypłacone
-          </Badge>
-        );
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
+    .filter((payout) => payout.status === "paid")
+    .reduce((sum, payout) => sum + Number(payout.amount_net || 0), 0);
+  const feeTotal = payouts.reduce((sum, payout) => sum + Number(payout.platform_fee || 0), 0);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-12 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
-            <Wallet className="w-8 h-8 text-indigo-600" />
-            Panel Wypłat
-          </h1>
-          <p className="text-slate-500 mt-1">Zarządzaj wypłatami dla studentów</p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => loadPayouts()}
-          disabled={loading}
-          className="gap-2"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          Odśwież
-        </Button>
-      </div>
+    <div className="space-y-8 pb-12">
+      <div className="relative overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-900/50 p-8 shadow-2xl">
+        <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/20">
+                <Wallet className="h-6 w-6 text-emerald-400" />
+              </div>
+              <span className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400/80">
+                Finance
+              </span>
+            </div>
+            <h1 className="mb-3 text-4xl font-black leading-none tracking-tight text-white md:text-5xl">
+              Wyplaty
+            </h1>
+            <p className="max-w-2xl font-medium leading-relaxed text-slate-400">
+              Operacyjny panel wyplat dla studentow. Pozwala szybko wyszukiwac rekordy,
+              filtrowac statusy i zamykac payout flow bez zmiany schemy.
+            </p>
+          </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-amber-200 bg-amber-50/50">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-amber-600 uppercase tracking-wider">Oczekujące</p>
-                <p className="text-2xl font-black text-amber-800">{pendingCount}</p>
-              </div>
-              <div className="text-xs text-amber-600 font-bold">{pendingTotal.toFixed(2)} PLN</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-blue-200 bg-blue-50/50">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Przetwarzane</p>
-                <p className="text-2xl font-black text-blue-800">{processingCount}</p>
-              </div>
-              <Loader2 className="w-5 h-5 text-blue-400" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-emerald-200 bg-emerald-50/50">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Wypłacone</p>
-                <p className="text-2xl font-black text-emerald-800">{paidTotal.toFixed(2)} PLN</p>
-              </div>
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-indigo-200 bg-indigo-50/50">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Prowizje</p>
-                <p className="text-2xl font-black text-indigo-800">{feeTotal.toFixed(2)} PLN</p>
-              </div>
-              <DollarSign className="w-5 h-5 text-indigo-400" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-2">
-        <Filter className="w-4 h-4 text-slate-400" />
-        <span className="text-sm text-slate-500 font-medium">Filtr:</span>
-        {["all", "pending", "processing", "paid"].map((f) => (
           <Button
-            key={f}
-            variant={filter === f ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter(f)}
-            className={filter === f ? "bg-indigo-600 hover:bg-indigo-700" : ""}
+            variant="outline"
+            onClick={handleRefresh}
+            disabled={loading}
+            className="gap-2 border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white"
           >
-            {f === "all" && "Wszystkie"}
-            {f === "pending" && "Oczekujące"}
-            {f === "processing" && "Przetwarzane"}
-            {f === "paid" && "Wypłacone"}
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Odswiez
           </Button>
-        ))}
+        </div>
       </div>
 
-      {/* Payouts Table */}
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="rounded-3xl border border-white/5 bg-slate-950/40 p-5">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-500">
+            Oczekujace
+          </div>
+          <div className="mt-2 text-3xl font-black text-white">{pendingCount}</div>
+          <div className="mt-1 text-sm text-slate-400">{formatMoney(pendingTotal)}</div>
+        </div>
+        <div className="rounded-3xl border border-white/5 bg-slate-950/40 p-5">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-500">
+            Przetwarzane
+          </div>
+          <div className="mt-2 text-3xl font-black text-white">{processingCount}</div>
+          <div className="mt-1 text-sm text-slate-400">W toku po stronie operacyjnej</div>
+        </div>
+        <div className="rounded-3xl border border-white/5 bg-slate-950/40 p-5">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-500">
+            Wyplacone
+          </div>
+          <div className="mt-2 text-3xl font-black text-white">{formatMoney(paidTotal)}</div>
+          <div className="mt-1 text-sm text-slate-400">Kwota netto zamknietych payoutow</div>
+        </div>
+        <div className="rounded-3xl border border-white/5 bg-slate-950/40 p-5">
+          <div className="text-xs font-black uppercase tracking-widest text-slate-500">
+            Prowizje
+          </div>
+          <div className="mt-2 text-3xl font-black text-white">{formatMoney(feeTotal)}</div>
+          <div className="mt-1 text-sm text-slate-400">Suma platform fee w widoku</div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-950/40 shadow-xl backdrop-blur-sm">
+        <div className="border-b border-white/5 bg-white/5 p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-bold text-slate-400">
+                Rekordow: {visiblePayouts.length} / {payouts.length}
+              </span>
+              {(["all", "pending", "processing", "paid"] as PayoutStatusFilter[]).map((value) => (
+                <Button
+                  key={value}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFilter(value)}
+                  className={
+                    filter === value
+                      ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15"
+                      : "border-white/10 bg-transparent text-slate-400 hover:bg-white/5 hover:text-white"
+                  }
+                >
+                  {value === "all" && "Wszystkie"}
+                  {value === "pending" && "Oczekujace"}
+                  {value === "processing" && "Przetwarzane"}
+                  {value === "paid" && "Wyplacone"}
+                </Button>
+              ))}
             </div>
-          ) : payouts.length === 0 ? (
-            <div className="text-center py-20">
-              <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500 font-medium">Brak wypłat do wyświetlenia</p>
-              <p className="text-slate-400 text-sm">Wypłaty pojawią się po akceptacji etapów przez firmy.</p>
+
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Szukaj po studencie, zleceniu lub ID"
+                  className="h-10 min-w-[260px] border-white/10 bg-slate-900/60 pl-9 text-white placeholder:text-slate-500"
+                />
+              </div>
+
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value as PayoutSortOption)}
+                className="h-10 rounded-xl border border-white/10 bg-slate-900/60 px-3 text-sm font-bold text-slate-200 outline-none"
+              >
+                <option value="created_desc">Najnowsze</option>
+                <option value="created_asc">Najstarsze</option>
+                <option value="net_desc">Najwyzsza kwota netto</option>
+                <option value="net_asc">Najnizsza kwota netto</option>
+              </select>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/50">
-                    <th className="text-left p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Student</th>
-                    <th className="text-left p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Zlecenie / Etap</th>
-                    <th className="text-right p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Brutto</th>
-                    <th className="text-right p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Prowizja platformy</th>
-                    <th className="text-right p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Netto</th>
-                    <th className="text-center p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                    <th className="text-left p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
-                    <th className="text-center p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Akcje</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payouts.map((payout) => (
-                    <tr key={payout.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                      <td className="p-4">
-                        <div className="font-semibold text-slate-800">{payout.studentName}</div>
-                      </td>
-                      <td className="p-4">
-                        <div className="text-sm text-slate-700">{payout.offerTitle}</div>
-                        <div className="text-xs text-slate-400">
-                          Etap {payout.milestoneIdx}: {payout.milestoneTitle}
-                        </div>
-                      </td>
-                      <td className="p-4 text-right font-mono text-sm">{Number(payout.amount_gross).toFixed(2)}</td>
-                      <td className="p-4 text-right font-mono text-sm text-red-600">
-                        -{Number(payout.platform_fee).toFixed(2)}
-                      </td>
-                      <td className="p-4 text-right font-mono text-sm font-bold text-emerald-700">
-                        {Number(payout.amount_net).toFixed(2)} PLN
-                      </td>
-                      <td className="p-4 text-center">{statusBadge(payout.status)}</td>
-                      <td className="p-4 text-sm text-slate-500">
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-white/5 bg-slate-950/20">
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Student
+                </th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Zlecenie i etap
+                </th>
+                <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Brutto
+                </th>
+                <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Fee
+                </th>
+                <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Netto
+                </th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Status
+                </th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Data
+                </th>
+                <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Akcje
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+                      <p className="font-bold text-slate-500">Ladowanie wyplat...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : visiblePayouts.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/5">
+                        <Wallet className="h-8 w-8 text-slate-700" />
+                      </div>
+                      <p className="font-bold text-slate-500">
+                        {search
+                          ? "Brak wyplat pasujacych do wyszukiwania."
+                          : "Brak wyplat do wyswietlenia."}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                visiblePayouts.map((payout) => (
+                  <tr key={payout.id} className="transition-colors hover:bg-white/5">
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-bold text-white">{payout.studentName}</div>
+                      <div className="mt-0.5 font-mono text-[10px] text-slate-500">
+                        ID: {payout.id.slice(0, 8)}...
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-bold text-white">{payout.offerTitle}</div>
+                      <div className="mt-0.5 text-[10px] text-slate-500">
+                        Etap {payout.milestoneIdx}: {payout.milestoneTitle}
+                      </div>
+                      <div className="mt-0.5 font-mono text-[10px] text-slate-500">
+                        Kontrakt:{" "}
+                        <Link
+                          href={`/app/admin/contracts/${payout.contract_id}`}
+                          className="transition-colors hover:text-emerald-300"
+                        >
+                          {payout.contract_id.slice(0, 8)}...
+                        </Link>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-slate-300">
+                      {formatMoney(Number(payout.amount_gross || 0))}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-rose-300">
+                      {formatMoney(Number(payout.platform_fee || 0))}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-black text-emerald-300">
+                      {formatMoney(Number(payout.amount_net || 0))}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <div className="flex">
+                        <span className={getStatusBadge(payout.status)}>
+                          {getStatusLabel(payout.status)}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <div className="text-sm font-bold text-slate-300">
                         {new Date(payout.created_at).toLocaleDateString("pl-PL", {
                           day: "numeric",
                           month: "short",
                           year: "numeric",
                         })}
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          {payout.status === "pending" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleMarkProcessing(payout.id)}
-                              disabled={isPending && actionId === payout.id}
-                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                            >
-                              {isPending && actionId === payout.id ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <>
-                                  <ArrowRight className="w-3 h-3 mr-1" />
-                                  Przetwarzaj
-                                </>
-                              )}
-                            </Button>
-                          )}
-                          {(payout.status === "pending" || payout.status === "processing") && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleMarkPaid(payout.id)}
-                              disabled={isPending && actionId === payout.id}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                            >
-                              {isPending && actionId === payout.id ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                                  Wypłacone
-                                </>
-                              )}
-                            </Button>
-                          )}
-                          {payout.status === "paid" && (
-                            <span className="text-xs text-slate-400">
-                              {payout.paid_at
-                                ? new Date(payout.paid_at).toLocaleDateString("pl-PL")
-                                : "—"}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-slate-500">
+                        {payout.paid_at
+                          ? `Wyplacono: ${new Date(payout.paid_at).toLocaleDateString("pl-PL")}`
+                          : "Jeszcze niezamknieta"}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {payout.status === "pending" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleMarkProcessing(payout.id)}
+                            disabled={isPending && actionId === payout.id}
+                            className="border-blue-400/20 bg-blue-500/10 text-blue-300 hover:bg-blue-500/15 hover:text-white"
+                          >
+                            {isPending && actionId === payout.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <>
+                                <ArrowRight className="mr-1 h-3.5 w-3.5" />
+                                Przetwarzaj
+                              </>
+                            )}
+                          </Button>
+                        ) : null}
+
+                        {(payout.status === "pending" || payout.status === "processing") && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleMarkPaid(payout.id)}
+                            disabled={isPending && actionId === payout.id}
+                            className="bg-emerald-600 text-white hover:bg-emerald-700"
+                          >
+                            {isPending && actionId === payout.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <>
+                                <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                                Wyplacone
+                              </>
+                            )}
+                          </Button>
+                        )}
+
+                        {payout.status === "paid" ? (
+                          <span className="text-xs font-medium text-slate-500">Zamkniete</span>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

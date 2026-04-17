@@ -10,46 +10,49 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ onRefresh, loading }: DashboardHeaderProps) {
   return (
-    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
-      <div>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-            <Activity className="w-5 h-5" />
+    <div className="relative overflow-hidden rounded-[2.5rem] border border-white/5 bg-slate-900/60 p-8 shadow-2xl shadow-black/20">
+      <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+        <div>
+          <div className="mb-2 flex items-center gap-3">
+            <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/20 p-3 text-indigo-300">
+              <Activity className="h-5 w-5" />
+            </div>
+            <h1 className="text-4xl font-black uppercase tracking-tight text-white">
+              Platform <span className="text-indigo-300">Intelligence</span>
+            </h1>
           </div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight italic uppercase">
-            Platform <span className="text-indigo-600">Intelligence</span>
-          </h1>
+          <p className="max-w-xl font-medium text-slate-300">
+            Zaawansowana analityka biznesowa, lejek konwersji i audyt finansowy
+            platformy Student2Work.
+          </p>
         </div>
-        <p className="text-slate-500 font-medium max-w-xl">
-          Zaawansowana analityka biznesowa, lejek konwersji i audyt finansowy platformy Student2Work.
-        </p>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm text-sm font-bold text-slate-600">
-          <Calendar className="w-4 h-4 text-indigo-500" />
-          Ostatnie 30 dni
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200">
+            <Calendar className="h-4 w-4 text-indigo-300" />
+            Ostatnie 30 dni
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRefresh}
+            disabled={loading}
+            className="h-10 gap-2 rounded-2xl border-white/10 bg-white/5 px-6 text-xs font-bold uppercase tracking-widest text-slate-200 hover:bg-white/10 hover:text-white"
+          >
+            <RefreshCcw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Odswiez
+          </Button>
+
+          <Button
+            variant="default"
+            size="sm"
+            className="h-10 gap-2 rounded-2xl bg-indigo-500 px-6 text-xs font-bold uppercase tracking-widest text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-400"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Eksportuj raport
+          </Button>
         </div>
-        
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={onRefresh}
-          disabled={loading}
-          className="rounded-2xl border-slate-200 hover:bg-slate-50 font-bold text-xs uppercase tracking-widest h-10 px-6 gap-2"
-        >
-          <RefreshCcw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Odśwież
-        </Button>
-
-        <Button 
-          variant="default" 
-          size="sm" 
-          className="rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-widest h-10 px-6 gap-2 shadow-lg shadow-slate-200"
-        >
-          <Download className="w-3.5 h-3.5" />
-          Eksportuj Raport
-        </Button>
       </div>
     </div>
   );

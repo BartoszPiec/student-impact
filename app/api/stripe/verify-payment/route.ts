@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 import { resolveCommissionRate } from "@/lib/commission";
+import { trySendNotification } from "@/lib/notifications/server";
 import Stripe from "stripe";
 
 function resolveFeePln(
@@ -122,15 +123,11 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (contractData?.student_id) {
-        await admin.rpc("create_notification", {
-          p_user_id: contractData.student_id,
-          p_typ: "contract_funded",
-          p_payload: {
-            contract_id: contractId,
-            application_id: applicationId || null,
-            service_order_id: serviceOrderId || null,
-            amount: session.amount_total ? session.amount_total / 100 : 0,
-          },
+        await trySendNotification(contractData.student_id, "contract_funded", {
+          contract_id: contractId,
+          application_id: applicationId || null,
+          service_order_id: serviceOrderId || null,
+          amount: session.amount_total ? session.amount_total / 100 : 0,
         });
       }
     } catch (error) {

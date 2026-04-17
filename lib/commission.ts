@@ -10,6 +10,19 @@ type ResolveCommissionRateOptions = {
 export const DEFAULT_JOB_COMMISSION_RATE = 0.1;
 export const DEFAULT_MICRO_COMMISSION_RATE = 0.15;
 export const DEFAULT_PLATFORM_SERVICE_COMMISSION_RATE = 0.2;
+export const ALLOWED_COMMISSION_RATE_OPTIONS = [0.1, 0.15, 0.2] as const;
+
+export function isAllowedCommissionRate(rate: number | null | undefined): boolean {
+  return rate == null || ALLOWED_COMMISSION_RATE_OPTIONS.includes(rate as (typeof ALLOWED_COMMISSION_RATE_OPTIONS)[number]);
+}
+
+export function formatCommissionRateLabel(rate: number | null | undefined): string {
+  if (rate == null) {
+    return "Auto";
+  }
+
+  return `${Math.round(rate * 100)}%`;
+}
 
 export function normalizeCommissionRate(rate: number | null | undefined): number | null {
   if (rate == null || !Number.isFinite(rate)) {

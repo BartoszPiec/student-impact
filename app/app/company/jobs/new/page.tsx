@@ -11,15 +11,14 @@ export default async function NewJobPage() {
 
     if (!user) redirect("/auth");
 
-    // Sprawdź czy to firma
     const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
     if (profile?.role !== "company") redirect("/app");
 
     return (
         <main className="pb-20">
             <PremiumPageHeader
-                title="Dodaj Ogłoszenie"
-                description="Wybierz rodzaj ogłoszenia. Możesz zlecić szybkie zadanie (mikrozlecenie) lub znaleźć stażystę na dłuższą metę."
+                title="Dodaj ogloszenie"
+                description="Wybierz typ wspolpracy i przygotuj brief, ktory ulatwi aplikowanie, negocjacje i dalsza wspolprace."
                 badge="Strefa Rekrutera"
                 icon={<Briefcase className="w-10 h-10" />}
             />
