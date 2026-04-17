@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import * as Sentry from "@sentry/nextjs";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
+import { buildRateLimitKey, enforceRateLimit, getRequestIp } from "@/lib/rate-limit";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -176,12 +177,38 @@ async function verifyJwtLocal(token: string): Promise<AuthState> {
 }
 
 export async function proxy(request: NextRequest) {
-  const response = NextResponse.next();
   const path = request.nextUrl.pathname;
   const isApp = path.startsWith("/app");
   const isAuth = path.startsWith("/auth");
   const isAdminRoute = path.startsWith("/app/admin");
   const isOnboardingRoute = path.startsWith("/app/onboarding") || path.startsWith("/app/profile");
+  const ip = getRequestIp(request);
+
+  if (isAuth) {
+    const authLimit = await enforceRateLimit("auth", buildRateLimitKey(["auth", ip]));
+    if (!authLimit.success) {
+      return new NextResponse("Too Many Requests", {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.max(Math.ceil((authLimit.reset - Date.now()) / 1000), 1)),
+        },
+      });
+    }
+  }
+
+  if (isApp) {
+    const appLimit = await enforceRateLimit("api", buildRateLimitKey(["app", ip]));
+    if (!appLimit.success) {
+      return new NextResponse("Too Many Requests", {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.max(Math.ceil((appLimit.reset - Date.now()) / 1000), 1)),
+        },
+      });
+    }
+  }
+
+  const response = NextResponse.next();
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {

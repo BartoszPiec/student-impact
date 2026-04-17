@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
+import Script from "next/script";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/browser";
+import { createClient } from "@/lib/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,7 @@ function getRequestedRole(): "student" | "company" | null {
 export default function AuthPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const [role, setRole] = useState<"student" | "company">(() => getRequestedRole() ?? "student");
   const [tab, setTab] = useState<"login" | "register">(() => (getRequestedRole() ? "register" : "login"));
   const [email, setEmail] = useState("");
@@ -70,6 +72,31 @@ export default function AuthPage() {
 
     return () => window.clearInterval(interval);
   }, []);
+
+  async function verifyTurnstile(token: string): Promise<string | null> {
+    if (!turnstileSiteKey) {
+      return null;
+    }
+
+    if (!token) {
+      return "Potwierdź, że nie jesteś botem.";
+    }
+
+    const response = await fetch("/api/auth/verify-turnstile", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token }),
+    });
+
+    const payload = await response.json().catch(() => null) as { success?: boolean; error?: string } | null;
+    if (!response.ok || payload?.success !== true) {
+      return payload?.error || "Weryfikacja CAPTCHA nie powiodła się.";
+    }
+
+    return null;
+  }
 
   async function handlePasswordReset() {
     const emailErr = validateEmail(email);
@@ -98,6 +125,14 @@ export default function AuthPage() {
 
   async function signUp(e: React.FormEvent) {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget as HTMLFormElement);
+    const turnstileToken = String(formData.get("cf-turnstile-response") ?? "");
+
+    const turnstileError = await verifyTurnstile(turnstileToken);
+    if (turnstileError) {
+      setInfo(turnstileError);
+      return;
+    }
 
     const emailErr = validateEmail(email);
     if (emailErr) {
@@ -157,6 +192,14 @@ export default function AuthPage() {
 
   async function signIn(e: React.FormEvent) {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget as HTMLFormElement);
+    const turnstileToken = String(formData.get("cf-turnstile-response") ?? "");
+
+    const turnstileError = await verifyTurnstile(turnstileToken);
+    if (turnstileError) {
+      setInfo(turnstileError);
+      return;
+    }
 
     const emailErr = validateEmail(email);
     if (emailErr) {
@@ -187,6 +230,10 @@ export default function AuthPage() {
 
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
+      {turnstileSiteKey ? (
+        <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" />
+      ) : null}
+
       <div className="relative hidden overflow-hidden bg-[#14213d] p-12 text-white lg:flex lg:flex-col">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(242,95,92,0.24),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(77,124,255,0.3),_transparent_35%),linear-gradient(135deg,_#14213d_0%,_#0d1730_100%)]" />
         <div className="absolute left-[10%] top-[15%] h-20 w-20 rounded-[1.5rem] border-2 border-white/10 animate-[spin_20s_linear_infinite]" />
@@ -248,8 +295,8 @@ export default function AuthPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center bg-gradient-to-br from-[#f5f7fa] to-[#e5e7eb] p-8">
-        <div className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-gray-100 bg-white p-8 shadow-xl">
+      <div className="flex items-center justify-center bg-gradient-to-br from-[#f5f7fa] to-[#e5e7eb] p-4 sm:p-8">
+        <div className="relative w-full max-w-md overflow-hidden rounded-[1.5rem] sm:rounded-[2rem] border border-gray-100 bg-white p-5 sm:p-8 shadow-xl">
           <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-[#f25f5c] via-[#f7b267] to-[#4d7cff]" />
 
           <div className="space-y-2 text-center">
@@ -317,6 +364,10 @@ export default function AuthPage() {
                 >
                   {loading ? "Logowanie..." : "Zaloguj się"}
                 </Button>
+
+                {turnstileSiteKey ? (
+                  <div className="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="light" />
+                ) : null}
               </form>
             </TabsContent>
 
@@ -433,6 +484,10 @@ export default function AuthPage() {
                 >
                   {loading ? "Rejestracja..." : "Załóż darmowe konto"}
                 </Button>
+
+                {turnstileSiteKey ? (
+                  <div className="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="light" />
+                ) : null}
               </form>
             </TabsContent>
           </Tabs>

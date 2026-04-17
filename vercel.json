@@ -2,7 +2,15 @@
   "crons": [
     {
       "path": "/api/cron/auto-accept",
-      "schedule": "0 1 * * *"
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/process-stripe-events",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-expired-sessions",
+      "schedule": "0 2 * * *"
     }
   ]
 }

@@ -43,11 +43,11 @@ const nextConfig: NextConfig = {
 
     const csp = [
       "default-src 'self'",
-      `script-src 'self' ${isDev ? "'unsafe-eval' 'unsafe-inline'" : "'unsafe-inline'"} https://js.stripe.com https://browser.sentry-cdn.com`,
+      `script-src 'self' ${isDev ? "'unsafe-eval' 'unsafe-inline'" : "'unsafe-inline'"} https://js.stripe.com https://browser.sentry-cdn.com https://challenges.cloudflare.com`,
       "style-src 'self' 'unsafe-inline'",
       `img-src 'self' data: blob: ${supabaseOrigin} https://*.stripe.com`,
-      `connect-src 'self' ${supabaseOrigin} wss://${supabaseHost} https://api.stripe.com https://*.ingest.sentry.io`,
-      "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
+      `connect-src 'self' ${supabaseOrigin} wss://${supabaseHost} https://api.stripe.com https://*.ingest.sentry.io https://challenges.cloudflare.com`,
+      "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
       "font-src 'self' data:",
       "object-src 'none'",
       "base-uri 'self'",
