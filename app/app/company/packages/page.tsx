@@ -35,6 +35,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const ACTIVE_SYSTEM_PACKAGE_IDS = new Set<string>([
+  "5de0e9f6-3768-4732-987b-5c0073591646", // Projekt Logo
+  "c9fea07e-ba17-4dba-b15e-5b045cd267db", // Miesięczny Pakiet Social Media
+  "d2c5a96c-e955-440b-bd29-d94e96aadcc5", // Setup email marketingu
+]);
+
 // ── Strip Markdown helper ────────────────────────────────────
 function stripMarkdown(text: string): string {
   if (!text) return '';
@@ -233,7 +239,11 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
     return true;
   };
 
-  let platformServices = servicePackages?.filter((p: any) => p.type === 'platform_service' && filterByAll(p)) || [];
+  let platformServices = servicePackages?.filter((p: any) =>
+    p.type === "platform_service"
+    && ACTIVE_SYSTEM_PACKAGE_IDS.has(String(p.id))
+    && filterByAll(p),
+  ) || [];
   let studentServices = servicePackages?.filter((p: any) => (!p.type || p.type === 'student_gig') && filterByAll(p)) || [];
 
   // Enrich Student Services with Ranking & Tags
