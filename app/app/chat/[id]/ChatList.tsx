@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { markMessagesAsRead } from "../_actions";
 import { normalizeMessage } from "@/app/lib/chat/chatEventUtils";
 import { TextBubble } from "../_components/TextBubble";
@@ -12,6 +12,7 @@ import { SystemEventRow } from "../_components/SystemEventRow";
 import { InquiryCard } from "../_components/InquiryCard";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
+import { createClient } from "@/lib/supabase/client";
 
 type ChatMessageRecord = {
     id: string;
@@ -50,12 +51,51 @@ export function ChatList({
     userId: string;
     conversationId: string;
 }) {
+    const supabase = useMemo(() => createClient(), []);
     const bottomRef = useRef<HTMLDivElement>(null);
+    const [liveMessages, setLiveMessages] = useState<ChatMessageRecord[]>(messages);
+
+    useEffect(() => {
+        setLiveMessages(messages);
+    }, [messages]);
+
+    useEffect(() => {
+        const channel = supabase
+            .channel(`messages:${conversationId}`)
+            .on(
+                "postgres_changes",
+                {
+                    event: "INSERT",
+                    schema: "public",
+                    table: "messages",
+                    filter: `conversation_id=eq.${conversationId}`,
+                },
+                (payload) => {
+                    const incoming = payload.new as ChatMessageRecord;
+                    const normalized = normalizeMessage(incoming, userId);
+
+                    setLiveMessages((previous) => {
+                        if (previous.some((message) => message.id === normalized.id)) {
+                            return previous;
+                        }
+
+                        const next = [...previous, incoming];
+                        next.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                        return next;
+                    });
+                },
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [conversationId, userId, supabase]);
 
     // 1. Normalize messages
     const normalizedMessages = useMemo(() => {
-        return messages.map((message) => normalizeMessage(message, userId));
-    }, [messages, userId]);
+        return liveMessages.map((message) => normalizeMessage(message, userId));
+    }, [liveMessages, userId]);
 
     // 2. Identify Latest Proposals
     const statusMap = useMemo(() => {
@@ -91,18 +131,18 @@ export function ChatList({
     }, [normalizedMessages]);
 
 
-    const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
+    const lastMessageId = liveMessages.length > 0 ? liveMessages[liveMessages.length - 1].id : null;
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }, [lastMessageId]);
 
     useEffect(() => {
-        const hasUnread = messages.some((message) => !message.read_at && message.sender_id !== userId);
+        const hasUnread = liveMessages.some((message) => !message.read_at && message.sender_id !== userId);
         if (conversationId && hasUnread) {
             markMessagesAsRead(conversationId).catch(console.error);
         }
-    }, [conversationId, messages, userId]);
+    }, [conversationId, liveMessages, userId]);
 
     if (normalizedMessages.length === 0) {
         return (
@@ -162,7 +202,7 @@ export function ChatList({
 
                             {msg.event === "rate.proposed" && (() => {
                                 // Extract rate from payload with multiple fallbacks
-                                let rateValue = getPayloadNumber(msg.payload, "proposed_stawka")
+                                const rateValue = getPayloadNumber(msg.payload, "proposed_stawka")
                                     ?? getPayloadNumber(msg.payload, "amount")
                                     ?? (msg.content ? parseFloat(msg.content.replace(/[^\d.]/g, '')) : undefined);
                                 
