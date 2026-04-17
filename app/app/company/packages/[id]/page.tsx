@@ -529,6 +529,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
             type: "default",
         });
     }
+    const firstSectionId = navItems[0]?.id || null;
 
     const relatedServiceIds = Array.isArray((pkg as any).related_service_ids)
         ? (pkg as any).related_service_ids.filter((value: unknown): value is string => typeof value === "string")
@@ -573,93 +574,144 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
     }
 
     return (
-        <main className="min-h-screen bg-slate-50/50 pb-20 font-sans">
+        <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#0f172a_0%,_#070b16_45%,_#04070f_100%)] pb-24 font-sans">
 
-            {/* PREMIUM DARK HERO */}
-            <div className={`relative overflow-hidden bg-[#0a0f1c] pb-32 pt-16`}>
+            {/* PREMIUM HERO */}
+            <div className={`relative overflow-hidden bg-[#070b16] pb-24 pt-14 lg:pb-28`}>
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div className={`absolute top-[-20%] left-[-10%] w-[50%] h-[80%] rounded-full opacity-20 blur-[120px] bg-gradient-to-br ${config.gradient}`} />
-                    <div className={`absolute bottom-[-20%] right-[-10%] w-[40%] h-[60%] rounded-full opacity-20 blur-[100px] bg-gradient-to-tl ${config.gradient}`} />
-                    <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-[0.03] bg-repeat" />
+                    <div className={`absolute top-[-25%] left-[-5%] h-[85%] w-[55%] rounded-full bg-gradient-to-br ${config.gradient} opacity-25 blur-[140px]`} />
+                    <div className={`absolute bottom-[-35%] right-[-8%] h-[75%] w-[45%] rounded-full bg-gradient-to-tl ${config.gradient} opacity-30 blur-[120px]`} />
+                    <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:56px_56px] opacity-25" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#070b16]/50 to-[#070b16]" />
                 </div>
 
                 <PageContainer className="relative z-10">
-                    <Link href="/app/company/packages" className="inline-flex items-center text-sm font-medium text-slate-300 hover:text-white mb-10 transition-colors group bg-white/5 backdrop-blur-md px-5 py-2.5 rounded-full border border-white/10 hover:bg-white/10">
-                        <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
+                    <Link href="/app/company/packages" className="group mb-10 inline-flex items-center rounded-full border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
+                        <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" />
                         Wroc do katalogu
                     </Link>
 
-                    <div className="max-w-4xl">
-                        <div className="flex flex-wrap items-center gap-3 mb-8">
-                            <Badge className={`bg-white/10 backdrop-blur-md border border-white/10 text-white text-sm font-medium px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.05)]`}>
-                                <Zap className="w-4 h-4 mr-1.5 opacity-80" />
-                                {pkg.category || "Usluga systemowa"}
-                            </Badge>
-                            {pkg.type === 'student_gig' && (
-                                <Badge className="bg-blue-500/20 backdrop-blur-md border border-blue-400/20 text-blue-100 text-sm font-medium px-4 py-1.5 rounded-full">
-                                    <Users className="w-4 h-4 mr-1.5" />
-                                    Oferta Studenta
+                    <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-end">
+                        <div className="max-w-4xl">
+                            <div className="mb-8 flex flex-wrap items-center gap-3">
+                                <Badge className="rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-sm font-medium text-white">
+                                    <Zap className="mr-1.5 h-4 w-4 opacity-80" />
+                                    {pkg.category || "Usluga systemowa"}
                                 </Badge>
-                            )}
-                            {pkg.requires_nda && (
-                                <Badge className="bg-rose-500/20 backdrop-blur-md border border-rose-400/20 text-rose-100 text-sm font-medium px-4 py-1.5 rounded-full">
-                                    <ShieldAlert className="w-4 h-4 mr-1.5" />
-                                    Wymaga NDA
-                                </Badge>
-                            )}
-                            {hasVariants && (
-                                <Badge className="bg-amber-500/20 backdrop-blur-md border border-amber-400/20 text-amber-100 text-sm font-medium px-4 py-1.5 rounded-full">
-                                    <Package className="w-4 h-4 mr-1.5" />
-                                    {variants.length} warianty
-                                </Badge>
-                            )}
+                                {pkg.type === "student_gig" && (
+                                    <Badge className="rounded-full border border-blue-300/20 bg-blue-500/20 px-4 py-1.5 text-sm font-medium text-blue-100">
+                                        <Users className="mr-1.5 h-4 w-4" />
+                                        Oferta Studenta
+                                    </Badge>
+                                )}
+                                {pkg.requires_nda && (
+                                    <Badge className="rounded-full border border-rose-300/20 bg-rose-500/20 px-4 py-1.5 text-sm font-medium text-rose-100">
+                                        <ShieldAlert className="mr-1.5 h-4 w-4" />
+                                        Wymaga NDA
+                                    </Badge>
+                                )}
+                                {hasVariants && (
+                                    <Badge className="rounded-full border border-amber-300/20 bg-amber-500/20 px-4 py-1.5 text-sm font-medium text-amber-100">
+                                        <Package className="mr-1.5 h-4 w-4" />
+                                        {variants.length} warianty
+                                    </Badge>
+                                )}
+                            </div>
+                            <h1 className="mb-6 text-4xl font-extrabold leading-tight tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-slate-300 md:text-6xl lg:text-7xl">
+                                {displayTitle}
+                            </h1>
+                            <p className="max-w-3xl text-lg leading-relaxed text-slate-300 md:text-2xl">
+                                {heroSubtitle}
+                            </p>
+
+                            <div className="mt-10 flex flex-wrap items-center gap-3">
+                                <Button asChild className={`h-12 rounded-full bg-gradient-to-r px-7 text-base font-bold text-white shadow-xl shadow-indigo-900/30 ${config.gradient} hover:opacity-95`}>
+                                    <Link href={`/app/company/packages/${pkg.id}/customize`}>
+                                        Rozpocznij brief
+                                        <ArrowRight className="ml-2 h-4 w-4" />
+                                    </Link>
+                                </Button>
+                                {firstSectionId ? (
+                                    <Button asChild variant="outline" className="h-12 rounded-full border-white/20 bg-white/5 px-7 text-base font-semibold text-slate-100 hover:bg-white/10">
+                                        <Link href={`#${firstSectionId}`}>
+                                            Zobacz szczegoly
+                                        </Link>
+                                    </Button>
+                                ) : null}
+                            </div>
                         </div>
-                        <h1 className="text-4xl md:text-5xl lg:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-white to-white/70 mb-6 leading-tight tracking-tight">
-                            {displayTitle}
-                        </h1>
-                        <p className="text-xl md:text-2xl text-slate-300 max-w-3xl leading-relaxed font-light">
-                            {heroSubtitle}
-                        </p>
+
+                        <div className="hidden lg:block">
+                            <div className="relative overflow-hidden rounded-[2rem] border border-white/15 bg-white/[0.04] p-6 backdrop-blur-xl shadow-[0_35px_90px_-40px_rgba(8,47,73,0.9)]">
+                                <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${config.gradient}`} />
+                                <div className="mb-5 flex items-center justify-between">
+                                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-300">Snapshot pakietu</p>
+                                    <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-200">
+                                        Escrow aktywne
+                                    </span>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Cena startowa</p>
+                                        <p className="mt-2 text-3xl font-extrabold text-white">{minVariantPrice} PLN</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Realizacja</p>
+                                            <p className="mt-1 text-base font-bold text-slate-100">{deliveryRangeLabel}</p>
+                                        </div>
+                                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Platnosc</p>
+                                            <p className="mt-1 text-base font-bold text-slate-100">Po akceptacji</p>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Zakres wspolpracy</p>
+                                        <div className="h-2 w-full rounded-full bg-white/10">
+                                            <div className={`h-2 rounded-full bg-gradient-to-r ${config.gradient} w-4/5`} />
+                                        </div>
+                                        <p className="text-sm text-slate-300">Brief, realizacja, poprawki, finalne pliki.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </PageContainer>
             </div>
 
-            {/* OVERLAPPING BENTO GRID (Trust Signals) */}
-            <PageContainer className="relative z-20 -mt-20 mb-12">
+            {/* KEY FACTS STRIP */}
+            <PageContainer className="relative z-20 -mt-8 mb-14">
                 <AnimateOnScroll>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-                        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-1">
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-100 to-emerald-50 flex items-center justify-center mb-4 border border-emerald-100/50">
-                                <Coins className="w-6 h-6 text-emerald-600" />
+                    <div className="overflow-hidden rounded-[1.75rem] border border-white/15 bg-white/[0.05] shadow-[0_25px_60px_-35px_rgba(15,23,42,0.9)] backdrop-blur-xl">
+                        <div className="grid grid-cols-2 divide-x divide-y divide-white/10 md:grid-cols-4 md:divide-y-0">
+                            <div className="p-5 md:p-6">
+                                <div className="mb-2 flex items-center gap-2 text-slate-300">
+                                    <Coins className="h-4 w-4" />
+                                    <span className="text-xs font-bold uppercase tracking-[0.2em]">Cena od</span>
+                                </div>
+                                <p className="text-2xl font-extrabold text-white">{minVariantPrice} PLN</p>
                             </div>
-                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Cena od</div>
-                            <div className="text-2xl font-extrabold text-slate-900">{minVariantPrice} PLN</div>
-                        </div>
-
-                        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-1">
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center mb-4 border border-blue-100/50">
-                                <Timer className="w-6 h-6 text-blue-600" />
+                            <div className="p-5 md:p-6">
+                                <div className="mb-2 flex items-center gap-2 text-slate-300">
+                                    <Timer className="h-4 w-4" />
+                                    <span className="text-xs font-bold uppercase tracking-[0.2em]">Realizacja</span>
+                                </div>
+                                <p className="text-2xl font-extrabold text-white">{deliveryRangeLabel}</p>
                             </div>
-                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Realizacja</div>
-                            <div className="text-2xl font-extrabold text-slate-900">
-                                {deliveryRangeLabel}
+                            <div className="p-5 md:p-6">
+                                <div className="mb-2 flex items-center gap-2 text-slate-300">
+                                    <Shield className="h-4 w-4" />
+                                    <span className="text-xs font-bold uppercase tracking-[0.2em]">Platnosc</span>
+                                </div>
+                                <p className="text-2xl font-extrabold text-white">Escrow</p>
                             </div>
-                        </div>
-
-                        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-1">
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-100 to-violet-50 flex items-center justify-center mb-4 border border-violet-100/50">
-                                <Shield className="w-6 h-6 text-violet-600" />
+                            <div className="p-5 md:p-6">
+                                <div className="mb-2 flex items-center gap-2 text-slate-300">
+                                    <ShieldCheck className="h-4 w-4" />
+                                    <span className="text-xs font-bold uppercase tracking-[0.2em]">Gwarancja</span>
+                                </div>
+                                <p className="text-2xl font-extrabold text-white">Satysfakcji</p>
                             </div>
-                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Platnosc</div>
-                            <div className="text-2xl font-extrabold text-slate-900">Escrow</div>
-                        </div>
-
-                        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-1">
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-100 to-amber-50 flex items-center justify-center mb-4 border border-amber-100/50">
-                                <ShieldCheck className="w-6 h-6 text-amber-600" />
-                            </div>
-                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Gwarancja</div>
-                            <div className="text-2xl font-extrabold text-slate-900">Satysfakcji</div>
                         </div>
                     </div>
                 </AnimateOnScroll>
@@ -667,13 +719,15 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
 
             {/* SECTION NAV (sticky anchor navigation) */}
             {navItems.length > 0 && (
-                <div className="hidden lg:block relative z-30 mb-8">
+                <div className="relative z-30 mb-12 hidden lg:block">
                     <SectionNav sections={navItems} gradient={config.gradient} />
                 </div>
             )}
 
             {/* MAIN CONTENT */}
-            <PageContainer>
+            <PageContainer className="relative">
+                <div className={`pointer-events-none absolute -left-24 top-20 h-72 w-72 rounded-full bg-gradient-to-br ${config.gradient} opacity-20 blur-[110px]`} />
+                <div className="pointer-events-none absolute -right-24 bottom-24 h-80 w-80 rounded-full bg-indigo-400/20 blur-[120px]" />
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
 
                     {/* LEFT COLUMN: Section Cards */}
@@ -682,7 +736,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                         {/* Intro section */}
                         {introText && (
                             <AnimateOnScroll delay={100}>
-                                <div className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20 mb-8 relative overflow-hidden group hover:shadow-2xl hover:shadow-slate-200/30 transition-all duration-500">
+                                <div className="relative mb-8 overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] transition-all duration-500 group hover:shadow-[0_40px_90px_-45px_rgba(15,23,42,0.65)] md:p-12">
                                     <div className={`absolute top-0 left-0 w-2 h-full bg-gradient-to-b ${config.gradient} rounded-l-[2rem] opacity-80 group-hover:opacity-100 transition-opacity`} />
                                     
                                     <div className="flex items-start gap-5 mb-8">
@@ -709,7 +763,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                     <div
                                         id={sectionId}
                                         className={cn(
-                                            "bg-white/70 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20 scroll-mt-[120px] relative overflow-hidden group hover:shadow-2xl hover:shadow-slate-200/30 transition-all duration-500",
+                                            "relative scroll-mt-[120px] overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] transition-all duration-500 group hover:shadow-[0_40px_90px_-45px_rgba(15,23,42,0.65)] sm:p-8 md:p-12",
                                             sConfig.bgClass
                                         )}
                                     >
@@ -761,7 +815,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
 
                         {sections.length === 0 && cleanDescription && (
                             <AnimateOnScroll delay={100}>
-                                <div className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
+                                <div className="rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] md:p-12">
                                     <MarkdownLite content={cleanDescription} />
                                 </div>
                             </AnimateOnScroll>
@@ -769,7 +823,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
 
                         {briefPreviewSections.length > 0 && (
                             <AnimateOnScroll delay={220}>
-                                <div className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
+                                <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] sm:p-8 md:p-12">
                                     <div className="flex items-start gap-5 mb-8">
                                         <div className={`w-16 h-16 rounded-2xl ${config.lightBg} flex items-center justify-center shrink-0 border border-white shadow-inner`}>
                                             <FileText className={`w-8 h-8 ${config.darkText}`} />
@@ -805,7 +859,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                             <AnimateOnScroll delay={260}>
                                 <div
                                     id={FAQ_SECTION_ID}
-                                    className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20 scroll-mt-[120px]"
+                                    className="scroll-mt-[120px] rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] sm:p-8 md:p-12"
                                 >
                                     <div className="flex items-start gap-5 mb-8">
                                         <div className={`w-16 h-16 rounded-2xl ${config.lightBg} flex items-center justify-center shrink-0 border border-white shadow-inner`}>
@@ -835,7 +889,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
 
                         {isLogoPackage && (
                             <AnimateOnScroll delay={280}>
-                                <div className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
+                                <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] sm:p-8 md:p-12">
                                     <div className="flex items-start gap-5 mb-8">
                                         <div className={`w-16 h-16 rounded-2xl ${config.lightBg} flex items-center justify-center shrink-0 border border-white shadow-inner`}>
                                             <Users className={`w-8 h-8 ${config.darkText}`} />
@@ -857,7 +911,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
 
                         {relatedServices.length > 0 && (
                             <AnimateOnScroll delay={300}>
-                                <div className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
+                                <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] sm:p-8 md:p-12">
                                     <div className="flex items-start gap-5 mb-8">
                                         <div className={`w-16 h-16 rounded-2xl ${config.lightBg} flex items-center justify-center shrink-0 border border-white shadow-inner`}>
                                             <Sparkles className={`w-8 h-8 ${config.darkText}`} />
