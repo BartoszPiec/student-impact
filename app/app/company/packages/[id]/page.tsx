@@ -574,19 +574,20 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
     }
 
     return (
-        <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#0f172a_0%,_#070b16_45%,_#04070f_100%)] pb-24 font-sans">
+        <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#f8f9ff_0%,_#f3f5ff_35%,_#edf2ff_100%)] pb-24 font-sans">
 
             {/* PREMIUM HERO */}
-            <div className={`relative overflow-hidden bg-[#070b16] pb-24 pt-14 lg:pb-28`}>
+            <div className="relative overflow-hidden border-b border-indigo-100/60 bg-gradient-to-br from-[#f7f9ff] via-white to-[#edf2ff] pb-24 pt-14 lg:pb-28">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div className={`absolute top-[-25%] left-[-5%] h-[85%] w-[55%] rounded-full bg-gradient-to-br ${config.gradient} opacity-25 blur-[140px]`} />
-                    <div className={`absolute bottom-[-35%] right-[-8%] h-[75%] w-[45%] rounded-full bg-gradient-to-tl ${config.gradient} opacity-30 blur-[120px]`} />
-                    <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:56px_56px] opacity-25" />
-                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#070b16]/50 to-[#070b16]" />
+                    <div className={`absolute -left-24 top-[-30%] h-[70%] w-[45%] rounded-full bg-gradient-to-br ${config.gradient} opacity-20 blur-[120px]`} />
+                    <div className={`absolute -right-20 bottom-[-30%] h-[65%] w-[40%] rounded-full bg-gradient-to-tl ${config.gradient} opacity-20 blur-[120px]`} />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.08),transparent_42%),radial-gradient(circle_at_80%_65%,rgba(168,85,247,0.08),transparent_40%)]" />
+                    <div className="absolute left-1/2 top-10 h-[560px] w-[560px] -translate-x-1/2 rounded-full border border-indigo-200/40" />
+                    <div className="absolute left-1/2 top-16 h-[480px] w-[480px] -translate-x-1/2 rounded-full border border-indigo-100/50" />
                 </div>
 
                 <PageContainer className="relative z-10">
-                    <Link href="/app/company/packages" className="group mb-10 inline-flex items-center rounded-full border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
+                    <Link href="/app/company/packages" className="group mb-10 inline-flex items-center rounded-full border border-slate-200 bg-white/90 px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-white hover:text-slate-900">
                         <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" />
                         Wroc do katalogu
                     </Link>
@@ -594,33 +595,33 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                     <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-end">
                         <div className="max-w-4xl">
                             <div className="mb-8 flex flex-wrap items-center gap-3">
-                                <Badge className="rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-sm font-medium text-white">
-                                    <Zap className="mr-1.5 h-4 w-4 opacity-80" />
+                                <Badge className="rounded-full border border-indigo-200 bg-indigo-50/90 px-4 py-1.5 text-sm font-semibold text-indigo-700">
+                                    <Zap className="mr-1.5 h-4 w-4 opacity-90" />
                                     {pkg.category || "Usluga systemowa"}
                                 </Badge>
                                 {pkg.type === "student_gig" && (
-                                    <Badge className="rounded-full border border-blue-300/20 bg-blue-500/20 px-4 py-1.5 text-sm font-medium text-blue-100">
+                                    <Badge className="rounded-full border border-blue-200 bg-blue-50/90 px-4 py-1.5 text-sm font-semibold text-blue-700">
                                         <Users className="mr-1.5 h-4 w-4" />
                                         Oferta Studenta
                                     </Badge>
                                 )}
                                 {pkg.requires_nda && (
-                                    <Badge className="rounded-full border border-rose-300/20 bg-rose-500/20 px-4 py-1.5 text-sm font-medium text-rose-100">
+                                    <Badge className="rounded-full border border-rose-200 bg-rose-50/90 px-4 py-1.5 text-sm font-semibold text-rose-700">
                                         <ShieldAlert className="mr-1.5 h-4 w-4" />
                                         Wymaga NDA
                                     </Badge>
                                 )}
                                 {hasVariants && (
-                                    <Badge className="rounded-full border border-amber-300/20 bg-amber-500/20 px-4 py-1.5 text-sm font-medium text-amber-100">
+                                    <Badge className="rounded-full border border-amber-200 bg-amber-50/90 px-4 py-1.5 text-sm font-semibold text-amber-700">
                                         <Package className="mr-1.5 h-4 w-4" />
                                         {variants.length} warianty
                                     </Badge>
                                 )}
                             </div>
-                            <h1 className="mb-6 text-4xl font-extrabold leading-tight tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-slate-300 md:text-6xl lg:text-7xl">
+                            <h1 className="mb-6 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-700 bg-clip-text text-4xl font-extrabold leading-tight tracking-tight text-transparent md:text-6xl lg:text-7xl">
                                 {displayTitle}
                             </h1>
-                            <p className="max-w-3xl text-lg leading-relaxed text-slate-300 md:text-2xl">
+                            <p className="max-w-3xl text-lg leading-relaxed text-slate-600 md:text-2xl">
                                 {heroSubtitle}
                             </p>
 
@@ -632,7 +633,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                     </Link>
                                 </Button>
                                 {firstSectionId ? (
-                                    <Button asChild variant="outline" className="h-12 rounded-full border-white/20 bg-white/5 px-7 text-base font-semibold text-slate-100 hover:bg-white/10">
+                                    <Button asChild variant="outline" className="h-12 rounded-full border-slate-300 bg-white px-7 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900">
                                         <Link href={`#${firstSectionId}`}>
                                             Zobacz szczegoly
                                         </Link>
@@ -642,35 +643,36 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                         </div>
 
                         <div className="hidden lg:block">
-                            <div className="relative overflow-hidden rounded-[2rem] border border-white/15 bg-white/[0.04] p-6 backdrop-blur-xl shadow-[0_35px_90px_-40px_rgba(8,47,73,0.9)]">
+                            <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white/95 p-6 shadow-[0_35px_90px_-45px_rgba(71,85,105,0.35)]">
                                 <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${config.gradient}`} />
+                                <div className="pointer-events-none absolute -right-20 -top-20 h-44 w-44 rounded-full bg-indigo-100/70 blur-2xl" />
                                 <div className="mb-5 flex items-center justify-between">
-                                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-300">Snapshot pakietu</p>
-                                    <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-200">
+                                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Snapshot pakietu</p>
+                                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
                                         Escrow aktywne
                                     </span>
                                 </div>
                                 <div className="space-y-4">
-                                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Cena startowa</p>
-                                        <p className="mt-2 text-3xl font-extrabold text-white">{minVariantPrice} PLN</p>
+                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+                                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Cena startowa</p>
+                                        <p className="mt-2 text-3xl font-extrabold text-slate-900">{minVariantPrice} PLN</p>
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
-                                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Realizacja</p>
-                                            <p className="mt-1 text-base font-bold text-slate-100">{deliveryRangeLabel}</p>
+                                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Realizacja</p>
+                                            <p className="mt-1 text-base font-bold text-slate-800">{deliveryRangeLabel}</p>
                                         </div>
-                                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Platnosc</p>
-                                            <p className="mt-1 text-base font-bold text-slate-100">Po akceptacji</p>
+                                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Platnosc</p>
+                                            <p className="mt-1 text-base font-bold text-slate-800">Po akceptacji</p>
                                         </div>
                                     </div>
-                                    <div className="space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Zakres wspolpracy</p>
-                                        <div className="h-2 w-full rounded-full bg-white/10">
+                                    <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
+                                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Zakres wspolpracy</p>
+                                        <div className="h-2 w-full rounded-full bg-slate-100">
                                             <div className={`h-2 rounded-full bg-gradient-to-r ${config.gradient} w-4/5`} />
                                         </div>
-                                        <p className="text-sm text-slate-300">Brief, realizacja, poprawki, finalne pliki.</p>
+                                        <p className="text-sm text-slate-600">Brief, realizacja, poprawki, finalne pliki.</p>
                                     </div>
                                 </div>
                             </div>
@@ -682,35 +684,35 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
             {/* KEY FACTS STRIP */}
             <PageContainer className="relative z-20 -mt-8 mb-14">
                 <AnimateOnScroll>
-                    <div className="overflow-hidden rounded-[1.75rem] border border-white/15 bg-white/[0.05] shadow-[0_25px_60px_-35px_rgba(15,23,42,0.9)] backdrop-blur-xl">
-                        <div className="grid grid-cols-2 divide-x divide-y divide-white/10 md:grid-cols-4 md:divide-y-0">
+                    <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_25px_60px_-40px_rgba(71,85,105,0.35)]">
+                        <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 md:grid-cols-4 md:divide-y-0">
                             <div className="p-5 md:p-6">
-                                <div className="mb-2 flex items-center gap-2 text-slate-300">
+                                <div className="mb-2 flex items-center gap-2 text-slate-500">
                                     <Coins className="h-4 w-4" />
                                     <span className="text-xs font-bold uppercase tracking-[0.2em]">Cena od</span>
                                 </div>
-                                <p className="text-2xl font-extrabold text-white">{minVariantPrice} PLN</p>
+                                <p className="text-2xl font-extrabold text-slate-900">{minVariantPrice} PLN</p>
                             </div>
                             <div className="p-5 md:p-6">
-                                <div className="mb-2 flex items-center gap-2 text-slate-300">
+                                <div className="mb-2 flex items-center gap-2 text-slate-500">
                                     <Timer className="h-4 w-4" />
                                     <span className="text-xs font-bold uppercase tracking-[0.2em]">Realizacja</span>
                                 </div>
-                                <p className="text-2xl font-extrabold text-white">{deliveryRangeLabel}</p>
+                                <p className="text-2xl font-extrabold text-slate-900">{deliveryRangeLabel}</p>
                             </div>
                             <div className="p-5 md:p-6">
-                                <div className="mb-2 flex items-center gap-2 text-slate-300">
+                                <div className="mb-2 flex items-center gap-2 text-slate-500">
                                     <Shield className="h-4 w-4" />
                                     <span className="text-xs font-bold uppercase tracking-[0.2em]">Platnosc</span>
                                 </div>
-                                <p className="text-2xl font-extrabold text-white">Escrow</p>
+                                <p className="text-2xl font-extrabold text-slate-900">Escrow</p>
                             </div>
                             <div className="p-5 md:p-6">
-                                <div className="mb-2 flex items-center gap-2 text-slate-300">
+                                <div className="mb-2 flex items-center gap-2 text-slate-500">
                                     <ShieldCheck className="h-4 w-4" />
                                     <span className="text-xs font-bold uppercase tracking-[0.2em]">Gwarancja</span>
                                 </div>
-                                <p className="text-2xl font-extrabold text-white">Satysfakcji</p>
+                                <p className="text-2xl font-extrabold text-slate-900">Satysfakcji</p>
                             </div>
                         </div>
                     </div>
