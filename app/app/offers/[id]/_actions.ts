@@ -5,16 +5,18 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { trySendNotification } from "@/lib/notifications/server";
 
-function toNumber(v: any): number | null {
+type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type JsonPayload = Record<string, unknown>;
+
+function toNumber(v: unknown): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
 
 async function notifyUser(
-  _supabase: any,
   userId: string,
   typ: string,
-  payload: Record<string, any> = {}
+  payload: JsonPayload = {}
 ) {
   try {
     await trySendNotification(userId, typ, payload);
@@ -23,7 +25,7 @@ async function notifyUser(
   }
 }
 
-async function ensureConversationForApplication(supabase: any, args: {
+async function ensureConversationForApplication(supabase: AppSupabaseClient, args: {
   application_id: string;
   offer_id: string;
   company_id: string;
@@ -39,21 +41,29 @@ async function ensureConversationForApplication(supabase: any, args: {
 
   const { data: created, error } = await supabase
     .from("conversations")
-    .insert({
+    .upsert({
       application_id: args.application_id,
       company_id: args.company_id,
       student_id: args.student_id,
       offer_id: args.offer_id,
       type: 'application',
-    })
+      status: "active",
+    }, { onConflict: "application_id" })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error || !created?.id) throw new Error(error?.message ?? "Nie udało się utworzyć rozmowy");
   return created.id as string;
 }
 
-async function insertChatMessage(supabase: any, conversationId: string, senderId: string, body: string, event: string | null = null, payload: any = null) {
+async function insertChatMessage(
+  supabase: AppSupabaseClient,
+  conversationId: string,
+  senderId: string,
+  body: string,
+  event: string | null = null,
+  payload: JsonPayload | null = null
+) {
   const b = (body ?? "").trim();
   if (!b) return;
 
@@ -91,6 +101,17 @@ export async function applyToOffer(
       redirect("/auth");
     }
     logs.push(`User: ${user.id}`);
+
+    const { data: currentProfile, error: currentProfileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (currentProfileError || currentProfile?.role !== "student") {
+      logs.push(`Role guard failed: ${currentProfileError?.message ?? currentProfile?.role ?? "missing"}`);
+      return { error: "Tylko konto studenta moze aplikowac na zadanie.", debug: logs };
+    }
 
     // Pobierz ofertę (do walidacji + powiadomień)
     const { data: offer, error: offerErr } = await supabase
@@ -140,23 +161,30 @@ export async function applyToOffer(
     // SYSTEM Platform Service (Auto-Accept + Limit 2 + Simple UI)
     const isSystemPlatform = offer.is_platform_service === true;
 
-    // Company/Legacy Micro (Manual Accept + Limit 1? Or No Limit? + Negotiation UI)
-    // "Mikrozlecenie utworzone przez firmę" -> Student negotiates, Company accepts.
+    // Company-created micro offers are single-instance. Only true system services can stay open for many students.
     const isMicroType = (offer.typ && (offer.typ.toLowerCase().includes("micro") || offer.typ.toLowerCase().includes("mikro")));
-
-    // Logic: Treat as "Platform/System" ONLY if true system service. 
-    // If it's just text "micro", treat as Standard Order.
-
-    const isPlatform = isSystemPlatform;
     logs.push(`IsSystemPlatform: ${isSystemPlatform}, IsMicroType: ${isMicroType}`);
 
-    // FIX: Allow Micro-type offers to be applied to even if "closed" or "in_progress"
-    const isMultiInstance = isSystemPlatform || isMicroType;
+    const isMultiInstance = isSystemPlatform;
 
     if ((offer.status === "closed" && !isMultiInstance) || (offer.status === "in_progress" && !isMultiInstance)) {
       logs.push("Offer is closed/in_progress -> redirect app");
-      // Enhanced Error Message for Debugging
-      return { error: `Oferta już nieaktualna (zajęta). [DEBUG: ${logs.join(' -> ')}]`, debug: logs };
+      return { error: "Oferta jest już nieaktualna albo została zajęta przez innego studenta.", debug: logs };
+    }
+
+    if (!isMultiInstance) {
+      const { data: lockedApplication } = await supabase
+        .from("applications")
+        .select("id, status")
+        .eq("offer_id", offerId)
+        .in("status", ["accepted", "in_progress", "completed"])
+        .limit(1)
+        .maybeSingle();
+
+      if (lockedApplication?.id && lockedApplication.id !== applicationId) {
+        logs.push(`Offer locked by application ${lockedApplication.id}:${lockedApplication.status}`);
+        return { error: "Oferta jest już zajęta albo zakończona.", debug: logs };
+      }
     }
 
 
@@ -233,7 +261,7 @@ export async function applyToOffer(
     let conversationId: string | undefined;
 
     try {
-      conversationId = await ensureConversationForApplication(supabase as any, {
+      conversationId = await ensureConversationForApplication(supabase, {
         application_id: applicationId!,
         offer_id: offerId,
         company_id: offer.company_id,
@@ -246,14 +274,7 @@ export async function applyToOffer(
       let msgEvent: string | null = null; // Default: standard message
 
       if (isSystemPlatform && autoAccepted) {
-        // Fetch Student Name for the System Message
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("first_name, last_name, email")
-          .eq("user_id", user.id)
-          .single();
-
-        const studentName = profile ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || profile.email : "Student";
+        const studentName = user.email ?? "Student";
 
         initialMsg = `Zlecenie będzie realizował ${studentName} od teraz możecie się ze sobą komunikować.`;
         msgEvent = 'system.notice'; // Renders as system badge
@@ -269,23 +290,23 @@ export async function applyToOffer(
       }
 
       await insertChatMessage(
-        supabase as any,
+        supabase,
         conversationId,
         user.id,
         initialMsg,
-        msgEvent as any
+        msgEvent
       );
       logs.push("Initial Msg Sent");
 
       // ✅ 1b) Info o CV
       if (cvUrl) {
-        await insertChatMessage(supabase as any, conversationId, user.id, "Załączono CV do zgłoszenia.");
+        await insertChatMessage(supabase, conversationId, user.id, "Załączono CV do zgłoszenia.");
       }
 
       // ✅ 2) jeśli negocjuje, dopisz to też na czacie
       if (isNegotiation) {
         await insertChatMessage(
-          supabase as any,
+          supabase,
           conversationId,
           user.id,
           `Proponuję stawkę ${proposed} zł.`,
@@ -298,7 +319,6 @@ export async function applyToOffer(
       logs.push("Notifying...");
 
       await notifyUser(
-        supabase as any,
         offer.company_id,
         autoAccepted ? "application_accepted_auto" : (isNegotiation ? "negotiation_proposed" : "application_sent"),
         {
@@ -315,7 +335,7 @@ export async function applyToOffer(
         // Notify student as well - REMOVED per user request
         /*
         await notifyUser(
-            supabase as any,
+            supabase,
             user.id,
             "application_accepted",
             {
@@ -326,8 +346,9 @@ export async function applyToOffer(
         );
         */
       }
-    } catch (innerErr: any) {
-      logs.push(`Inner Logic Error: ${innerErr.message}`);
+    } catch (innerErr: unknown) {
+      const message = innerErr instanceof Error ? innerErr.message : "Nieznany blad";
+      logs.push(`Inner Logic Error: ${message}`);
       console.error(innerErr);
       throw innerErr;
     }
@@ -340,12 +361,14 @@ export async function applyToOffer(
     // Redirect instructions instead of throwing NEXT_REDIRECT
     return { success: true, redirectUrl: `/app/offers/${offerId}`, debug: logs };
 
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Wystapil nieoczekiwany blad.";
+    const digest = err && typeof err === "object" && "digest" in err ? String(err.digest) : null;
     console.error("applyToOffer error:", err);
-    logs.push(`FATAL: ${err.message}`);
-    if (err.message === "NEXT_REDIRECT" || err.digest?.includes("NEXT_REDIRECT")) {
+    logs.push(`FATAL: ${message}`);
+    if (message === "NEXT_REDIRECT" || digest?.includes("NEXT_REDIRECT")) {
       throw err;
     }
-    return { error: err.message || "Wystąpił nieoczekiwany błąd.", debug: logs };
+    return { error: message, debug: logs };
   }
 }
