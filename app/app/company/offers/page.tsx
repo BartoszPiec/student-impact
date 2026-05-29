@@ -2,10 +2,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { PageContainer } from "@/components/ui/page-container";
+import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import OffersTabs from "./offers-tabs";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, FileText, Plus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,10 @@ type ServiceOrderRow = {
   created_at: string | null;
   status: string | null;
   amount: number | null;
-  package: unknown;
+  counter_amount?: number | null;
+  package: {
+    title?: string | null;
+  } | null;
 };
 
 type ContractRelation = { terms_status: string | null } | { terms_status: string | null }[] | null;
@@ -151,7 +154,7 @@ export default async function CompanyOffersPage({
     const applicationRows = (apps ?? []) as ApplicationRow[];
 
     applicationRows.forEach((application) => {
-      if ((application.status === "accepted" || application.status === "in_progress") && application.student_id) {
+      if (["accepted", "in_progress", "completed"].includes(application.status) && application.student_id) {
         studentIds.push(application.student_id);
       }
     });
@@ -175,6 +178,10 @@ export default async function CompanyOffersPage({
     applicationRows.forEach((application) => {
       appIds.push(application.id);
       appIdToOfferId.set(application.id, application.offer_id);
+
+      if (application.status === "completed") {
+        approvedOfferIds.add(application.offer_id);
+      }
 
       totalByOffer.set(application.offer_id, (totalByOffer.get(application.offer_id) ?? 0) + 1);
       if (application.status === "sent") {
@@ -213,13 +220,17 @@ export default async function CompanyOffersPage({
         .from("deliverables")
         .select("application_id, status")
         .in("application_id", appIds)
-        .in("status", ["approved", "delivered", "pending"]);
+        .in("status", ["accepted", "approved", "completed", "released", "delivered", "pending"]);
 
       ((delivs ?? []) as DeliverableRow[]).forEach((deliverable) => {
         const offerId = appIdToOfferId.get(deliverable.application_id ?? "");
         if (offerId) {
-          if (deliverable.status === "approved") approvedOfferIds.add(offerId);
-          if (deliverable.status === "pending") deliveredOfferIds.add(offerId);
+          if (["accepted", "approved", "completed", "released"].includes(deliverable.status)) {
+            approvedOfferIds.add(offerId);
+          }
+          if (["delivered", "pending"].includes(deliverable.status)) {
+            deliveredOfferIds.add(offerId);
+          }
         }
       });
     }
@@ -242,26 +253,23 @@ export default async function CompanyOffersPage({
   });
 
   return (
-    <main className="space-y-8 pb-12">
+    <main className="min-h-screen bg-slate-50/60 pb-12">
       <PremiumPageHeader
         badge="Panel Pracodawcy"
-        title="Moje ogłoszenia"
-        description="Zarządzaj swoimi ofertami pracy i projektami z jednego, eleganckiego miejsca."
-        icon={
-          <svg className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-          </svg>
-        }
+        title="Moje zlecenia"
+        description="Ogłoszenia i zamówione usługi w jednym widoku: decyzje, kandydaci, realizacje i archiwum."
+        icon={<FileText className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
         actions={
-          <Button asChild size="lg" className="bg-white text-indigo-900 hover:bg-indigo-50 shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-all hover:scale-105 active:scale-95 px-8 h-14 rounded-2xl font-bold">
+          <Button asChild variant="outline" className="h-12 rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white">
             <Link href="/app/company/jobs/new">
-              <span className="mr-2 text-xl">+</span> Dodaj ogłoszenie
+              <Plus className="mr-2 h-4 w-4" />
+              Dodaj ogłoszenie
             </Link>
           </Button>
         }
       />
 
-      <PageContainer className="pb-12">
+      <PageContainer className="py-8">
         {offerCreated ? (
           <div className="mb-8 rounded-[2rem] border border-emerald-200 bg-emerald-50 px-6 py-5 text-emerald-950 shadow-lg shadow-emerald-500/10">
             <div className="flex items-start gap-4">
@@ -282,9 +290,9 @@ export default async function CompanyOffersPage({
         ) : null}
 
         {error ? (
-          <pre className="rounded-md border p-4 text-sm overflow-auto mb-8 bg-white/50 backdrop-blur-sm border-white/20 shadow-inner">
-            {JSON.stringify(error, null, 2)}
-          </pre>
+          <div className="mb-8 rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+            Nie udalo sie pobrac wszystkich ofert. Odswiez strone albo wroc za chwile.
+          </div>
         ) : null}
 
         <OffersTabs

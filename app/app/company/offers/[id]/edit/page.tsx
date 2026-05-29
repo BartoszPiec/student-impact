@@ -43,7 +43,7 @@ export default async function EditOfferPage(props: { params: Promise<{ id: strin
     .from("applications")
     .select("id")
     .eq("offer_id", offer.id)
-    .eq("status", "accepted")
+    .in("status", ["accepted", "in_progress", "completed"])
     .limit(1)
     .maybeSingle();
 

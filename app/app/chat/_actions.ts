@@ -15,6 +15,7 @@ type ApplicationForChat = {
   id: string;
   student_id: string;
   offer_id: string;
+  status?: string | null;
   message_to_company: string | null;
   offers: OfferRelation | OfferRelation[];
 };
@@ -27,7 +28,7 @@ export async function openChatForApplication(applicationId: string) {
 
   const { data: appRow, error: appErr } = await supabase
     .from("applications")
-    .select("id, student_id, offer_id, message_to_company, offers(company_id)")
+    .select("id, student_id, offer_id, status, message_to_company, offers(company_id)")
     .eq("id", applicationId)
     .single();
 
@@ -54,12 +55,14 @@ export async function openChatForApplication(applicationId: string) {
 
   const { data: created, error: createErr } = await supabase
     .from("conversations")
-    .insert({
+    .upsert({
       application_id: applicationId,
       company_id: companyId,
       student_id: studentId,
       offer_id: offerId,
-    })
+      type: "application",
+      status: "active",
+    }, { onConflict: "application_id" })
     .select("id")
     .single();
 
@@ -72,12 +75,19 @@ export async function openChatForApplication(applicationId: string) {
   }
 
   if (first) {
-    await sendTextMessage(created.id, first);
-    // await supabase.from("messages").insert({
-    //   conversation_id: created.id,
-    //   sender_id: studentId,
-    //   content: first,
-    // });
+    await supabase.from("messages").insert({
+      conversation_id: created.id,
+      sender_id: studentId,
+      content: first,
+      event: "text.sent",
+      payload: {},
+    });
+
+    await sendNotification(companyId, "message_new", {
+      conversation_id: created.id,
+      application_id: applicationId,
+      snippet: first.slice(0, 80),
+    });
   }
 
   redirect(`/app/chat/${created.id}`);
@@ -88,6 +98,16 @@ export async function openChatForOfferInquiry(offerId: string) {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (profileError || profile?.role !== "student") {
+    throw new Error("Tylko konto studenta moze rozpoczac rozmowe o ofercie.");
+  }
 
   const { data: offer } = await supabase
     .from("offers")
@@ -130,17 +150,83 @@ export async function openChatForOfferInquiry(offerId: string) {
 }
 
 export async function markMessagesAsRead(conversationId: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
+  const { supabase, user } = await validateParticipant(conversationId);
 
-  await supabase.from("messages")
+  const { error } = await supabase.from("messages")
     .update({ read_at: new Date().toISOString() })
     .eq("conversation_id", conversationId)
     .neq("sender_id", user.id)
     .is("read_at", null);
 
+  if (error) {
+    throw new Error("Nie udalo sie oznaczyc wiadomosci jako przeczytanych.");
+  }
+
+  revalidatePath("/app/chat");
+  revalidatePath(`/app/chat/${conversationId}`);
   revalidatePath("/app/chat", "layout");
+}
+
+export async function markConversationAsUnread(conversationId: string) {
+  const { supabase, user } = await validateParticipant(conversationId);
+
+  const { data: lastIncoming } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .neq("sender_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!lastIncoming?.id) return;
+
+  const { error } = await supabase
+    .from("messages")
+    .update({ read_at: null })
+    .eq("id", lastIncoming.id);
+
+  if (error) {
+    throw new Error("Nie udalo sie oznaczyc rozmowy jako nieprzeczytanej.");
+  }
+
+  revalidatePath("/app/chat");
+  revalidatePath(`/app/chat/${conversationId}`);
+  revalidatePath("/app/chat", "layout");
+}
+
+export async function toggleMessageFlag(conversationId: string, messageId: string) {
+  const { supabase, user } = await validateParticipant(conversationId);
+
+  const { data: message } = await supabase
+    .from("messages")
+    .select("id, flagged_by")
+    .eq("id", messageId)
+    .eq("conversation_id", conversationId)
+    .maybeSingle();
+
+  if (!message?.id) {
+    throw new Error("Wiadomosc nie istnieje.");
+  }
+
+  const flaggedBy = Array.isArray(message.flagged_by)
+    ? message.flagged_by.filter((id): id is string => typeof id === "string")
+    : [];
+  const nextFlaggedBy = flaggedBy.includes(user.id)
+    ? flaggedBy.filter((id) => id !== user.id)
+    : [...flaggedBy, user.id];
+
+  const { error } = await supabase
+    .from("messages")
+    .update({ flagged_by: nextFlaggedBy })
+    .eq("id", messageId)
+    .eq("conversation_id", conversationId);
+
+  if (error) {
+    throw new Error("Nie udalo sie zaktualizowac flagi wiadomosci.");
+  }
+
+  revalidatePath(`/app/chat/${conversationId}`);
 }
 
 // --- NEW TRANSACTIONAL ACTIONS ---
@@ -152,7 +238,7 @@ async function validateParticipant(conversationId: string) {
 
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, company_id, student_id, application_id, package_id")
+    .select("id, company_id, student_id, application_id, service_order_id, package_id")
     .eq("id", conversationId)
     .single();
 
@@ -162,6 +248,68 @@ async function validateParticipant(conversationId: string) {
   if (!isParticipant) throw new Error("Brak dostępu");
 
   return { supabase, user, conv };
+}
+
+async function assertCanSendMessage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  conv: {
+    id: string;
+    company_id: string;
+    student_id: string;
+    application_id?: string | null;
+    service_order_id?: string | null;
+  },
+) {
+  if (userId !== conv.student_id) return;
+
+  let businessStatus: string | null = null;
+  if (conv.application_id) {
+    const { data } = await supabase
+      .from("applications")
+      .select("status")
+      .eq("id", conv.application_id)
+      .maybeSingle();
+    businessStatus = data?.status ?? null;
+  } else if (conv.service_order_id) {
+    const { data } = await supabase
+      .from("service_orders")
+      .select("status")
+      .eq("id", conv.service_order_id)
+      .maybeSingle();
+    businessStatus = data?.status ?? null;
+  }
+
+  const allowedStatuses = new Set([
+    "countered",
+    "accepted",
+    "active",
+    "in_progress",
+    "revision",
+    "delivered",
+    "completed",
+    "disputed",
+  ]);
+
+  if (businessStatus && allowedStatuses.has(businessStatus)) return;
+
+  const { count: companyMessagesCount } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conv.id)
+    .eq("sender_id", conv.company_id);
+
+  if ((companyMessagesCount ?? 0) > 0) return;
+
+  const { count: studentMessagesCount } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conv.id)
+    .eq("sender_id", conv.student_id);
+
+  if ((studentMessagesCount ?? 0) > 0) {
+    throw new Error("Poczekaj na odpowiedz firmy, zanim wyslesz kolejna wiadomosc.");
+  }
 }
 
 async function enforceMessageRateLimit(userId: string, action: string, conversationId: string) {
@@ -181,6 +329,7 @@ export async function sendTextMessage(conversationId: string, content: string) {
   await enforceMessageRateLimit(user.id, "text", conversationId);
   if (!content.trim()) return;
   if (content.length > 10000) throw new Error("Wiadomość jest za długa (max 10 000 znaków)");
+  await assertCanSendMessage(supabase, user.id, conv);
 
   await supabase.from("messages").insert({
     conversation_id: conversationId,
@@ -203,6 +352,7 @@ export async function sendTextMessage(conversationId: string, content: string) {
 export async function sendFileMessage(conversationId: string, fileName: string, fileUrl: string, fileType: string) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
   await enforceMessageRateLimit(user.id, "file", conversationId);
+  await assertCanSendMessage(supabase, user.id, conv);
 
   // Walidacja URL pliku — musi być ścieżką Supabase Storage (relatywna) lub https://
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -241,6 +391,7 @@ export async function sendEventMessage(
 ) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
   await enforceMessageRateLimit(user.id, "event", conversationId);
+  await assertCanSendMessage(supabase, user.id, conv);
 
   await supabase.from("messages").insert({
     conversation_id: conversationId,
@@ -303,8 +454,7 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
         is_platform_service?: boolean;
         typ?: string | null;
       };
-      const isMultiInstance = offerRow.is_platform_service === true ||
-        (offerRow.typ && (offerRow.typ.toLowerCase().includes("micro") || offerRow.typ.toLowerCase().includes("mikro")));
+      const isMultiInstance = offerRow.is_platform_service === true;
 
       if (!isMultiInstance) {
         const now = new Date().toISOString();

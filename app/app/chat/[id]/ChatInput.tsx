@@ -194,7 +194,7 @@ export function ChatInput({
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setRateOpen(false)} className="rounded-xl border-slate-200">Anuluj</Button>
-                        <Button onClick={submitRate} className="rounded-xl gradient-primary shadow-primary hover:opacity-90 transition-opacity">Wyślij propozycję</Button>
+                        <Button onClick={submitRate} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Wyślij propozycję</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -215,7 +215,7 @@ export function ChatInput({
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setDeadlineOpen(false)} className="rounded-xl border-slate-200">Anuluj</Button>
-                        <Button onClick={submitDeadline} className="rounded-xl gradient-primary shadow-primary hover:opacity-90 transition-opacity">Wyślij propozycję</Button>
+                        <Button onClick={submitDeadline} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Wyślij propozycję</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

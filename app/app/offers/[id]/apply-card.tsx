@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { applyToOffer } from "./_actions";
-import { Loader2, CheckCircle2, AlertCircle, Banknote, UploadCloud, FileText, X, Zap, ArrowLeft } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Banknote, UploadCloud, FileText, X, Zap, ArrowLeft, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ApplySheet } from "@/app/app/jobs/apply-sheet";
 import { JobOffer } from "@/app/app/jobs/job-card";
@@ -45,9 +45,17 @@ export default function ApplyCard({
   const isJobOrInternship = offerTyp && (offerTyp.toLowerCase().includes("job") || offerTyp.toLowerCase().includes("praca") || offerTyp.toLowerCase().includes("staż"));
   const canNegotiate = !isJobOrInternship && !isPlatformService;
 
-  // Platform Service Logic
-  const [agreed, setAgreed] = useState(false);
+  const initialRate = useMemo(
+    () => (offerStawka != null ? String(offerStawka) : ""),
+    [offerStawka]
+  );
+  const [rate, setRate] = useState(initialRate);
+  const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
+  // Platform Service Logic
   if (isPlatformService) {
     // Mock JobOffer object for ApplySheet
     const mockOffer: JobOffer = {
@@ -62,29 +70,48 @@ export default function ApplyCard({
     };
 
     return (
-      <Card className={`border-amber-200 shadow-md ${className || ""}`}>
-        <CardHeader className="bg-amber-50/50 pb-4 border-b border-amber-100">
-          <CardTitle className="text-xl text-amber-900 flex items-center gap-2">
-            <Zap className="h-5 w-5 text-amber-500" />
+      <Card className={cn(
+        "border-none rounded-[2.5rem] overflow-hidden bg-white shadow-2xl shadow-amber-900/10 ring-1 ring-amber-100",
+        className
+      )}>
+        <CardHeader className="relative overflow-hidden border-b border-amber-100 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-8">
+          <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-amber-300/20 blur-3xl" />
+          <CardTitle className="relative z-10 text-2xl font-black text-slate-950 flex items-center gap-3">
+            <span className="rounded-2xl bg-amber-500 p-3 text-white shadow-lg shadow-amber-500/20">
+              <Zap className="h-6 w-6" />
+            </span>
             Przyjmij to zlecenie
           </CardTitle>
-          <CardDescription className="text-amber-800/80">
+          <CardDescription className="relative z-10 max-w-sm text-sm font-semibold leading-6 text-slate-600">
             To jest zlecenie systemowe. Stawka jest stała i nienegocjowalna.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6 pt-6">
-          <div className="bg-white p-4 rounded-lg border border-amber-100 space-y-2">
-            <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gwarantowane Wynagrodzenie</Label>
-            <div className="text-2xl font-bold text-slate-900">
+        <CardContent className="space-y-5 p-8">
+          <div className="rounded-3xl border border-amber-100 bg-amber-50/40 p-6">
+            <Label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <Banknote className="h-4 w-4 text-amber-600" />
+              Gwarantowane Wynagrodzenie
+            </Label>
+            <div className="text-3xl font-black text-slate-950">
               {formattedSalary ? formattedSalary : (offerStawka != null ? `${offerStawka} PLN` : "Stawka niepodana")}
             </div>
             <p className="text-xs text-slate-500">Stawka netto za wykonanie całości zlecenia.</p>
           </div>
+          <div className="grid gap-3 text-sm font-semibold text-slate-700">
+            <div className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+              <span>Po przyjęciu zlecenia przejdziesz do panelu realizacji i komunikacji z firmą.</span>
+            </div>
+            <div className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <span>Przed potwierdzeniem jeszcze raz zobaczysz zakres prac.</span>
+            </div>
+          </div>
         </CardContent>
-        <CardFooter className="bg-amber-50/50 py-4 border-t border-amber-100 flex justify-end">
+        <CardFooter className="border-t border-slate-100 bg-slate-50/60 p-8">
           <ApplySheet offer={mockOffer}>
             <Button
-              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm"
+              className="h-14 w-full rounded-2xl bg-amber-600 text-base font-black text-white shadow-xl shadow-amber-600/20 transition-all hover:bg-amber-700 hover:scale-[1.01]"
             >
               Przyjmij to zlecenie
             </Button>
@@ -95,18 +122,6 @@ export default function ApplyCard({
   }
 
   // --- STANADARD JOB APPLICATION LOGIC BELOW ---
-
-  // gdy user kliknie "Negocjuj", startujemy od stawki z oferty (jeśli jest)
-  const initialRate = useMemo(
-    () => (offerStawka != null ? String(offerStawka) : ""),
-    [offerStawka]
-  );
-
-  const [rate, setRate] = useState(initialRate);
-
-  const [err, setErr] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
 
   function parseRate(v: string): number | null {
     const s = v.trim();
@@ -123,7 +138,7 @@ export default function ApplyCard({
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `${fileName}`;
 
-    const { error: uploadError, data } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('cvs')
       .upload(filePath, file);
 
@@ -138,8 +153,6 @@ export default function ApplyCard({
 
     return publicUrl;
   };
-
-  const router = useRouter();
 
   const handleSubmit = () => {
     startTransition(async () => {
@@ -165,8 +178,8 @@ export default function ApplyCard({
         if (cvFile) {
           try {
             cvUrl = await uploadCv(cvFile);
-          } catch (uploadErr: any) {
-            setErr(uploadErr.message);
+          } catch (uploadErr: unknown) {
+            setErr(uploadErr instanceof Error ? uploadErr.message : "Błąd przesyłania CV.");
             return;
           }
         }
@@ -183,8 +196,8 @@ export default function ApplyCard({
         setOk("Twoja aplikacja została wysłana! 🚀");
         setMessage("");
         setCvFile(null);
-      } catch (e: any) {
-        setErr(e?.message ?? "Wystąpił błąd podczas wysyłania aplikacji.");
+      } catch (e: unknown) {
+        setErr(e instanceof Error ? e.message : "Wystąpił błąd podczas wysyłania aplikacji.");
       }
     });
   };

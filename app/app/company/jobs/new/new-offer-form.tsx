@@ -1190,7 +1190,7 @@ export default function NewOfferForm({
               onClick={handleSubmit}
               disabled={isLoading}
               className={cn(
-                "h-14 rounded-[1.5rem] px-8 text-sm font-semibold shadow-lg transition-transform hover:-translate-y-0.5",
+                "h-14 rounded-[1.5rem] px-8 text-sm font-semibold shadow-lg transition-transform hover:-translate-y-0.5 text-white",
                 isJob ? "bg-indigo-600 hover:bg-indigo-700" : "bg-emerald-600 hover:bg-emerald-700",
               )}
             >

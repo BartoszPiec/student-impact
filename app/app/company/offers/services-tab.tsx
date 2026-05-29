@@ -1,18 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Package, Briefcase } from "lucide-react";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import { openChatForApplication } from "../../chat/_actions";
+import type { CompanyOffer, CompanyOfferStats } from "./offer-card";
+
+export type ServiceOrderForList = {
+    id: string;
+    created_at: string | null;
+    status: string | null;
+    amount: number | null;
+    counter_amount?: number | null;
+    package?: {
+        title?: string | null;
+    } | null;
+};
 
 interface ServicesTabProps {
-    systemServices: any[];
-    studentServices: any[];
-    statsMap: any;
+    systemServices: CompanyOffer[];
+    studentServices: ServiceOrderForList[];
+    statsMap: Record<string, CompanyOfferStats | undefined>;
+}
+
+function formatServiceDate(value: string | null) {
+    if (!value) return "Brak daty";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Brak daty";
+    return format(date, "d MMM yyyy", { locale: pl });
 }
 
 export default function ServicesTab({ systemServices, studentServices, statsMap }: ServicesTabProps) {
@@ -42,8 +60,9 @@ export default function ServicesTab({ systemServices, studentServices, statsMap 
                     </h3>
                     <div className="grid grid-cols-1 gap-4">
                         {systemServices.map(offer => {
-                            const stats = statsMap[offer.id] || {};
-                            const { accepted, acceptedAppId } = stats;
+                            const stats = statsMap[offer.id];
+                            const accepted = stats?.accepted ?? 0;
+                            const acceptedAppId = stats?.acceptedAppId ?? null;
                             const isInProgress = offer.status === "in_progress" || accepted > 0;
                             const chatAction = acceptedAppId ? openChatForApplication.bind(null, acceptedAppId) : null;
 
@@ -68,7 +87,7 @@ export default function ServicesTab({ systemServices, studentServices, statsMap 
 
                                             <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-sm text-slate-500 font-medium">
                                                 <span className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded-lg">
-                                                    📅 {format(new Date(offer.created_at), "d MMM yyyy", { locale: pl })}
+                                                    {formatServiceDate(offer.created_at)}
                                                 </span>
                                                 <Badge variant="outline" className={offer.status === 'published' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-600'}>
                                                     {offer.status === 'published' ? 'W Realizacji' : (offer.status === 'closed' ? 'Zakończone' : 'Aktywne')}
@@ -125,7 +144,10 @@ export default function ServicesTab({ systemServices, studentServices, statsMap 
                         Usługi Zlecone (Studenci)
                     </h3>
                     <div className="grid grid-cols-1 gap-4">
-                        {studentServices.map(order => (
+                        {studentServices.map(order => {
+                            const orderStatus = order.status ?? "";
+
+                            return (
                             <div key={order.id} className="group relative bg-white hover:bg-slate-50/50 rounded-3xl border border-slate-200 hover:border-amber-200 p-1 shadow-sm hover:shadow-lg transition-all duration-300">
                                 <div className="flex flex-col md:flex-row gap-6 p-5 items-center">
                                     {/* Icon/Image Placeholder */}
@@ -146,18 +168,18 @@ export default function ServicesTab({ systemServices, studentServices, statsMap 
 
                                         <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-sm text-slate-500 font-medium">
                                             <span className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded-lg">
-                                                📅 {format(new Date(order.created_at), "d MMM yyyy", { locale: pl })}
+                                                {formatServiceDate(order.created_at)}
                                             </span>
                                             <Badge variant="outline" className={
-                                                ['in_progress', 'accepted'].includes(order.status) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                                                    order.status === 'proposal_sent' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' :
-                                                        order.status === 'countered' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                                                ['in_progress', 'accepted'].includes(orderStatus) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                                                    orderStatus === 'proposal_sent' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' :
+                                                        orderStatus === 'countered' ? 'border-amber-200 bg-amber-50 text-amber-700' :
                                                             'border-slate-200 bg-slate-50 text-slate-600'
                                             }>
-                                                {order.status === 'in_progress' ? 'W trakcie' :
-                                                    order.status === 'accepted' ? 'Zaakceptowano' :
-                                                        order.status === 'proposal_sent' ? 'Negocjacje' :
-                                                            order.status === 'countered' ? `Kontroferta: ${order.counter_amount} PLN` :
+                                                {orderStatus === 'in_progress' ? 'W trakcie' :
+                                                    orderStatus === 'accepted' ? 'Zaakceptowano' :
+                                                        orderStatus === 'proposal_sent' ? 'Negocjacje' :
+                                                            orderStatus === 'countered' ? `Kontroferta: ${order.counter_amount} PLN` :
                                                                 'Czeka na akceptację'}
                                             </Badge>
                                         </div>
@@ -173,13 +195,13 @@ export default function ServicesTab({ systemServices, studentServices, statsMap 
 
                                         <div className="flex items-center gap-2">
                                             <Button asChild className={`h-10 px-6 rounded-xl font-bold shadow-lg transition-all hover:-translate-y-0.5
-                                                ${['inquiry', 'proposal_sent'].includes(order.status)
+                                                ${['inquiry', 'proposal_sent'].includes(orderStatus)
                                                     ? "bg-slate-800 text-white hover:bg-slate-700 hover:shadow-slate-200"
                                                     : "bg-amber-600 hover:bg-amber-700 text-white hover:shadow-amber-200"
                                                 }
                                             `}>
                                                 <Link href={`/app/deliverables/${order.id}`}>
-                                                    {['inquiry', 'proposal_sent'].includes(order.status) ? "Szczegóły" : "Panel Realizacji"}
+                                                    {['inquiry', 'proposal_sent'].includes(orderStatus) ? "Szczegóły" : "Panel Realizacji"}
                                                 </Link>
                                             </Button>
 
@@ -190,7 +212,8 @@ export default function ServicesTab({ systemServices, studentServices, statsMap 
                                     </div>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             )}

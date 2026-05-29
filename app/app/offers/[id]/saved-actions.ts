@@ -28,10 +28,10 @@ export async function toggleSavedOffer(offerId: string) {
 
     if (error) throw new Error(error.message);
   } else {
-    const { error } = await supabase.from("saved_offers").insert({
+    const { error } = await supabase.from("saved_offers").upsert({
       student_id: studentId,
       offer_id: offerId,
-    });
+    }, { onConflict: "student_id,offer_id", ignoreDuplicates: true });
 
     if (error) throw new Error(error.message);
   }

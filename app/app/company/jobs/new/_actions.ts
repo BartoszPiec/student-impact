@@ -73,11 +73,12 @@ function validateOfferMaterials(value: string | null) {
       continue;
     }
 
-    if (/^(https?:\/\/|www\.)/i.test(line)) {
-      if (!line.startsWith("https://") || !isValidHttpsUrl(line)) {
-        throw new Error("Link do materialow musi zaczynac sie od https:// i prowadzic do poprawnego adresu.");
-      }
-    }
+    // Walidacja URL linku do materiałów wyłączona — akceptujemy dowolny tekst
+    // if (/^(https?:\/\/|www\.)/i.test(line)) {
+    //   if (!line.startsWith("https://") || !isValidHttpsUrl(line)) {
+    //     throw new Error("Link do materialow musi zaczynac sie od https:// i prowadzic do poprawnego adresu.");
+    //   }
+    // }
   }
 }
 
@@ -89,11 +90,21 @@ export async function createOffer(formData: FormData) {
 
   if (!user) throw new Error("Brak sesji");
 
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (profileError || profile?.role !== "company") {
+    throw new Error("Tylko konto firmowe moze dodawac zadania.");
+  }
+
   const tytul = String(formData.get("tytul") ?? "").trim();
   const opis = String(formData.get("opis") ?? "").trim();
   const kategoria = String(formData.get("kategoria") ?? "Inne");
   const typ = String(formData.get("typ") ?? "micro");
-  const is_platform_service = formData.get("is_platform_service") === "on";
+  const is_platform_service = false;
 
   const czas = String(formData.get("czas") ?? "").trim() || null;
   const cel_wspolpracy = String(formData.get("cel_wspolpracy") ?? "").trim() || null;

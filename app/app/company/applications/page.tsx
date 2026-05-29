@@ -563,9 +563,9 @@ export default async function CompanyApplicationsPage({
 
       <PageContainer className="mt-8">
         {error && (
-          <pre className="rounded-md border p-4 text-sm overflow-auto mb-6 bg-red-50 text-red-600 border-red-100">
-            {JSON.stringify(error, null, 2)}
-          </pre>
+          <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+            Nie udalo sie pobrac listy aplikacji. Odswiez strone albo wroc za chwile.
+          </div>
         )}
 
         <Tabs defaultValue={defaultTab} className="w-full">

@@ -40,6 +40,10 @@ type UserApplicationRow = {
   offer_id: string | null;
 };
 
+type LockedApplicationRow = {
+  offer_id: string | null;
+};
+
 function unwrapCompanyProfile(
   relation: OfferQueryRow["company_profiles"],
 ): { nazwa?: string | null; logo_url?: string | null } | null {
@@ -72,7 +76,7 @@ export default async function JobsPage({
     .single();
 
   if (profile?.role === "company") {
-    redirect("/app");
+    redirect("/app/company/packages");
   }
 
   const { count: totalOffersCount } = await supabase
@@ -98,6 +102,22 @@ export default async function JobsPage({
     console.error("Error fetching job offers:", error);
   }
 
+  const offerRows = (offersData || []) as OfferQueryRow[];
+  const offerIds = offerRows.map((offer) => offer.id);
+  const lockedOfferIds = new Set<string>();
+
+  if (offerIds.length > 0) {
+    const { data: lockedApplications } = await supabase
+      .from("applications")
+      .select("offer_id")
+      .in("offer_id", offerIds)
+      .in("status", ["accepted", "in_progress", "completed"]);
+
+    ((lockedApplications || []) as LockedApplicationRow[]).forEach((application) => {
+      if (application.offer_id) lockedOfferIds.add(application.offer_id);
+    });
+  }
+
   const { data: userApps } = await supabase
     .from("applications")
     .select("offer_id")
@@ -109,7 +129,17 @@ export default async function JobsPage({
       .filter((offerId): offerId is string => Boolean(offerId)),
   );
 
-  const offers: JobOffer[] = ((offersData || []) as OfferQueryRow[]).map((offer) => {
+  const visibleOfferRows = offerRows.filter((offer) => {
+    if (offer.is_platform_service === true) return true;
+    return !lockedOfferIds.has(offer.id);
+  });
+
+  const visibleTotalOffersCount =
+    totalOffersCount == null
+      ? visibleOfferRows.length
+      : Math.max(visibleOfferRows.length, totalOffersCount - lockedOfferIds.size);
+
+  const offers: JobOffer[] = visibleOfferRows.map((offer) => {
     const companyProfile = unwrapCompanyProfile(offer.company_profiles);
 
     return {
@@ -188,7 +218,7 @@ export default async function JobsPage({
         <JobBoardView
           initialOffers={offers}
           appliedOfferIds={appliedOfferIds}
-          totalOffersCount={totalOffersCount ?? offers.length}
+          totalOffersCount={visibleTotalOffersCount}
           currentPage={currentPage}
         />
       </PageContainer>

@@ -1,3 +1,4 @@
+"use client";
 
 import { Button } from "@/components/ui/button";
 import { Check, X, Banknote } from "lucide-react";
@@ -150,7 +151,7 @@ export function RateCard({
                             </div>
                             <DialogFooter>
                                 <Button variant="outline" onClick={() => setCounterOpen(false)} className="rounded-xl border-slate-200">Anuluj</Button>
-                                <Button onClick={handleCounter} className="rounded-xl gradient-primary shadow-primary hover:opacity-90 transition-opacity">Wyślij propozycję</Button>
+                                <Button onClick={handleCounter} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Wyślij propozycję</Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>

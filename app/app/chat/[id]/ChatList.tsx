@@ -2,7 +2,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { markMessagesAsRead } from "../_actions";
+import { markConversationAsUnread, markMessagesAsRead, toggleMessageFlag } from "../_actions";
+import { useRouter } from "next/navigation";
 import { normalizeMessage } from "@/app/lib/chat/chatEventUtils";
 import { TextBubble } from "../_components/TextBubble";
 import { FileBubble } from "../_components/FileBubble";
@@ -13,6 +14,9 @@ import { InquiryCard } from "../_components/InquiryCard";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Flag, MailOpen, MoreHorizontal } from "lucide-react";
 
 type ChatMessageRecord = {
     id: string;
@@ -22,6 +26,7 @@ type ChatMessageRecord = {
     read_at?: string | null;
     attachment_url?: string | null;
     attachment_type?: string | null;
+    flagged_by?: string[] | null;
     event?: string | null;
     payload?: Record<string, unknown> | null;
 };
@@ -52,8 +57,11 @@ export function ChatList({
     conversationId: string;
 }) {
     const supabase = useMemo(() => createClient(), []);
+    const router = useRouter();
     const bottomRef = useRef<HTMLDivElement>(null);
+    const suppressAutoReadRef = useRef(false);
     const [liveMessages, setLiveMessages] = useState<ChatMessageRecord[]>(messages);
+    const [pendingActionId, setPendingActionId] = useState<string | null>(null);
 
     useEffect(() => {
         setLiveMessages(messages);
@@ -140,9 +148,30 @@ export function ChatList({
     useEffect(() => {
         const hasUnread = liveMessages.some((message) => !message.read_at && message.sender_id !== userId);
         if (conversationId && hasUnread) {
-            markMessagesAsRead(conversationId).catch(console.error);
+            const manualUnreadAt = Number(window.localStorage.getItem(`chat:manual-unread:${conversationId}`) || 0);
+            const shouldSuppressAutoRead = manualUnreadAt > 0 && Date.now() - manualUnreadAt < 30000;
+            if (suppressAutoReadRef.current && shouldSuppressAutoRead) {
+                return;
+            }
+            if (shouldSuppressAutoRead) {
+                suppressAutoReadRef.current = true;
+                return;
+            }
+            suppressAutoReadRef.current = false;
+
+            const readAt = new Date().toISOString();
+            setLiveMessages((previous) =>
+                previous.map((message) =>
+                    message.sender_id !== userId && !message.read_at
+                        ? { ...message, read_at: readAt }
+                        : message,
+                ),
+            );
+            markMessagesAsRead(conversationId)
+                .then(() => router.refresh())
+                .catch(console.error);
         }
-    }, [conversationId, liveMessages, userId]);
+    }, [conversationId, liveMessages, router, userId]);
 
     if (normalizedMessages.length === 0) {
         return (
@@ -151,9 +180,48 @@ export function ChatList({
             </div>
         );
     }
+
+    const handleToggleFlag = async (messageId: string) => {
+        setPendingActionId(messageId);
+        try {
+            await toggleMessageFlag(conversationId, messageId);
+            setLiveMessages((previous) =>
+                previous.map((message) => {
+                    if (message.id !== messageId) return message;
+                    const flaggedBy = Array.isArray(message.flagged_by) ? message.flagged_by : [];
+                    const nextFlaggedBy = flaggedBy.includes(userId)
+                        ? flaggedBy.filter((id) => id !== userId)
+                        : [...flaggedBy, userId];
+                    return { ...message, flagged_by: nextFlaggedBy };
+                }),
+            );
+        } finally {
+            setPendingActionId(null);
+        }
+    };
+
+    const handleMarkUnread = async () => {
+        window.localStorage.setItem(`chat:manual-unread:${conversationId}`, String(Date.now()));
+        await markConversationAsUnread(conversationId);
+        suppressAutoReadRef.current = true;
+        setLiveMessages((previous) => {
+            const next = [...previous];
+            for (let index = next.length - 1; index >= 0; index -= 1) {
+                if (next[index].sender_id !== userId) {
+                    next[index] = { ...next[index], read_at: null };
+                    break;
+                }
+            }
+            return next;
+        });
+        router.refresh();
+    };
+
     return (
         <div className="flex flex-col gap-6 py-6 pb-4">
             {normalizedMessages.map((msg, index) => {
+                const rawMessage = liveMessages.find((message) => message.id === msg.id);
+                const isFlagged = Array.isArray(rawMessage?.flagged_by) && rawMessage.flagged_by.includes(userId);
                 const dateKey = new Date(msg.created_at).toDateString();
                 const previousMessage = normalizedMessages[index - 1];
                 const previousDateKey = previousMessage
@@ -171,7 +239,31 @@ export function ChatList({
                             </div>
                         )}
 
-                        <div className={`flex flex-col ${msg.event.includes('system') || msg.event.includes('accepted') || msg.event.includes('rejected') ? 'items-center' : (msg.is_mine ? "items-end" : "items-start")} gap-1`}>
+                        <div className={`group/message flex flex-col ${msg.event.includes('system') || msg.event.includes('accepted') || msg.event.includes('rejected') ? 'items-center' : (msg.is_mine ? "items-end" : "items-start")} gap-1`}>
+                            <div className={`flex items-center gap-2 ${msg.is_mine ? "flex-row-reverse" : "flex-row"}`}>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 rounded-full text-slate-300 opacity-0 transition-opacity hover:text-slate-700 group-hover/message:opacity-100"
+                                            disabled={pendingActionId === msg.id}
+                                        >
+                                            <MoreHorizontal className="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align={msg.is_mine ? "end" : "start"} className="w-56">
+                                        <DropdownMenuItem onClick={() => handleToggleFlag(msg.id)} className="gap-2">
+                                            <Flag className="h-4 w-4" />
+                                            {isFlagged ? "Usuń flagę" : "Oflaguj wiadomość"}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={handleMarkUnread} className="gap-2">
+                                            <MailOpen className="h-4 w-4" />
+                                            Oznacz rozmowę jako nieprzeczytaną
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
 
                             {msg.event === "text.sent" && (
                                 <>
@@ -236,6 +328,14 @@ export function ChatList({
                             {(msg.event === "rate.accepted" || msg.event === "rate.rejected" || msg.event === "deadline.accepted" || msg.event === "deadline.rejected" || msg.event === "system.notice") && (
                                 <SystemEventRow content={msg.content || ""} type={msg.event} />
                             )}
+                            </div>
+
+                            {isFlagged ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                                    <Flag className="h-3 w-3" />
+                                    Oflagowana
+                                </span>
+                            ) : null}
 
 
                             {/* Timestamp */}

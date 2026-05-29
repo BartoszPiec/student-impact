@@ -1,18 +1,235 @@
-import type { Metadata, ResolvingMetadata } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import ApplyCard from "./apply-card";
 import SaveButton from "./save-button";
 import { openChatForApplication, openChatForOfferInquiry } from "@/app/app/chat/_actions";
-import { Clock, MapPin, Building2, Banknote, Briefcase, GraduationCap, ArrowLeft, CheckCircle2, MessageSquare, Lock, HelpCircle, Star, Zap } from "lucide-react";
+import { Clock, MapPin, Building2, Briefcase, GraduationCap, ArrowLeft, CheckCircle2, MessageSquare, Lock, HelpCircle, Star, Zap } from "lucide-react";
 import { PageContainer } from "@/components/ui/page-container";
+import { parsePackageBriefDescription } from "@/lib/services/package-customization";
 
 export const dynamic = "force-dynamic";
+
+type DetailItem = {
+  label: string;
+  value: string;
+};
+
+type CompanyProfileRelation = {
+  nazwa?: string | null;
+  logo_url?: string | null;
+} | Array<{
+  nazwa?: string | null;
+  logo_url?: string | null;
+}> | null;
+
+type OfferDetails = {
+  company_profiles?: CompanyProfileRelation;
+  is_platform_service?: boolean | null;
+  cel_wspolpracy?: string | null;
+  oczekiwany_rezultat?: string | null;
+  kryteria_akceptacji?: string | null;
+  osoba_prowadzaca?: string | null;
+  planowany_start?: string | null;
+  tryb_pracy?: string | null;
+  wymagana_poufnosc?: boolean | null;
+  przeniesienie_praw_autorskich?: boolean | null;
+  portfolio_dozwolone?: boolean | null;
+  materialy_legalnie_udostepnione?: boolean | null;
+  obligations?: string | string[] | null;
+};
+
+type ReviewSummary = {
+  rating: number;
+  comment: string | null;
+};
+
+type MetaItem = {
+  label: string;
+  value: string;
+};
+
+function getCompanyName(companyProfiles: CompanyProfileRelation) {
+  const profile = Array.isArray(companyProfiles) ? companyProfiles[0] : companyProfiles;
+  return profile?.nazwa || "Firma";
+}
+
+function isMeaningfulText(value: unknown) {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim();
+  return normalized.length > 0 && !["()", "[]", "{}", "-", "—"].includes(normalized);
+}
+
+function cleanDetailLabel(label: string) {
+  return label.replace(/[\u{1F300}-\u{1FAFF}]/gu, "").trim();
+}
+
+function formatDetailValue(label: string, value: string) {
+  const normalized = value.trim();
+  const lower = normalized.toLowerCase();
+
+  if (lower === "no_logo") return "Logo nie zostało przekazane.";
+  if (lower === "platform") return "Kontakt przez platformę Student2Work.";
+  if (lower === "brak") return "Brak wskazanych preferencji.";
+
+  if (label.toLowerCase().includes("termin")) {
+    const date = new Date(normalized);
+    if (!Number.isNaN(date.getTime())) return date.toLocaleDateString("pl-PL");
+  }
+
+  return normalized;
+}
+
+function buildDetailItems(answersByLabel: Record<string, string>, deadline: string, notes: string): DetailItem[] {
+  const items = Object.entries(answersByLabel)
+    .filter(([, value]) => isMeaningfulText(value))
+    .map(([label, value]) => ({
+      label: cleanDetailLabel(label),
+      value: formatDetailValue(label, value),
+    }));
+
+  if (isMeaningfulText(deadline)) {
+    items.push({
+      label: "Preferowany termin",
+      value: formatDetailValue("Preferowany termin", deadline),
+    });
+  }
+
+  if (isMeaningfulText(notes)) {
+    items.push({
+      label: "Dodatkowe uwagi",
+      value: notes.trim(),
+    });
+  }
+
+  return items;
+}
+
+function splitTaskLines(value: unknown) {
+  const text = Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string").join("\n")
+    : typeof value === "string"
+      ? value
+      : "";
+
+  return text
+    .split(/\r?\n|•|(?:^|\s)-\s+/)
+    .map((line) => line.trim())
+    .filter((line) => isMeaningfulText(line) && !/^https?:\/\//i.test(line));
+}
+
+function InlineText({ text }: { text: string }) {
+  const parts = text.split(/(\*\*.*?\*\*)/);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return (
+            <strong key={`${part}-${index}`} className="font-black text-slate-950">
+              {part.slice(2, -2)}
+            </strong>
+          );
+        }
+
+        return <span key={`${part}-${index}`}>{part}</span>;
+      })}
+    </>
+  );
+}
+
+function OfferDescription({ content }: { content: string }) {
+  const blocks: Array<{ type: "heading" | "paragraph" | "list"; text?: string; items?: string[] }> = [];
+  const lines = content.split(/\r?\n/);
+  let paragraph: string[] = [];
+  let listItems: string[] = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length > 0) {
+      blocks.push({ type: "paragraph", text: paragraph.join(" ") });
+      paragraph = [];
+    }
+  };
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      blocks.push({ type: "list", items: listItems });
+      listItems = [];
+    }
+  };
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim();
+
+    if (!line) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+
+    const headingMatch = line.match(/^#{1,4}\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "heading", text: headingMatch[1] });
+      return;
+    }
+
+    const bulletMatch = line.match(/^[-*]\s+(.+)$/);
+    if (bulletMatch) {
+      flushParagraph();
+      listItems.push(bulletMatch[1]);
+      return;
+    }
+
+    flushList();
+    paragraph.push(line);
+  });
+
+  flushParagraph();
+  flushList();
+
+  if (blocks.length === 0) {
+    return <p className="text-base font-medium leading-8 text-slate-600">Brak opisu oferty.</p>;
+  }
+
+  return (
+    <div className="space-y-7">
+      {blocks.map((block, index) => {
+        if (block.type === "heading") {
+          return (
+            <h4 key={`heading-${index}`} className="text-xl font-black leading-tight text-slate-950">
+              {block.text}
+            </h4>
+          );
+        }
+
+        if (block.type === "list") {
+          return (
+            <ul key={`list-${index}`} className="grid gap-3">
+              {(block.items || []).map((item) => (
+                <li key={item} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 text-base font-semibold leading-7 text-slate-700">
+                  <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-indigo-500" />
+                  <span><InlineText text={item} /></span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={`paragraph-${index}`} className="text-base font-medium leading-8 text-slate-600 md:text-lg">
+            <InlineText text={block.text || ""} />
+          </p>
+        );
+      })}
+    </div>
+  );
+}
 
 function AppStatusLabel(status: string) {
   if (status === "accepted") return <span className="text-emerald-600 font-bold">Zaakceptowana</span>;
@@ -23,7 +240,6 @@ function AppStatusLabel(status: string) {
 
 export async function generateMetadata(
   { params }: { params: Promise<{ id: string }> },
-  parent: ResolvingMetadata
 ): Promise<Metadata> {
   const { id } = await params;
   const supabase = await createClient();
@@ -39,7 +255,7 @@ export async function generateMetadata(
     };
   }
 
-  const companyName = (offer as any).company_profiles?.nazwa || "Firma";
+  const companyName = getCompanyName(offer.company_profiles as CompanyProfileRelation);
   const desc = offer.opis ? offer.opis.substring(0, 160).trim() + (offer.opis.length > 160 ? "..." : "") : "Sprawdź tę ofertę na platformie Student2Work!";
  
   return {
@@ -79,6 +295,7 @@ export default async function OfferDetailsPage({
     .maybeSingle();
 
   if (error || !offer) redirect("/app");
+  const offerRow = offer as OfferDetails;
 
   // User Context
   const { data: userData } = await supabase.auth.getUser();
@@ -97,6 +314,8 @@ export default async function OfferDetailsPage({
   // Check if owner
   const isOwner = user && user.id === offer.company_id;
   const canApply = role === "student";
+  const backHref = isOwner ? "/app/company/offers" : role === "company" ? "/app/company/packages" : "/app/jobs";
+  const backLabel = isOwner ? "Wróć do moich ofert" : role === "company" ? "Wróć do katalogu usług" : "Wróć do listy ofert";
 
   // Check Saved Status
   let isSaved = false;
@@ -124,7 +343,7 @@ export default async function OfferDetailsPage({
   }
 
   // Fetch Review if Completed
-  let myReview: any = null;
+  let myReview: ReviewSummary | null = null;
   if (myApplication?.status === 'completed' && user) {
     const { data: rev } = await supabase
       .from("reviews")
@@ -132,13 +351,32 @@ export default async function OfferDetailsPage({
       .eq("application_id", myApplication.id)
       .eq("reviewer_role", "company")
       .maybeSingle();
-    myReview = rev;
+    myReview = rev as ReviewSummary | null;
   }
+
+  let isLockedForNewApplications = false;
+  if (!offerRow.is_platform_service) {
+    const { count: lockedApplicationsCount } = await supabase
+      .from("applications")
+      .select("id", { count: "exact", head: true })
+      .eq("offer_id", offer.id)
+      .in("status", ["accepted", "in_progress", "completed"]);
+
+    isLockedForNewApplications = (lockedApplicationsCount ?? 0) > 0;
+  }
+
+  const canStartNewApplication =
+    (offer.status ?? "published") === "published" &&
+    (offerRow.is_platform_service || !isLockedForNewApplications);
 
   // Check if offer is editable (not in progress)
   let isEditable = isOwner && (offer.status ?? "published") === "published";
   if (isEditable) {
-    const { count } = await supabase.from("applications").select("*", { count: 'exact', head: true }).eq("offer_id", offer.id).eq("status", "accepted");
+    const { count } = await supabase
+      .from("applications")
+      .select("*", { count: 'exact', head: true })
+      .eq("offer_id", offer.id)
+      .in("status", ["accepted", "in_progress", "completed"]);
     if (count && count > 0) isEditable = false;
   }
 
@@ -157,7 +395,7 @@ export default async function OfferDetailsPage({
     salaryDisplay = "-";
   }
 
-  const companyName = (offer as any).company_profiles?.nazwa || "Firma";
+  const companyName = getCompanyName(offer.company_profiles as CompanyProfileRelation);
   const isJob = (offer.typ === "job" || offer.typ === "Praca" || offer.typ === "praca");
   const periodLabel = offer.salary_period === "hourly" ? "godz." : (isJob ? "mies." : "projekt");
 
@@ -166,7 +404,7 @@ export default async function OfferDetailsPage({
   const hasDetails = offer.opis && offer.opis.includes(separator);
 
   let descriptionMain = offer.opis;
-  let customDetails: Array<{ label: string, value: string }> = [];
+  const customDetails: Array<{ label: string, value: string }> = [];
 
   if (hasDetails) {
     const parts = offer.opis.split(separator);
@@ -184,56 +422,68 @@ export default async function OfferDetailsPage({
     });
   }
 
-  const isPlatformService = (offer as any).is_platform_service || false;
+  const parsedBrief = parsePackageBriefDescription(offer.opis);
+  descriptionMain = parsedBrief.baseDescription || offer.opis || "";
+  const companyRequestDetails = buildDetailItems(
+    parsedBrief.answersByLabel,
+    parsedBrief.deadline,
+    parsedBrief.notes,
+  );
+
+  const isPlatformService = offerRow.is_platform_service || false;
   const gradient = isPlatformService ? "from-amber-600 to-orange-600" 
     : isJob ? "from-blue-600 to-indigo-700" 
     : "from-violet-600 to-purple-700";
   const briefSections = [
     {
       label: "Cel wspolpracy",
-      value: (offer as any).cel_wspolpracy,
+      value: offerRow.cel_wspolpracy,
       tone: "bg-blue-50 border-blue-100 text-blue-700",
     },
     {
       label: "Oczekiwany rezultat",
-      value: (offer as any).oczekiwany_rezultat,
+      value: offerRow.oczekiwany_rezultat,
       tone: "bg-emerald-50 border-emerald-100 text-emerald-700",
     },
     {
       label: "Kryteria akceptacji",
-      value: (offer as any).kryteria_akceptacji,
+      value: offerRow.kryteria_akceptacji,
       tone: "bg-amber-50 border-amber-100 text-amber-700",
     },
   ].filter((item) => Boolean(item.value));
-  const collaborationMeta = [
-    (offer as any).osoba_prowadzaca
-      ? { label: "Osoba prowadzaca", value: (offer as any).osoba_prowadzaca }
+  const collaborationMeta: MetaItem[] = [
+    offerRow.osoba_prowadzaca
+      ? { label: "Osoba prowadzaca", value: offerRow.osoba_prowadzaca }
       : null,
-    (offer as any).planowany_start
+    offerRow.planowany_start
       ? {
           label: "Planowany start",
-          value: new Date((offer as any).planowany_start).toLocaleDateString("pl-PL"),
+          value: new Date(offerRow.planowany_start).toLocaleDateString("pl-PL"),
         }
       : null,
     offer.czas ? { label: "Czas realizacji", value: offer.czas } : null,
-    (offer as any).tryb_pracy
+    offerRow.tryb_pracy
       ? {
           label: "Tryb pracy",
           value:
-            (offer as any).tryb_pracy === "remote"
+            offerRow.tryb_pracy === "remote"
               ? "Remote"
-              : (offer as any).tryb_pracy === "hybrid"
+              : offerRow.tryb_pracy === "hybrid"
                 ? "Hybrydowo"
                 : "Na miejscu",
         }
       : null,
-  ].filter(Boolean);
-  const formalSignals = [
-    (offer as any).wymagana_poufnosc ? "Poufnosc wymagana" : null,
-    (offer as any).przeniesienie_praw_autorskich ? "Przeniesienie praw autorskich" : null,
-    (offer as any).portfolio_dozwolone ? "Portfolio dozwolone" : "Portfolio wymaga uzgodnienia",
-    (offer as any).materialy_legalnie_udostepnione ? "Materialy firmy zweryfikowane" : null,
-  ].filter(Boolean);
+  ].filter((item): item is MetaItem => Boolean(item));
+  const formalSignals: string[] = [
+    offerRow.wymagana_poufnosc ? "Poufnosc wymagana" : null,
+    offerRow.przeniesienie_praw_autorskich ? "Przeniesienie praw autorskich" : null,
+    offerRow.portfolio_dozwolone ? "Portfolio dozwolone" : "Portfolio wymaga uzgodnienia",
+    offerRow.materialy_legalnie_udostepnione ? "Materialy firmy zweryfikowane" : null,
+  ].filter((signal): signal is string => Boolean(signal));
+  const responsibilityLines = splitTaskLines(offerRow.obligations || offer.wymagania);
+  const obligationsForApplyCard = Array.isArray(offerRow.obligations)
+    ? offerRow.obligations.join("\n")
+    : offerRow.obligations ?? undefined;
 
   return (
     <main className="min-h-screen bg-slate-50/50 pb-20 font-sans">
@@ -246,9 +496,9 @@ export default async function OfferDetailsPage({
         </div>
 
         <PageContainer className="relative z-10">
-          <Link href="/app/jobs" className="inline-flex items-center text-sm font-medium text-slate-300 hover:text-white mb-10 transition-colors group bg-white/5 backdrop-blur-md px-5 py-2.5 rounded-full border border-white/10 hover:bg-white/10">
+          <Link href={backHref} className="inline-flex items-center text-sm font-medium text-slate-300 hover:text-white mb-10 transition-colors group bg-white/5 backdrop-blur-md px-5 py-2.5 rounded-full border border-white/10 hover:bg-white/10">
             <ArrowLeft className="h-4 w-4 mr-2 transition-transform group-hover:-translate-x-1" /> 
-            Wróć do listy ofert
+            {backLabel}
           </Link>
 
           <div className="flex flex-col lg:flex-row items-start justify-between gap-10">
@@ -323,32 +573,28 @@ export default async function OfferDetailsPage({
                 <span className="w-8 h-1 bg-indigo-500 rounded-full"></span>
                 Opis oferty
               </h3>
-              <div className="prose prose-slate max-w-none leading-relaxed text-slate-600 text-lg whitespace-pre-line font-medium">
-                {descriptionMain}
-              </div>
+              <OfferDescription content={descriptionMain} />
             </section>
 
-            {(briefSections.length > 0 || collaborationMeta.length > 0 || formalSignals.length > 0) && (
+            {briefSections.length > 0 && (
               <section className="bg-white/80 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
                   <span className="w-8 h-1 bg-blue-500 rounded-full"></span>
                   Brief wspolpracy
                 </h3>
 
-                {briefSections.length > 0 && (
-                  <div className="grid gap-6">
-                    {briefSections.map((section) => (
-                      <div key={section.label} className="rounded-[1.75rem] border border-slate-100 bg-white p-6 shadow-sm">
-                        <div className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${section.tone}`}>
-                          {section.label}
-                        </div>
-                        <p className="mt-4 whitespace-pre-line text-base font-medium leading-8 text-slate-700">
-                          {section.value}
-                        </p>
+                <div className="grid gap-6">
+                  {briefSections.map((section) => (
+                    <div key={section.label} className="rounded-[1.75rem] border border-slate-100 bg-white p-6 shadow-sm">
+                      <div className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${section.tone}`}>
+                        {section.label}
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <p className="mt-4 whitespace-pre-line text-base font-medium leading-8 text-slate-700">
+                        {section.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
 
                 {(collaborationMeta.length > 0 || formalSignals.length > 0) && (
                   <div className="mt-8 grid gap-6 md:grid-cols-2">
@@ -356,7 +602,7 @@ export default async function OfferDetailsPage({
                       <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-6">
                         <p className="mb-4 text-xs font-black uppercase tracking-widest text-slate-400">Ustalenia operacyjne</p>
                         <div className="grid gap-3">
-                          {collaborationMeta.map((item: any) => (
+                          {collaborationMeta.map((item) => (
                             <div key={item.label} className="rounded-2xl border border-white bg-white px-4 py-4 shadow-sm">
                               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</p>
                               <p className="mt-2 text-sm font-bold text-slate-900">{item.value}</p>
@@ -387,21 +633,58 @@ export default async function OfferDetailsPage({
             )}
 
             {/* Custom Details for System Offers */}
-            {customDetails.length > 0 && (
-              <section className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
+            {companyRequestDetails.length > 0 && (
+              <section className="bg-white rounded-[2rem] p-8 md:p-12 border border-slate-100 shadow-xl shadow-slate-200/30">
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
                   <span className="w-8 h-1 bg-purple-500 rounded-full"></span>
-                  Szczegóły zlecenia
+                  Informacje przesłane przez firmę
                 </h3>
-                <div className="grid sm:grid-cols-2 gap-6">
-                  {customDetails.map((detail, idx) => (
-                    <div key={idx} className="bg-slate-50/50 p-6 rounded-3xl border border-slate-100 hover:border-purple-200 transition-colors group">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-purple-500 transition-colors">
-                        {detail.label.replace(/[\u{1F300}-\u{1F9FF}]/gu, '')}
+                <div className="mb-8 rounded-2xl border border-purple-100 bg-purple-50/50 p-5">
+                  <p className="text-sm font-semibold leading-7 text-purple-950">
+                    To są odpowiedzi firmy z formularza zamówienia. Traktuj je jako kontekst do realizacji, oddzielony od ogólnego opisu pakietu.
+                  </p>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-5">
+                  {companyRequestDetails.map((detail) => (
+                    <div key={detail.label} className="bg-slate-50/80 p-6 rounded-3xl border border-slate-100 hover:border-purple-200 transition-colors group">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 group-hover:text-purple-500 transition-colors">
+                        {detail.label}
                       </p>
-                      <p className="font-bold text-slate-900 text-lg">{detail.value}</p>
+                      <p className="whitespace-pre-line break-words font-bold text-slate-900 text-base leading-7">{detail.value}</p>
                     </div>
                   ))}
+                </div>
+              </section>
+            )}
+
+            {briefSections.length === 0 && (collaborationMeta.length > 0 || formalSignals.length > 0) && (
+              <section className="bg-white/80 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
+                  <span className="w-8 h-1 bg-blue-500 rounded-full"></span>
+                  Warunki realizacji
+                </h3>
+                <div className="grid gap-5 md:grid-cols-2">
+                  {collaborationMeta.map((item) => (
+                    <div key={item.label} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                      <p className="mt-2 text-base font-black text-slate-900">{item.value}</p>
+                    </div>
+                  ))}
+                  {formalSignals.length > 0 && (
+                    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm md:col-span-2">
+                      <p className="mb-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Sygnały formalne</p>
+                      <div className="flex flex-wrap gap-3">
+                        {formalSignals.map((signal) => (
+                          <Badge
+                            key={signal}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-700 shadow-sm"
+                          >
+                            {signal}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </section>
             )}
@@ -426,6 +709,7 @@ export default async function OfferDetailsPage({
 
             {/* Additional Requirements & Time */}
             {isPlatformService ? (
+              responsibilityLines.length > 0 && (
               <section className="bg-indigo-900 rounded-[2.5rem] p-8 md:p-12 shadow-2xl text-white relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] -mr-32 -mt-32"></div>
                 <h3 className="relative z-10 text-sm font-black text-indigo-300 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
@@ -433,12 +717,9 @@ export default async function OfferDetailsPage({
                   Zakres Obowiązków
                 </h3>
                 <div className="relative z-10 space-y-6">
-                  {((offer as any).obligations || offer.wymagania) ? (
+                  {responsibilityLines.length > 0 ? (
                     <div className="grid gap-4">
-                      {((offer as any).obligations || offer.wymagania)
-                        .split(/\n|- |• /)
-                        .map((line: string) => line.trim())
-                        .filter((line: string) => line.length > 1 && line !== "()")
+                      {responsibilityLines
                         .map((line: string, i: number) => (
                           <div key={i} className="flex items-start gap-4 p-5 bg-white/5 rounded-3xl border border-white/10 hover:bg-white/10 transition-colors">
                             <div className="w-6 h-6 rounded-full bg-amber-400/20 flex items-center justify-center shrink-0 mt-0.5 border border-amber-400/30">
@@ -454,6 +735,7 @@ export default async function OfferDetailsPage({
                   )}
                 </div>
               </section>
+              )
             ) : (
               (offer.wymagania || offer.czas) && (
                 <section className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
@@ -508,7 +790,7 @@ export default async function OfferDetailsPage({
                               <div className="font-bold text-slate-900">Ocena Klienta: {myReview.rating}/5</div>
                             </div>
                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-sm text-slate-600 italic text-center">
-                              "{myReview.comment}"
+                              &ldquo;{myReview.comment}&rdquo;
                             </div>
                           </div>
                         ) : (
@@ -564,18 +846,25 @@ export default async function OfferDetailsPage({
                       </CardContent>
                     </Card>
                   )
-                ) : (
+                ) : canStartNewApplication ? (
                   <ApplyCard
                     offerId={offer.id}
                     offerStawka={offer.stawka}
                     offerTyp={offer.typ}
                     formattedSalary={salaryDisplay}
                     className="w-full"
-                    isPlatformService={(offer as any).is_platform_service}
+                    isPlatformService={isPlatformService}
                     offerTitle={offer.tytul}
                     offerDescription={offer.opis}
-                    obligations={(offer as any).obligations}
+                    obligations={obligationsForApplyCard}
                   />
+                ) : (
+                  <Card className="border-none rounded-[2.5rem] bg-slate-50 p-8 text-center border border-dashed border-slate-200">
+                    <Lock className="mx-auto mb-4 h-8 w-8 text-slate-400" />
+                    <p className="text-sm font-bold text-slate-500 uppercase tracking-widest leading-relaxed">
+                      Oferta jest już zajęta albo zakończona.
+                    </p>
+                  </Card>
                 )
               ) : (
                 <Card className="border-none rounded-[2.5rem] bg-slate-50 p-8 text-center border border-dashed border-slate-200">

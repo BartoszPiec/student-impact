@@ -229,6 +229,9 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
 
                               <div className="space-y-3">
                                 <p className="text-sm font-semibold leading-relaxed text-slate-600">{statusMeta.summaryLabel}</p>
+                                <div className="rounded-xl border border-white bg-white/80 px-3 py-2 text-xs font-black uppercase tracking-widest text-indigo-700 shadow-sm">
+                                  Następna akcja: {statusMeta.nextActionLabel}
+                                </div>
                                 <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
                                   <Calendar className="h-3.5 w-3.5" />
                                   {format(new Date(order.created_at), "d MMM yyyy", { locale: pl }).toUpperCase()}

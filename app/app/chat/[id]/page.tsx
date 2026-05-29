@@ -2,14 +2,45 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Card } from "@/components/ui/card";
 import { ChatInput } from "./ChatInput";
 import { ChatList } from "./ChatList";
 import { ChatSidebar } from "./_components/ChatSidebar";
 import { ChatBackBtn } from "./ChatBackBtn";
 import { Sparkles } from "lucide-react";
+import { ChatHeaderActions } from "./ChatHeaderActions";
 
 export const dynamic = "force-dynamic";
+
+type ChatOffer = {
+  id: string;
+  tytul: string | null;
+  stawka: number | null;
+  typ: string | null;
+  is_private: boolean | null;
+  service_package_id: string | null;
+  status?: string | null;
+};
+
+type ChatPackage = {
+  title: string | null;
+  price: number | null;
+  is_system: boolean | null;
+};
+
+type ChatConversation = {
+  id: string;
+  company_id: string;
+  student_id: string;
+  offer_id: string | null;
+  package_id: string | null;
+  application_id: string | null;
+  offers: ChatOffer | ChatOffer[] | null;
+  package: ChatPackage | ChatPackage[] | null;
+};
+
+function unwrapRelation<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
+}
 
 export default async function ChatPage({
   params,
@@ -25,71 +56,75 @@ export default async function ChatPage({
 
   const { data: conv, error: convErr } = await supabase
     .from("conversations")
-    .select("id, company_id, student_id, offer_id, package_id, application_id, offers(id, tytul, stawka, typ, is_private, service_package_id), package:service_packages(title, price, is_system)")
+    .select("id, company_id, student_id, offer_id, package_id, application_id, offers(id, tytul, stawka, typ, is_private, service_package_id, status), package:service_packages(title, price, is_system)")
     .eq("id", id)
     .single();
 
   if (convErr || !conv) redirect("/app");
 
-  const isCompany = user.id === conv.company_id;
-  const isStudent = user.id === conv.student_id;
+  const conversation = conv as ChatConversation;
+  const isCompany = user.id === conversation.company_id;
+  const isStudent = user.id === conversation.student_id;
   if (!isCompany && !isStudent) redirect("/app");
 
   // Fetch Student Name for Company View
   let studentName = null;
-  if (isCompany && conv.student_id) {
-    const { data: sp } = await supabase.from("student_profiles").select("public_name").eq("user_id", conv.student_id).single();
+  if (isCompany && conversation.student_id) {
+    const { data: sp } = await supabase.from("student_profiles").select("public_name").eq("user_id", conversation.student_id).single();
     studentName = sp?.public_name;
   }
 
-  const offer = Array.isArray((conv as any).offers) ? (conv as any).offers[0] : (conv as any).offers;
-  const pkg = (conv as any).package;
+  const offer = unwrapRelation(conversation.offers);
+  const pkg = unwrapRelation(conversation.package);
 
   const chatTitle = offer?.tytul ?? pkg?.title ?? "Rozmowa";
 
   let headerLink: string | null = null;
-  if (offer) {
-    headerLink = isCompany ? `/app/company/offers/${conv.offer_id}` : `/app/jobs/${conv.offer_id}`;
-  } else if (conv.package_id) {
-    headerLink = `/app/orders/create/${conv.package_id}`;
+  const isOfferUnavailable = !offer && Boolean(conversation.offer_id);
+  const isOfferClosed = ["completed", "cancelled", "closed", "archived"].includes(String(offer?.status || ""));
+
+  if (offer && !isOfferClosed) {
+    headerLink = isCompany ? `/app/company/offers/${conversation.offer_id}` : `/app/offers/${conversation.offer_id}`;
+  } else if (conversation.package_id) {
+    headerLink = `/app/orders/create/${conversation.package_id}`;
   }
 
   let appRow = null;
-  if (conv.application_id) {
+  if (conversation.application_id) {
     const { data } = await supabase
       .from('applications')
       .select('*')
-      .eq('id', conv.application_id)
+      .eq('id', conversation.application_id)
       .single();
     if (data) appRow = data;
   }
 
   // Fallback: If application_id is missing, try connecting via offer_id
-  if (!appRow && conv.offer_id && conv.student_id) {
+  if (!appRow && conversation.offer_id && conversation.student_id) {
     const { data: fb } = await supabase.from('applications')
       .select('*')
-      .eq('offer_id', conv.offer_id)
-      .eq('student_id', conv.student_id)
+      .eq('offer_id', conversation.offer_id)
+      .eq('student_id', conversation.student_id)
       .maybeSingle();
     if (fb) appRow = fb;
   }
 
   const { data: msgs } = await supabase
     .from("messages")
-    .select("id, sender_id, content, created_at, read_at, attachment_url, attachment_type, event, payload")
-    .eq("conversation_id", conv.id)
+    .select("id, sender_id, content, created_at, read_at, flagged_by, attachment_url, attachment_type, event, payload")
+    .eq("conversation_id", conversation.id)
     .order("created_at", { ascending: true });
 
   // Fetch Service Order if needed (System Context)
   let serviceOrderRow = null;
-  const effectivePackageId = conv.package_id || offer?.service_package_id;
+  const effectivePackageId = conversation.package_id || offer?.service_package_id;
 
   if (effectivePackageId) {
-    let { data: so } = await supabase.from("service_orders")
+    const { data: so } = await supabase.from("service_orders")
       .select("*")
       .eq("package_id", effectivePackageId)
-      .eq("student_id", conv.student_id)
-      .eq("company_id", conv.company_id)
+      .eq("student_id", conversation.student_id)
+      .eq("company_id", conversation.company_id)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -105,7 +140,7 @@ export default async function ChatPage({
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-slate-50/80 to-transparent pointer-events-none -z-10" />
 
         {/* Header */}
-        <div className="flex-none flex items-center justify-between px-8 py-5 bg-white/80 backdrop-blur-md border-b border-slate-50 z-20 sticky top-0">
+        <div className="flex-none flex items-center justify-between gap-4 px-8 py-5 bg-white/80 backdrop-blur-md border-b border-slate-50 z-20 sticky top-0">
           <div className="flex items-center gap-4">
             <div className="md:hidden">
               <ChatBackBtn />
@@ -124,8 +159,14 @@ export default async function ChatPage({
               {studentName && (
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">Rozmowa z: <span className="text-indigo-500">{studentName}</span></p>
               )}
+              {(isOfferUnavailable || isOfferClosed) && (
+                <p className="mt-1 text-xs font-semibold text-amber-600">
+                  To ogloszenie jest juz zakonczone albo niedostepne. Rozmowa zostaje jako historia ustalen.
+                </p>
+              )}
             </div>
           </div>
+          <ChatHeaderActions conversationId={conversation.id} />
         </div>
 
         {/* Chat List */}
@@ -134,7 +175,7 @@ export default async function ChatPage({
             <ChatList
               messages={msgs ?? []}
               userId={user.id}
-              conversationId={conv.id}
+              conversationId={conversation.id}
             />
           </div>
         </div>
@@ -149,7 +190,7 @@ export default async function ChatPage({
 
       {/* Right Sidebar */}
       <ChatSidebar
-        conversation={conv}
+        conversation={conversation}
         application={appRow}
         offer={offer}
         packageData={pkg}

@@ -3,20 +3,95 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Loader2, AlertTriangle, CheckCircle2, ClipboardList, Info } from "lucide-react";
 import { applyToOffer } from "@/app/app/offers/[id]/_actions";
+import { parsePackageBriefDescription } from "@/lib/services/package-customization";
 import { JobOffer } from "./job-card";
+
+type ConfirmationDetails = {
+    scopeLines: string[];
+    companyDetails: Array<{ label: string; value: string }>;
+};
+
+function isMeaningfulText(value: unknown) {
+    if (typeof value !== "string") return false;
+    const normalized = value.trim();
+    return normalized.length > 0 && !["()", "[]", "{}", "-", "—"].includes(normalized);
+}
+
+function splitScopeLines(text: string) {
+    return text
+        .split(/\r?\n|•|(?:^|\s)-\s+/)
+        .map((line) => line.trim())
+        .filter((line) => isMeaningfulText(line) && !/^https?:\/\//i.test(line));
+}
+
+function stripMarkdown(text: string) {
+    return text
+        .replace(/^#{1,4}\s+/gm, "")
+        .replace(/\*\*(.*?)\*\*/g, "$1")
+        .trim();
+}
+
+function formatAnswerValue(label: string, value: string) {
+    const normalized = value.trim();
+    const lower = normalized.toLowerCase();
+
+    if (lower === "no_logo") return "Logo nie zostało przekazane.";
+    if (lower === "platform") return "Kontakt przez platformę Student2Work.";
+    if (lower === "brak") return "Brak wskazanych preferencji.";
+
+    if (label.toLowerCase().includes("termin")) {
+        const date = new Date(normalized);
+        if (!Number.isNaN(date.getTime())) return date.toLocaleDateString("pl-PL");
+    }
+
+    return normalized;
+}
+
+function buildConfirmationDetails(offer: JobOffer): ConfirmationDetails {
+    const parsedBrief = parsePackageBriefDescription(offer.opis);
+    const obligationLines = isMeaningfulText(offer.obligations)
+        ? splitScopeLines(offer.obligations || "")
+        : [];
+    const descriptionLines = splitScopeLines(stripMarkdown(parsedBrief.baseDescription || offer.opis || ""));
+
+    const companyDetails = Object.entries(parsedBrief.answersByLabel)
+        .filter(([, value]) => isMeaningfulText(value))
+        .slice(0, 8)
+        .map(([label, value]) => ({
+            label,
+            value: formatAnswerValue(label, value),
+        }));
+
+    if (isMeaningfulText(parsedBrief.deadline)) {
+        companyDetails.push({
+            label: "Preferowany termin",
+            value: formatAnswerValue("Preferowany termin", parsedBrief.deadline),
+        });
+    }
+
+    return {
+        scopeLines: obligationLines.length > 0 ? obligationLines : descriptionLines.slice(0, 6),
+        companyDetails,
+    };
+}
 
 export function ApplySheet({
     offer,
     children,
-    onSuccess
+    onSuccess,
 }: {
     offer: JobOffer;
     children: React.ReactNode;
@@ -26,8 +101,9 @@ export function ApplySheet({
     const [isLoading, setIsLoading] = useState(false);
     const [accepted, setAccepted] = useState(false);
     const [error, setError] = useState("");
-
     const router = useRouter();
+
+    const confirmationDetails = buildConfirmationDetails(offer);
 
     async function handleApply() {
         if (!accepted) return;
@@ -45,70 +121,72 @@ export function ApplySheet({
                 router.refresh();
                 router.push(result.redirectUrl);
             }
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(e);
-            setError(e.message || "Wystąpił błąd podczas aplikowania.");
+            setError(e instanceof Error ? e.message : "Wystąpił błąd podczas aplikowania.");
             setIsLoading(false);
         }
     }
 
-    const scopeOfWork = (offer as any).obligations || offer.opis || "Szczegóły w opisie zlecenia.";
-
-    const formatScopeOfWork = (text: string) => {
-        // Simple splitter by newlines or '-'
-        const lines = text.split(/[\n•-]+/).map(l => l.trim()).filter(l => l.length > 0);
-
-        if (lines.length === 0) return <p className="text-sm text-slate-600">Brak szczegółowego opisu.</p>;
-
-        return (
-            <ul className="space-y-2">
-                {lines.map((line, idx) => (
-                    <li key={idx} className="flex gap-2 text-sm text-slate-700 items-start">
-                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 flex-shrink-0" />
-                        <span>{line}</span>
-                    </li>
-                ))}
-            </ul>
-        );
-    };
-
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-            <DialogTrigger asChild>
-                {children}
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+            <DialogTrigger asChild>{children}</DialogTrigger>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
                 <DialogHeader className="space-y-2">
-                    <DialogTitle className="text-xl md:text-2xl font-bold flex items-start gap-4">
-                        <div className="bg-amber-100 text-amber-700 p-3 rounded-xl">
-                            ⚡
+                    <DialogTitle className="flex items-start gap-4 text-xl font-black text-slate-950 md:text-2xl">
+                        <div className="rounded-2xl bg-amber-100 p-3 text-amber-700">
+                            <ClipboardList className="h-5 w-5" />
                         </div>
                         <div>
-                            Potwierdź zgłoszenie
-                            <div className="text-base font-normal text-slate-500 mt-1 line-clamp-1">
+                            Potwierdź przyjęcie zlecenia
+                            <div className="mt-1 line-clamp-2 text-base font-semibold text-slate-500">
                                 {offer.tytul}
                             </div>
                         </div>
                     </DialogTitle>
-                    <DialogDescription className="pt-2">
-                        To jest <strong>Zlecenie Systemowe</strong> (Gwarantowane). Aplikując, zobowiązujesz się do jego realizacji.
+                    <DialogDescription className="pt-2 text-sm font-medium leading-6 text-slate-600">
+                        To jest <strong>zlecenie systemowe</strong>. Po potwierdzeniu przyjmujesz odpowiedzialność za realizację zgodnie z zakresem i briefem firmy.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="py-6 space-y-6">
-                    {/* SCOPE OF WORK */}
-                    <div className="bg-slate-50/80 p-5 rounded-xl border border-slate-100">
-                        <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-indigo-600" />
-                            Zakres Obowiązków
+                <div className="space-y-6 py-6">
+                    <div className="rounded-3xl border border-slate-100 bg-slate-50/80 p-5">
+                        <h4 className="mb-4 flex items-center gap-2 font-black text-slate-900">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            Co przyjmujesz
                         </h4>
-                        <div className="max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                            {formatScopeOfWork(scopeOfWork)}
-                        </div>
+                        {confirmationDetails.scopeLines.length > 0 ? (
+                            <ul className="max-h-56 space-y-3 overflow-y-auto pr-2">
+                                {confirmationDetails.scopeLines.map((line) => (
+                                    <li key={line} className="flex items-start gap-3 rounded-2xl border border-white bg-white p-4 text-sm font-semibold leading-6 text-slate-700">
+                                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                                        <span>{line}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm font-semibold text-slate-600">Szczegóły znajdziesz w opisie zlecenia.</p>
+                        )}
                     </div>
 
-                    {/* CONFIRMATION */}
-                    <div className="flex items-start space-x-3 p-4 bg-amber-50 rounded-xl border border-amber-100/50">
+                    {confirmationDetails.companyDetails.length > 0 ? (
+                        <div className="rounded-3xl border border-amber-100 bg-amber-50/50 p-5">
+                            <h4 className="mb-4 flex items-center gap-2 font-black text-amber-950">
+                                <Info className="h-4 w-4 text-amber-700" />
+                                Najważniejsze informacje od firmy
+                            </h4>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                {confirmationDetails.companyDetails.map((detail) => (
+                                    <div key={detail.label} className="rounded-2xl border border-amber-100/80 bg-white p-4">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{detail.label}</p>
+                                        <p className="mt-2 break-words text-sm font-bold leading-6 text-slate-900">{detail.value}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+
+                    <div className="flex items-start space-x-3 rounded-2xl border border-amber-100 bg-amber-50 p-4">
                         <Checkbox
                             id="accept-terms"
                             checked={accepted}
@@ -116,31 +194,31 @@ export function ApplySheet({
                             className="mt-1 border-amber-600 data-[state=checked]:bg-amber-600"
                         />
                         <div className="space-y-1">
-                            <Label htmlFor="accept-terms" className="text-sm font-medium text-amber-900 cursor-pointer">
+                            <Label htmlFor="accept-terms" className="cursor-pointer text-sm font-bold text-amber-950">
                                 Akceptuję odpowiedzialność
                             </Label>
-                            <p className="text-xs text-amber-700/80 leading-relaxed">
+                            <p className="text-xs leading-relaxed text-amber-700/80">
                                 Rozumiem, że przyjęcie zlecenia wiąże się z obowiązkiem jego wykonania w wyznaczonym terminie.
                             </p>
                         </div>
                     </div>
 
-                    {error && (
-                        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg flex items-center gap-2 border border-red-100">
+                    {error ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-600">
                             <AlertTriangle className="h-4 w-4" />
                             {error}
                         </div>
-                    )}
+                    ) : null}
                 </div>
 
-                <DialogFooter className="gap-2 sm:gap-0 sticky bottom-0 bg-white pt-2">
+                <DialogFooter className="sticky bottom-0 gap-2 bg-white pt-2 sm:gap-0">
                     <Button variant="outline" onClick={() => setIsOpen(false)}>
                         Anuluj
                     </Button>
                     <Button
                         onClick={handleApply}
                         disabled={!accepted || isLoading}
-                        className="bg-amber-600 hover:bg-amber-700 text-white min-w-[140px]"
+                        className="min-w-[140px] bg-amber-600 text-white hover:bg-amber-700"
                     >
                         {isLoading ? (
                             <>

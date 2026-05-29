@@ -2,6 +2,8 @@
 import { createClient } from "@/lib/supabase/server";
 import ChatListSidebarClient from "./ChatListSidebarClient";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 export type ChatPreview = {
     id: string;
     created_at: string;
@@ -30,6 +32,59 @@ export type ChatPreview = {
     }
 };
 
+type SidebarMessage = {
+    content?: string | null;
+    created_at: string;
+    read_at?: string | null;
+    sender_id: string;
+    event?: string | null;
+    payload?: Record<string, unknown> | null;
+    attachment_type?: string | null;
+};
+
+function payloadString(payload: Record<string, unknown> | null | undefined, key: string) {
+    const value = payload?.[key];
+    return typeof value === "string" ? value : "";
+}
+
+function payloadNumber(payload: Record<string, unknown> | null | undefined, key: string) {
+    const value = payload?.[key];
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function buildLastMessagePreview(message?: SidebarMessage | null) {
+    if (!message) return "";
+
+    const content = String(message.content || "").trim();
+    if (content) return content;
+
+    switch (message.event) {
+        case "file.sent":
+            return `[Plik] ${payloadString(message.payload, "name") || "Zalacznik"}`;
+        case "rate.proposed": {
+            const amount = payloadNumber(message.payload, "proposed_stawka") ?? payloadNumber(message.payload, "amount");
+            return amount ? `Propozycja stawki: ${amount} PLN` : "Nowa propozycja stawki";
+        }
+        case "rate.accepted":
+            return "Stawka zaakceptowana";
+        case "rate.rejected":
+            return "Stawka odrzucona";
+        case "deadline.proposed":
+            return `Propozycja terminu: ${payloadString(message.payload, "proposed_deadline") || "nowy termin"}`;
+        case "deadline.accepted":
+            return "Termin zaakceptowany";
+        case "deadline.rejected":
+            return "Termin odrzucony";
+        case "inquiry.details":
+        case "inquiry_details":
+            return "Szczegoly zapytania";
+        case "system.notice":
+            return "Aktualizacja rozmowy";
+        default:
+            return message.event ? "Nowe zdarzenie w rozmowie" : "";
+    }
+}
+
 export default async function ChatListSidebar() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -50,7 +105,7 @@ export default async function ChatListSidebar() {
         offer:offers(tytul),
         package:service_packages(title),
         application:applications(offer:offers(tytul)),
-        messages:messages(content, created_at, read_at, sender_id)
+        messages:messages(content, created_at, read_at, sender_id, event, payload, attachment_type)
       `)
         .or(`student_id.eq.${user.id},company_id.eq.${user.id}`)
         .order("updated_at", { ascending: false });
@@ -75,7 +130,7 @@ export default async function ChatListSidebar() {
         }
 
         // Sort messages desc
-        const sortedMsgs = (conv.messages || []).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const sortedMsgs = ((conv.messages || []) as SidebarMessage[]).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const lastMsg = sortedMsgs[0];
         const amISender = lastMsg?.sender_id === user.id;
 
@@ -96,7 +151,7 @@ export default async function ChatListSidebar() {
             active_at: conv.updated_at || conv.created_at,
             type: derivedType as any,
             unread_count: unread,
-            last_message: lastMsg?.content || "",
+            last_message: buildLastMessagePreview(lastMsg),
             other_user: otherUser,
             offer: conv.offer,
             package: conv.package,

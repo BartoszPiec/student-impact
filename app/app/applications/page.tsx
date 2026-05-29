@@ -184,26 +184,27 @@ export default async function StudentApplicationsPage() {
     }))
     .filter((item): item is SavedOfferItem => item.offer?.status === "published");
 
-  const wTrakcie = applications.filter((application) => application.stage === "in_progress");
-  const wyslane = applications.filter(
-    (application) =>
-      application.stage === "sent" || application.stage === "countered",
+  const doAkcji = applications.filter(
+    (application) => application.stage === "countered" || application.stage === "in_progress",
   );
+  const oczekujeNaFirme = applications.filter((application) => application.stage === "sent");
+  const czekaNaOcene = applications.filter((application) => application.stage === "done");
   const archiwum = applications.filter(
     (application) =>
       application.stage === "rejected" ||
-      application.stage === "done" ||
       application.stage === "cancelled",
   );
 
   const defaultTab =
-    wTrakcie.length > 0
-      ? "in_progress"
-      : wyslane.length > 0
-        ? "sent"
+    doAkcji.length > 0
+      ? "action"
+      : oczekujeNaFirme.length > 0
+        ? "waiting"
         : savedOffers.length > 0
           ? "saved"
-          : "archive";
+          : czekaNaOcene.length > 0
+            ? "review"
+            : "archive";
 
   return (
     <main className="pb-20">
@@ -219,28 +220,37 @@ export default async function StudentApplicationsPage() {
       <PageContainer className="space-y-8">
         <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 md:w-auto h-auto p-1.5 bg-slate-100/80 backdrop-blur-sm rounded-2xl border border-slate-200/50 shadow-inner">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 md:w-auto h-auto p-1.5 bg-slate-100/80 backdrop-blur-sm rounded-2xl border border-slate-200/50 shadow-inner">
               <TabsTrigger
-                value="in_progress"
+                value="action"
                 className="rounded-xl py-3 px-6 data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-indigo-600 font-bold transition-all duration-300"
               >
-                W trakcie{" "}
-                {wTrakcie.length > 0 ? (
+                Akcja{" "}
+                {doAkcji.length > 0 ? (
                   <Badge
                     variant="secondary"
                     className="ml-2 bg-indigo-100 text-indigo-700 border-indigo-200"
                   >
-                    {wTrakcie.length}
+                    {doAkcji.length}
                   </Badge>
                 ) : null}
               </TabsTrigger>
               <TabsTrigger
-                value="sent"
+                value="waiting"
                 className="rounded-xl py-3 px-6 data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-indigo-600 font-bold transition-all duration-300"
               >
-                Wyslane{" "}
+                Czeka na firme{" "}
                 <span className="ml-2 text-slate-400 font-medium tracking-tighter">
-                  ({wyslane.length})
+                  ({oczekujeNaFirme.length})
+                </span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="review"
+                className="rounded-xl py-3 px-6 data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-indigo-600 font-bold transition-all duration-300"
+              >
+                Do oceny{" "}
+                <span className="ml-2 text-slate-400 font-medium tracking-tighter">
+                  ({czekaNaOcene.length})
                 </span>
               </TabsTrigger>
               <TabsTrigger
@@ -269,24 +279,31 @@ export default async function StudentApplicationsPage() {
               <p className="text-sm font-bold text-indigo-700">
                 Filtr:{" "}
                 <span className="text-indigo-900 ml-1">
-                  {defaultTab === "in_progress" ? "Aktywne zlecenia" : "Widok ogolny"}
+                  {defaultTab === "action" ? "Wymaga Twojej akcji" : "Widok ogolny"}
                 </span>
               </p>
             </div>
           </div>
 
-          <TabsContent value="in_progress" className="space-y-4">
-            {wTrakcie.length === 0 ? (
-              <EmptyState label="Nie masz obecnie zadnych zlecen w trakcie." />
+          <TabsContent value="action" className="space-y-4">
+            {doAkcji.length === 0 ? (
+              <EmptyState label="Nic nie wymaga teraz Twojej akcji." />
             ) : (
-              <ApplicationList items={wTrakcie} />
+              <ApplicationList items={doAkcji} />
             )}
           </TabsContent>
-          <TabsContent value="sent" className="space-y-4">
-            {wyslane.length === 0 ? (
-              <EmptyState label="Brak oczekujacych zgloszen." />
+          <TabsContent value="waiting" className="space-y-4">
+            {oczekujeNaFirme.length === 0 ? (
+              <EmptyState label="Brak zgloszen oczekujacych na decyzje firmy." />
             ) : (
-              <ApplicationList items={wyslane} />
+              <ApplicationList items={oczekujeNaFirme} />
+            )}
+          </TabsContent>
+          <TabsContent value="review" className="space-y-4">
+            {czekaNaOcene.length === 0 ? (
+              <EmptyState label="Brak zakonczonych zlecen czekajacych na ocene." />
+            ) : (
+              <ApplicationList items={czekaNaOcene} />
             )}
           </TabsContent>
           <TabsContent value="saved" className="space-y-4">

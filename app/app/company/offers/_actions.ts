@@ -43,7 +43,7 @@ export async function setOfferStatus(
       .from("applications")
       .select("id")
       .eq("offer_id", offerId)
-      .eq("status", "accepted")
+      .in("status", ["accepted", "in_progress", "completed"])
       .limit(1)
       .maybeSingle();
 
@@ -62,7 +62,7 @@ export async function setOfferStatus(
         .from("deliverables")
         .select("id")
         .in("application_id", ids)
-        .eq("status", "approved")
+        .in("status", ["accepted", "approved"])
         .limit(1)
         .maybeSingle();
 
@@ -101,12 +101,12 @@ export async function updateOffer(offerId: string, formData: FormData) {
 
   if (profile?.role !== "company") redirect("/app");
 
-  // blokada edycji po accepted (w trakcie)
+  // blokada edycji po rozpoczeciu albo zakonczeniu realizacji
   const { data: accepted } = await supabase
     .from("applications")
     .select("id")
     .eq("offer_id", offerId)
-    .eq("status", "accepted")
+    .in("status", ["accepted", "in_progress", "completed"])
     .limit(1)
     .maybeSingle();
 

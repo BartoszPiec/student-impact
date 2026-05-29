@@ -41,7 +41,7 @@ export default async function SavedOffersPage({
   // Pobieramy zapisane + osadzone dane oferty
   const { data: rows, error } = await supabase
     .from("saved_offers")
-    .select("created_at, offers(id, tytul, opis, typ, czas, wymagania, stawka, status, created_at)")
+    .select("created_at, offers(id, tytul, opis, typ, czas, wymagania, stawka, status, created_at, is_platform_service)")
     .eq("student_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -52,6 +52,26 @@ export default async function SavedOffersPage({
       return { saved_at: r.created_at, offer };
     })
     .filter((x) => x.offer && x.offer.status === "published");
+
+  const lockedOfferIds = new Set<string>();
+  const offerIds = items.map((item) => item.offer.id).filter(Boolean);
+
+  if (offerIds.length > 0) {
+    const { data: lockedApplications } = await supabase
+      .from("applications")
+      .select("offer_id")
+      .in("offer_id", offerIds)
+      .in("status", ["accepted", "in_progress", "completed"]);
+
+    (lockedApplications ?? []).forEach((application: any) => {
+      if (application?.offer_id) lockedOfferIds.add(application.offer_id);
+    });
+  }
+
+  items = items.filter((item) => {
+    if (item.offer.is_platform_service === true) return true;
+    return !lockedOfferIds.has(item.offer.id);
+  });
 
   // Filtry
   if (typ && ["micro", "projekt", "praktyka"].includes(typ)) {
@@ -135,9 +155,9 @@ export default async function SavedOffersPage({
       </div>
 
       {error && (
-        <pre className="rounded-md border p-4 text-sm overflow-auto">
-          {JSON.stringify(error, null, 2)}
-        </pre>
+        <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+          Nie udalo sie pobrac zapisanych ofert. Odswiez strone albo wroc za chwile.
+        </div>
       )}
 
       {/* LISTA */}

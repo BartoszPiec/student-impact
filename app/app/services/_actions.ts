@@ -88,10 +88,12 @@ export async function createOfferFromSystemPackage(packageId: string) {
             opis: pkg.description + `\n\n---\nZlecenie utworzone na podstawie gotowego rozwiązania: ${pkg.title}.`,
             // salary_range* - jeśli tabela ma 'stawka' to wstawiam w stawka (fixed price)
             stawka: pkg.price,
+            service_package_id: pkg.id,
             // deadline? - zależy jak jest w User DB. W `createOffer` widać tylko tytul,opis,kategoria,typ,czas,wymagania,stawka,status
             // Nie widze deadline.
             // Spróbujmy dopasować do tego co widziałem w _actions.ts w new-offer
             status: "published",
+            typ: "projekt",
             is_platform_service: true,
             commission_rate: resolveCommissionRate({
                 explicitRate: pkg.commission_rate ?? null,
@@ -403,7 +405,7 @@ export async function createPrivateProposalAction(formData: FormData) {
 
     const { data: conversation, error: conversationError } = await supabase
         .from("conversations")
-        .insert({
+        .upsert({
             company_id: targetCompanyId,
             student_id: user.id,
             status: "active",
@@ -411,12 +413,16 @@ export async function createPrivateProposalAction(formData: FormData) {
             package_id: packageId,
             application_id: null,
             service_order_id: order.id,
-        })
+        }, { onConflict: "service_order_id" })
         .select("id")
-        .single();
+        .maybeSingle();
 
     if (conversationError) {
         throw new Error(conversationError.message);
+    }
+
+    if (!conversation) {
+        throw new Error("Nie udalo sie utworzyc rozmowy dla prywatnej propozycji.");
     }
 
     await supabase.from("messages").insert([
@@ -792,20 +798,27 @@ export async function selectCompanyOrderStudentAction(formData: FormData) {
         packageId: order.package_id,
     });
 
-    const conversationId = existingConversation?.id
-        || (await supabase
+    let conversationId = existingConversation?.id ?? null;
+    if (!conversationId) {
+        const { data: createdConversation, error: conversationError } = await supabase
             .from("conversations")
-            .insert({
+            .upsert({
                 company_id: user.id,
                 student_id: studentId,
                 status: "active",
                 type: "inquiry",
                 package_id: order.package_id,
                 service_order_id: orderId,
-            })
+            }, { onConflict: "service_order_id" })
             .select("id")
-            .maybeSingle()).data?.id
-        || null;
+            .maybeSingle();
+
+        if (conversationError) {
+            throw new Error(conversationError.message);
+        }
+
+        conversationId = createdConversation?.id ?? null;
+    }
 
     await supabase.from("notifications").insert({
         user_id: studentId,

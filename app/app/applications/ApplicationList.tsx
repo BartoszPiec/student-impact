@@ -152,175 +152,199 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
     offer?.typ === "job" || offer?.typ === "Praca" || offer?.typ === "praca";
 
   return (
-    <Card className="hover:shadow-xl transition-all duration-500 border-transparent bg-white group rounded-3xl overflow-hidden shadow-sm hover:border-indigo-100/50 hover:-translate-y-1">
+    <Card
+      className={cn(
+        "transition-all duration-500 border-transparent bg-white group rounded-3xl overflow-hidden shadow-sm hover:-translate-y-1",
+        isCountered
+          ? "ring-2 ring-amber-300 shadow-amber-100/60 hover:shadow-xl hover:shadow-amber-200/40"
+          : "hover:shadow-xl hover:border-indigo-100/50",
+      )}
+    >
       <CardContent className="p-0">
         <div className="flex flex-col md:flex-row gap-0">
           <div
             className={cn(
               "w-full md:w-2 md:h-initial h-2 shrink-0 transition-colors duration-500",
-              isJobOffer
-                ? "bg-indigo-500 group-hover:bg-indigo-600"
-                : "bg-amber-500 group-hover:bg-amber-600",
+              isCountered
+                ? "bg-amber-400 group-hover:bg-amber-500"
+                : isJobOffer
+                  ? "bg-indigo-500 group-hover:bg-indigo-600"
+                  : "bg-amber-500 group-hover:bg-amber-600",
             )}
           />
 
-          <div className="flex flex-col md:flex-row flex-1 p-6 justify-between gap-6 items-start md:items-center">
-            <div className="space-y-4 flex-1 w-full">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h3 className="font-extrabold text-xl text-slate-900 leading-tight">
-                  {offer?.tytul ?? "Nieznana oferta"}
-                </h3>
-                <StatusBadge status={app.status} stage={stage} />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-y-2 gap-x-6 text-sm">
-                <div className="flex items-center gap-2 text-slate-500 font-medium bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
-                  <Clock className="w-4 h-4 text-indigo-500" />
-                  <span>Zlozono: {formatDate(app.created_at)}</span>
-                </div>
-
-                <div className="flex items-center gap-2 text-slate-400 font-bold bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
-                  <span className="uppercase tracking-tight text-[10px]">ID: {app.id.slice(0, 8)}</span>
-                </div>
-
-                {offer?.typ ? (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] font-black uppercase tracking-widest bg-slate-50 border-slate-200 rounded-lg px-2 py-1"
-                  >
-                    {offer.typ}
-                  </Badge>
-                ) : null}
-              </div>
-
-              {app.message_to_company ? (
-                <div className="relative p-4 bg-indigo-50/10 border border-indigo-100/30 rounded-2xl text-sm italic text-slate-600 leading-relaxed max-w-2xl">
-                  <MessageSquare className="absolute -top-3 -right-3 h-8 w-8 text-indigo-100 opacity-50" />
-                  <span className="font-bold text-indigo-900 not-italic block text-[10px] uppercase tracking-widest mb-1">
-                    Twoja notatka:
+          <div className="flex flex-col flex-1 gap-0">
+            {/* Negotiation alert banner */}
+            {isCountered && app.counter_stawka && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-6 py-3">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span className="text-sm font-bold text-amber-900">
+                    Firma zaproponowała kontrofertę:{" "}
+                    <span className="text-amber-700">{formatMoney(app.counter_stawka)}</span>
                   </span>
-                  &quot;{app.message_to_company}&quot;
-                </div>
-              ) : null}
-            </div>
-
-            <div className="flex flex-col md:items-end items-start gap-4">
-              <div className="flex flex-col md:items-end">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">
-                  Stawka / Budzet
-                </span>
-                <div className="font-black text-2xl text-slate-900 flex flex-col md:items-end gap-1">
-                  {agreedMoney ? (
-                    <span className="text-emerald-600">{formatMoney(agreedMoney)}</span>
-                  ) : app.counter_stawka ? (
-                    <span className="text-amber-600">{formatMoney(app.counter_stawka)}</span>
-                  ) : app.proposed_stawka ? (
-                    <span className="text-indigo-600">{formatMoney(app.proposed_stawka)}</span>
-                  ) : (
-                    <span>{formatMoney(offer?.stawka)}</span>
-                  )}
-                  {isCountered && app.counter_stawka ? (
-                    <span className="text-[10px] text-slate-400 font-medium">
-                      Propozycja firmy
+                  {app.proposed_stawka && app.counter_stawka !== app.proposed_stawka && (
+                    <span className="text-xs text-amber-600">
+                      (Twoja poprzednia: {formatMoney(app.proposed_stawka)})
                     </span>
-                  ) : null}
+                  )}
                 </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-100 rounded-full px-3 py-1 border border-amber-200">
+                  Wymagana decyzja
+                </span>
+              </div>
+            )}
+
+            <div className="flex flex-col md:flex-row flex-1 p-6 justify-between gap-6 items-start md:items-center">
+              <div className="space-y-3 flex-1 w-full">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h3 className="font-extrabold text-xl text-slate-900 leading-tight">
+                    {offer?.tytul ?? "Nieznana oferta"}
+                  </h3>
+                  <StatusBadge status={app.status} stage={stage} />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm">
+                  <div className="flex items-center gap-2 text-slate-500 font-medium bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                    <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Złożono: {formatDate(app.created_at)}</span>
+                  </div>
+
+                  {offer?.typ && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-black uppercase tracking-widest bg-slate-50 border-slate-200 rounded-lg px-2 py-1"
+                    >
+                      {offer.typ}
+                    </Badge>
+                  )}
+                </div>
+
+                {app.message_to_company && (
+                  <div className="relative p-4 bg-slate-50/80 border border-slate-100 rounded-2xl text-sm italic text-slate-600 leading-relaxed max-w-2xl">
+                    <span className="font-bold text-slate-500 not-italic block text-[10px] uppercase tracking-widest mb-1">
+                      Twoja notatka:
+                    </span>
+                    &quot;{app.message_to_company}&quot;
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center gap-2 w-full md:w-auto mt-2">
-                {isInProgress ? (
-                  <>
-                    <Button
-                      asChild
-                      className="h-10 rounded-xl bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 text-white px-5 font-bold shadow-lg shadow-slate-200 border border-slate-700/50 transition-all duration-300"
-                    >
-                      <Link href={`/app/deliverables/${app.id}`}>Zarzadzaj</Link>
-                    </Button>
-                    <form action={openChatForApplication.bind(null, app.id)}>
+              <div className="flex flex-col md:items-end items-start gap-4">
+                <div className="flex flex-col md:items-end">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">
+                    Stawka / Budżet
+                  </span>
+                  <div className="font-black text-2xl text-slate-900 flex flex-col md:items-end gap-0.5">
+                    {agreedMoney ? (
+                      <span className="text-emerald-600">{formatMoney(agreedMoney)}</span>
+                    ) : isCountered && app.counter_stawka ? (
+                      <span className="text-amber-600">{formatMoney(app.counter_stawka)}</span>
+                    ) : app.proposed_stawka ? (
+                      <span className="text-indigo-600">{formatMoney(app.proposed_stawka)}</span>
+                    ) : (
+                      <span>{formatMoney(offer?.stawka)}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  {isInProgress ? (
+                    <>
                       <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-10 w-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 transition-all"
+                        asChild
+                        className="h-10 rounded-xl bg-slate-900 text-white px-5 font-bold hover:bg-indigo-600 transition-all duration-300"
                       >
-                        <MessageSquare className="w-4.5 h-4.5" />
+                        <Link href={`/app/deliverables/${app.id}`}>Zarządzaj</Link>
                       </Button>
-                    </form>
-                  </>
-                ) : isCountered ? (
-                  <div className="flex flex-col md:items-end gap-2.5 w-full md:w-auto">
-                    <div className="flex items-center gap-2">
-                      <form action={acceptCounterAsStudent.bind(null, app.id)}>
-                        <Button className="h-10 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white px-5 font-bold shadow-lg shadow-emerald-200/50 border border-emerald-400/30 transition-all duration-300">
-                          Akceptuj
-                        </Button>
-                      </form>
-                      <form action={rejectCounterAsStudent.bind(null, app.id)}>
-                        <Button
-                          variant="ghost"
-                          className="h-10 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50/50 px-4 font-bold transition-all duration-300"
-                        >
-                          Odrzuc
-                        </Button>
-                      </form>
                       <form action={openChatForApplication.bind(null, app.id)}>
                         <Button
                           variant="outline"
                           size="icon"
                           className="h-10 w-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 transition-all"
                         >
-                          <MessageSquare className="w-4.5 h-4.5" />
+                          <MessageSquare className="w-4 h-4" />
                         </Button>
                       </form>
-                    </div>
-                    <form
-                      action={proposeNewPriceAsStudent.bind(null, app.id)}
-                      className="flex items-center gap-1.5 bg-slate-50/80 rounded-xl px-2 py-1 border border-slate-100"
-                    >
-                      <Input
-                        name="proposed_stawka"
-                        type="number"
-                        placeholder="Kwota..."
-                        className="h-8 w-24 rounded-lg border-none bg-white shadow-sm text-sm placeholder:text-slate-300 focus-visible:ring-indigo-200"
-                      />
-                      <Button
-                        variant="ghost"
-                        type="submit"
-                        size="sm"
-                        className="h-8 rounded-lg bg-gradient-to-r from-indigo-50 to-indigo-100/50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 font-bold text-xs px-3 shadow-sm shadow-indigo-100 border border-indigo-200/50 transition-all duration-300"
+                    </>
+                  ) : isCountered ? (
+                    <div className="flex flex-col md:items-end gap-3 w-full md:w-auto">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <form action={acceptCounterAsStudent.bind(null, app.id)}>
+                          <Button className="h-10 rounded-xl bg-emerald-600 text-white px-5 font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200/50 transition-all duration-300">
+                            Akceptuj {formatMoney(app.counter_stawka)}
+                          </Button>
+                        </form>
+                        <form action={openChatForApplication.bind(null, app.id)}>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-10 w-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 transition-all"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                          </Button>
+                        </form>
+                        <form action={rejectCounterAsStudent.bind(null, app.id)}>
+                          <Button
+                            variant="ghost"
+                            className="h-10 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 px-4 font-bold transition-all"
+                          >
+                            Odrzuć
+                          </Button>
+                        </form>
+                      </div>
+                      <form
+                        action={proposeNewPriceAsStudent.bind(null, app.id)}
+                        className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-1.5"
                       >
-                        Zaproponuj
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">
+                          Kontra:
+                        </span>
+                        <Input
+                          name="proposed_stawka"
+                          type="number"
+                          placeholder="Kwota PLN"
+                          className="h-8 w-28 rounded-xl border-none bg-white shadow-sm text-sm placeholder:text-slate-300 focus-visible:ring-indigo-200"
+                        />
+                        <Button
+                          type="submit"
+                          size="sm"
+                          className="h-8 rounded-xl bg-indigo-600 text-white font-bold text-xs px-3 hover:bg-indigo-700 transition-all"
+                        >
+                          Wyślij
+                        </Button>
+                      </form>
+                      <WithdrawApplicationButton applicationId={app.id} />
+                    </div>
+                  ) : stage === "sent" ? (
+                    <>
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="h-10 rounded-xl border-indigo-200 bg-white text-indigo-700 font-bold hover:bg-indigo-50 transition-all px-6"
+                      >
+                        <Link href={`/app/offers/${offer?.id}`}>Szczegóły</Link>
                       </Button>
-                    </form>
-                    <WithdrawApplicationButton applicationId={app.id} />
-                  </div>
-                ) : stage === "sent" ? (
-                  <>
+                      <form action={openChatForApplication.bind(null, app.id)}>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-10 w-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </Button>
+                      </form>
+                    </>
+                  ) : (
                     <Button
                       asChild
                       variant="outline"
-                      className="h-10 rounded-xl border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 font-bold shadow-sm shadow-indigo-100 transition-all duration-300 px-6"
+                      className="h-10 rounded-xl border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 transition-all px-6"
                     >
-                      <Link href={`/app/offers/${offer?.id}`}>Szczegoly</Link>
+                      <Link href={`/app/offers/${offer?.id}`}>Szczegóły</Link>
                     </Button>
-                    <form action={openChatForApplication.bind(null, app.id)}>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-10 w-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50"
-                      >
-                        <MessageSquare className="w-4.5 h-4.5" />
-                      </Button>
-                    </form>
-                  </>
-                ) : (
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="h-10 rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold shadow-sm transition-all duration-300 px-6"
-                  >
-                    <Link href={`/app/offers/${offer?.id}`}>Szczegoly</Link>
-                  </Button>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           </div>

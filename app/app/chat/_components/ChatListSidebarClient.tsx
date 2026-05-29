@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Inbox, Search } from "lucide-react";
+import { Inbox, MailOpen, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,7 +26,7 @@ export default function ChatListSidebarClient({
 
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     setConversations(initialConversations);
@@ -44,19 +44,37 @@ export default function ChatListSidebarClient({
   }, [pathname, conversations]);
 
   useEffect(() => {
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const knownConversationIds = new Set(conversations.map((conversation) => conversation.id));
+    const requestRefresh = () => {
+      if (refreshTimer) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        router.refresh();
+      }, 1200);
+    };
+
     const channel = supabase
       .channel("chat_list_updates")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, (payload) => {
-        const newMsg = payload.new as { sender_id?: string } | null;
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        const newMsg = payload.new as { conversation_id?: string; sender_id?: string } | null;
         if (newMsg?.sender_id === userId) return;
-        router.refresh();
+        if (newMsg?.conversation_id && !knownConversationIds.has(newMsg.conversation_id)) return;
+        requestRefresh();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "conversations" }, (payload) => {
+        const conversation = payload.new as { company_id?: string; student_id?: string } | null;
+        if (conversation?.company_id === userId || conversation?.student_id === userId) {
+          requestRefresh();
+        }
       })
       .subscribe();
 
     return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
       supabase.removeChannel(channel);
     };
-  }, [router, supabase, userId]);
+  }, [conversations, router, supabase, userId]);
 
   const filtered = useMemo(() => {
     return conversations.filter((conversation) => {
@@ -66,8 +84,11 @@ export default function ChatListSidebarClient({
         name.toLowerCase().includes(search.toLowerCase()) ||
         title.toLowerCase().includes(search.toLowerCase());
 
-      if (activeTab === "all") return matchSearch;
-      return matchSearch && conversation.type === activeTab;
+      if (activeTab === "unread") {
+        return matchSearch && (conversation.unread_count || 0) > 0;
+      }
+
+      return matchSearch;
     });
   }, [activeTab, conversations, search]);
 
@@ -120,18 +141,13 @@ export default function ChatListSidebarClient({
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="w-full h-10 p-1 bg-slate-200/50 rounded-xl grid grid-cols-4 gap-1">
+            <TabsList className="w-full h-10 p-1 bg-slate-200/50 rounded-xl grid grid-cols-2 gap-1">
               <TabsTrigger value="all" className="rounded-lg text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm transition-all">
-                Wsz.
+                Wszystkie
               </TabsTrigger>
-              <TabsTrigger value="application" className="rounded-lg text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm transition-all">
-                Apl.
-              </TabsTrigger>
-              <TabsTrigger value="order" className="rounded-lg text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm transition-all">
-                Zlec.
-              </TabsTrigger>
-              <TabsTrigger value="inquiry" className="rounded-lg text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm transition-all">
-                Pyt.
+              <TabsTrigger value="unread" className="rounded-lg text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm transition-all">
+                <MailOpen className="mr-1 h-3.5 w-3.5" />
+                Nieprzeczytane
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -227,17 +243,27 @@ export default function ChatListSidebarClient({
                     </p>
                   </div>
 
-                  <div className="flex mt-1.5 gap-2">
-                    {conversation.type === "order" ? (
+                  <div className="flex mt-1.5 gap-1.5 flex-wrap">
+                    {conversation.type === "order" && (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-wide">
                         Zlecenie
                       </span>
-                    ) : null}
-                    {conversation.type === "inquiry" ? (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-100 uppercase tracking-wide">
-                        Pytanie
+                    )}
+                    {conversation.type === "application" && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 uppercase tracking-wide">
+                        Aplikacja
                       </span>
-                    ) : null}
+                    )}
+                    {conversation.type === "inquiry" && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-100 uppercase tracking-wide">
+                        Zapytanie
+                      </span>
+                    )}
+                    {effectiveUnread > 0 && !isActive && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-indigo-600 text-white uppercase tracking-wide">
+                        Nowe
+                      </span>
+                    )}
                   </div>
                 </div>
               </Link>

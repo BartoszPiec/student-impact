@@ -32,9 +32,7 @@ function toNumber(v: FormDataEntryValue | null): number | null {
 }
 
 function isMultiInstanceOffer(offer: OfferRow): boolean {
-  if (offer.is_platform_service === true) return true;
-  const offerType = offer.typ?.toLowerCase() ?? "";
-  return offerType.includes("micro") || offerType.includes("mikro");
+  return offer.is_platform_service === true;
 }
 
 async function notifyUser(
@@ -65,15 +63,16 @@ async function ensureConversationForApplication(
 
   const { data: created, error } = await supabase
     .from("conversations")
-    .insert({
+    .upsert({
       application_id: args.application_id,
       company_id: args.company_id,
       student_id: args.student_id,
       offer_id: args.offer_id,
       type: 'application',
-    })
+      status: "active",
+    }, { onConflict: "application_id" })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error || !created?.id) throw new Error(error?.message ?? "Nie udało się utworzyć rozmowy");
   return created.id as string;
