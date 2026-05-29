@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { transferPayoutViaStripe } from "@/lib/stripe/payouts";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -7,21 +8,64 @@ type ContractApplicationRow = {
   application_id: string | null;
 };
 
-type ApplicationOfferRow = {
-  offer_id: string | null;
+type ContractServiceOrderRow = {
+  service_order_id: string | null;
 };
 
 type ContractOfferRelation = {
   application_id: string | null;
-  applications: ApplicationOfferRow | ApplicationOfferRow[] | null;
+  applications: ApplicationOfferRelation | ApplicationOfferRelation[] | null;
 };
 
-function extractOfferId(value: ApplicationOfferRow | ApplicationOfferRow[] | null): string | null {
+type ApplicationOfferRelation = {
+  offer_id: string | null;
+  offers: OfferPlatformFlag | OfferPlatformFlag[] | null;
+};
+
+type OfferPlatformFlag = {
+  id: string | null;
+  is_platform_service: boolean | null;
+};
+
+type AutoAcceptResult = {
+  payout_ids?: unknown;
+};
+
+type PayoutTransferSummary = {
+  payoutId: string;
+  status: string;
+};
+
+function unwrapRelation<T>(value: T | T[] | null): T | null {
   if (Array.isArray(value)) {
-    return value[0]?.offer_id ?? null;
+    return value[0] ?? null;
   }
 
-  return value?.offer_id ?? null;
+  return value ?? null;
+}
+
+function extractPayoutIds(value: unknown): string[] {
+  if (!value || typeof value !== "object" || !("payout_ids" in value)) {
+    return [];
+  }
+
+  const payoutIds = (value as AutoAcceptResult).payout_ids;
+  if (!Array.isArray(payoutIds)) {
+    return [];
+  }
+
+  return payoutIds.filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
+function extractNonPlatformOfferId(value: ApplicationOfferRelation | ApplicationOfferRelation[] | null): string | null {
+  const application = unwrapRelation(value);
+  const offer = unwrapRelation(application?.offers ?? null);
+
+  if (offer?.is_platform_service === true) {
+    return null;
+  }
+
+  return application?.offer_id ?? offer?.id ?? null;
 }
 
 export async function GET(req: NextRequest) {
@@ -49,6 +93,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
+    const payoutTransfers: PayoutTransferSummary[] = [];
+    if (process.env.STRIPE_PAYOUTS_ENABLED === "true") {
+      for (const payoutId of extractPayoutIds(data)) {
+        const transferResult = await transferPayoutViaStripe(payoutId);
+        payoutTransfers.push({ payoutId, status: transferResult.status });
+      }
+    }
+
     // 2. Sync: completed contracts → completed applications
     //    (fallback for any contracts that completed but applications.status wasn't updated)
     const { data: staleApps } = await supabase
@@ -70,6 +122,24 @@ export async function GET(req: NextRequest) {
     }
 
     // 3. Sync: active contracts → in_progress applications
+    const { data: staleServiceOrders } = await supabase
+      .from("contracts")
+      .select("service_order_id")
+      .eq("status", "completed")
+      .not("service_order_id", "is", null);
+
+    if (staleServiceOrders && staleServiceOrders.length > 0) {
+      const serviceOrderIds = (staleServiceOrders as ContractServiceOrderRow[])
+        .map((contract) => contract.service_order_id)
+        .filter((id): id is string => Boolean(id));
+      await supabase
+        .from("service_orders")
+        .update({ status: "completed" })
+        .in("id", serviceOrderIds)
+        .neq("status", "completed")
+        .in("status", ["accepted", "active", "in_progress", "revision", "delivered"]);
+    }
+
     const { data: activeContracts } = await supabase
       .from("contracts")
       .select("application_id")
@@ -89,16 +159,33 @@ export async function GET(req: NextRequest) {
 
     // 4. Sync: accepted/in_progress applications → in_progress offers
     //    (fallback for offers that should be in_progress but aren't)
+    const { data: activeServiceOrderContracts } = await supabase
+      .from("contracts")
+      .select("service_order_id")
+      .eq("status", "active")
+      .not("service_order_id", "is", null);
+
+    if (activeServiceOrderContracts && activeServiceOrderContracts.length > 0) {
+      const activeServiceOrderIds = (activeServiceOrderContracts as ContractServiceOrderRow[])
+        .map((contract) => contract.service_order_id)
+        .filter((id): id is string => Boolean(id));
+      await supabase
+        .from("service_orders")
+        .update({ status: "active" })
+        .in("id", activeServiceOrderIds)
+        .in("status", ["accepted", "awaiting_funding"]);
+    }
+
     const { data: acceptedApps } = await supabase
       .from("applications")
-      .select("offer_id")
+      .select("offer_id, offers(id, is_platform_service)")
       .in("status", ["accepted", "in_progress"]);
 
     if (acceptedApps && acceptedApps.length > 0) {
       const offerIds = [
         ...new Set(
-          (acceptedApps as ApplicationOfferRow[])
-            .map((application) => application.offer_id)
+          (acceptedApps as ApplicationOfferRelation[])
+            .map((application) => extractNonPlatformOfferId(application))
             .filter((id): id is string => Boolean(id)),
         ),
       ];
@@ -112,12 +199,12 @@ export async function GET(req: NextRequest) {
     // 5. Sync: completed contracts → closed offers
     const { data: completedContracts } = await supabase
       .from("contracts")
-      .select("application_id, applications(offer_id)")
+      .select("application_id, applications(offer_id, offers(id, is_platform_service))")
       .eq("status", "completed");
 
     if (completedContracts && completedContracts.length > 0) {
       const completedOfferIds = (completedContracts as ContractOfferRelation[])
-        .map((contract) => extractOfferId(contract.applications))
+        .map((contract) => extractNonPlatformOfferId(contract.applications))
         .filter((id): id is string => Boolean(id));
       if (completedOfferIds.length > 0) {
         await supabase
@@ -131,6 +218,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       autoAccept: data,
+      payoutTransfers,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";

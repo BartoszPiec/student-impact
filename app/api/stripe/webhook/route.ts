@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { enqueueStripeEvent } from "@/lib/stripe/stripe-event-processor";
+import { enqueueStripeEvent, processPendingStripeEvents } from "@/lib/stripe/stripe-event-processor";
 import Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +21,19 @@ async function getRawBody(req: NextRequest): Promise<Buffer> {
   }
 
   return Buffer.concat(chunks);
+}
+
+function shouldProcessInline() {
+  if (process.env.STRIPE_WEBHOOK_PROCESS_INLINE !== "true") {
+    return false;
+  }
+
+  const isStripeTestMode = process.env.STRIPE_SECRET_KEY?.startsWith("sk_test_") === true;
+  const isPreviewLike =
+    process.env.VERCEL_ENV === "preview"
+    || process.env.NODE_ENV !== "production";
+
+  return isStripeTestMode && isPreviewLike;
 }
 
 export async function POST(req: NextRequest) {
@@ -50,7 +63,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const status = await enqueueStripeEvent(event);
-    return NextResponse.json({ received: true, status });
+    if (!shouldProcessInline()) {
+      return NextResponse.json({ received: true, status });
+    }
+
+    try {
+      const inlineProcessing = await processPendingStripeEvents(3);
+      return NextResponse.json({ received: true, status, inlineProcessing });
+    } catch (processingError) {
+      const message = processingError instanceof Error ? processingError.message : "Inline Stripe processing failed";
+      console.error("[stripe-webhook] inline processing failed:", message);
+      return NextResponse.json({ received: true, status, inlineProcessing: { failed: true } });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to enqueue Stripe event";
     console.error("[stripe-webhook] enqueue failed:", message);

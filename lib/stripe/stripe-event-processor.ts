@@ -14,6 +14,67 @@ type StripeEventRow = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+type PaymentSource = {
+  applicationId: string | null;
+  serviceOrderId: string | null;
+  sourceType: "application" | "service_order";
+};
+
+type PaymentContractRow = {
+  source_type?: "application" | "service_order" | null;
+  application_id?: string | null;
+  service_order_id?: string | null;
+  commission_rate?: number | null;
+  student_id?: string | null;
+  applications?: { offers?: { tytul?: string | null } | null } | { offers?: { tytul?: string | null } | null }[] | null;
+};
+
+function normalizeMetadataId(value: string | null | undefined): string | null {
+  return value && value.trim().length > 0 ? value.trim() : null;
+}
+
+function resolvePaymentSource(session: Stripe.Checkout.Session): PaymentSource {
+  const applicationId = normalizeMetadataId(session.metadata?.application_id);
+  const serviceOrderId = normalizeMetadataId(session.metadata?.service_order_id);
+  const selectedSourceCount = Number(Boolean(applicationId)) + Number(Boolean(serviceOrderId));
+
+  if (selectedSourceCount !== 1) {
+    throw new Error(`Checkout session ${session.id} must reference exactly one payment source`);
+  }
+
+  return {
+    applicationId,
+    serviceOrderId,
+    sourceType: applicationId ? "application" : "service_order",
+  };
+}
+
+function assertSourceMatchesContract(sessionId: string, source: PaymentSource, contract: PaymentContractRow | null): void {
+  if (!contract) {
+    throw new Error(`Contract not found for checkout session ${sessionId}`);
+  }
+
+  const contractSourceType = contract.source_type ?? (contract.service_order_id ? "service_order" : "application");
+  if (source.sourceType === "application") {
+    if (
+      contractSourceType !== "application"
+      || contract.application_id !== source.applicationId
+      || contract.service_order_id !== null
+    ) {
+      throw new Error(`Checkout session ${sessionId} application metadata does not match contract source`);
+    }
+    return;
+  }
+
+  if (
+    contractSourceType !== "service_order"
+    || contract.service_order_id !== source.serviceOrderId
+    || contract.application_id !== null
+  ) {
+    throw new Error(`Checkout session ${sessionId} service order metadata does not match contract source`);
+  }
+}
+
 function resolveFeePln(session: Stripe.Checkout.Session): number {
   const raw = session.metadata?.platform_fee;
   if (!raw) {
@@ -132,6 +193,9 @@ async function processStripeEvent(event: Stripe.Event) {
       return;
     case "payment_intent.payment_failed":
       return;
+    case "account.updated":
+      await handleAccountUpdated(event.data.object as Stripe.Account);
+      return;
     default:
       return;
   }
@@ -141,11 +205,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const supabase = createAdminClient();
 
   const contractId = session.metadata?.contract_id;
-  const applicationId = session.metadata?.application_id;
-  const serviceOrderId = session.metadata?.service_order_id;
+  const { applicationId, serviceOrderId, sourceType } = resolvePaymentSource(session);
   const milestoneIdsJson = session.metadata?.milestone_ids;
 
-  if (!contractId || (!applicationId && !serviceOrderId)) {
+  if (!contractId) {
     throw new Error(`Missing metadata in checkout session: ${session.id}`);
   }
 
@@ -173,7 +236,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   const { data: contractData, error: contractError } = await supabase
     .from("contracts")
-    .select("commission_rate, student_id, applications!contracts_application_id_fkey(offers(tytul))")
+    .select("source_type, application_id, service_order_id, commission_rate, student_id, applications!contracts_application_id_fkey(offers(tytul))")
     .eq("id", contractId)
     .maybeSingle();
 
@@ -181,15 +244,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     throw new Error(`Failed to load contract ${contractId}: ${contractError.message}`);
   }
 
-  const contract = contractData as {
-    commission_rate?: number | null;
-    student_id?: string | null;
-    applications?: { offers?: { tytul?: string | null } | null } | { offers?: { tytul?: string | null } | null }[] | null;
-  } | null;
+  const contract = contractData as PaymentContractRow | null;
+  assertSourceMatchesContract(session.id, { applicationId, serviceOrderId, sourceType }, contract);
 
   const commissionRate = resolveCommissionRate({
     explicitRate: contract?.commission_rate ?? (session.metadata?.commission_rate ? Number(session.metadata.commission_rate) : null),
-    sourceType: serviceOrderId ? "service_order" : "application",
+    sourceType,
     isPlatformService: Boolean(serviceOrderId),
   });
   const resolvedFeePln = resolveFeePln(session);
@@ -217,6 +277,25 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   if (rpcError) {
     throw new Error(`RPC process_stripe_payment_v4 failed: ${rpcError.message}`);
+  }
+
+  if (serviceOrderId) {
+    const { error: serviceOrderSyncError } = await supabase
+      .from("service_orders")
+      .update({ status: "in_progress" })
+      .eq("id", serviceOrderId)
+      .in("status", [
+        "accepted",
+        "active",
+        "pending",
+        "proposal_sent",
+        "pending_confirmation",
+        "pending_student_confirmation",
+      ]);
+
+    if (serviceOrderSyncError) {
+      throw new Error(`Failed to sync service order after payment: ${serviceOrderSyncError.message}`);
+    }
   }
 
   try {
@@ -315,5 +394,30 @@ async function handleRefundCreated(refund: Stripe.Refund) {
 
   if (error) {
     throw new Error(`Failed to process refund ${refund.id}: ${error.message}`);
+  }
+}
+
+async function handleAccountUpdated(account: Stripe.Account) {
+  const supabase = createAdminClient();
+  const metadataUserId = normalizeMetadataId(account.metadata?.user_id);
+  const transfersCapability = account.capabilities?.transfers;
+  const onboardingComplete = Boolean(
+    account.details_submitted
+    && account.payouts_enabled
+    && transfersCapability === "active",
+  );
+
+  const payload = {
+    stripe_account_id: account.id,
+    stripe_onboarding_completed_at: onboardingComplete ? new Date().toISOString() : null,
+  };
+
+  const query = supabase.from("student_profiles").update(payload);
+  const { error } = metadataUserId && UUID_RE.test(metadataUserId)
+    ? await query.eq("user_id", metadataUserId)
+    : await query.eq("stripe_account_id", account.id);
+
+  if (error) {
+    throw new Error(`Failed to sync Stripe account ${account.id}: ${error.message}`);
   }
 }

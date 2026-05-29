@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { resolveServerAppUrl } from "@/lib/app-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildRateLimitKey, enforceRateLimit, getRequestIp } from "@/lib/rate-limit";
 
@@ -109,7 +110,10 @@ function getEmailContent(type: string, payload: NotificationPayload = {}) {
       break;
   }
 
-  html += `<br><p><a href="${process.env.NEXT_PUBLIC_APP_URL}/app">Przejdz do aplikacji Student2Work</a></p>`;
+  const appUrl = resolveServerAppUrl();
+  if (appUrl) {
+    html += `<br><p><a href="${appUrl}/app">Przejdz do aplikacji Student2Work</a></p>`;
+  }
   return { subject, html };
 }
 

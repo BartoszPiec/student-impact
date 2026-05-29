@@ -6,6 +6,58 @@ import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
 import Stripe from "stripe";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type PaymentSource = {
+  applicationId: string | null;
+  serviceOrderId: string | null;
+  sourceType: "application" | "service_order";
+};
+
+type PaymentContractRow = {
+  id: string;
+  company_id: string;
+  status: string | null;
+  commission_rate: number | null;
+  source_type: "application" | "service_order" | null;
+  application_id: string | null;
+  service_order_id: string | null;
+};
+
+function normalizeMetadataId(value: string | null | undefined): string | null {
+  return value && value.trim().length > 0 ? value.trim() : null;
+}
+
+function resolvePaymentSource(session: Stripe.Checkout.Session): PaymentSource {
+  const applicationId = normalizeMetadataId(session.metadata?.application_id);
+  const serviceOrderId = normalizeMetadataId(session.metadata?.service_order_id);
+  const selectedSourceCount = Number(Boolean(applicationId)) + Number(Boolean(serviceOrderId));
+
+  if (selectedSourceCount !== 1) {
+    throw new Error("Sesja platnosci musi dotyczyc dokladnie jednego typu zlecenia");
+  }
+
+  return {
+    applicationId,
+    serviceOrderId,
+    sourceType: applicationId ? "application" : "service_order",
+  };
+}
+
+function sourceMatchesContract(source: PaymentSource, contract: PaymentContractRow): boolean {
+  const contractSourceType = contract.source_type ?? (contract.service_order_id ? "service_order" : "application");
+
+  if (source.sourceType === "application") {
+    return contractSourceType === "application"
+      && contract.application_id === source.applicationId
+      && contract.service_order_id === null;
+  }
+
+  return contractSourceType === "service_order"
+    && contract.service_order_id === source.serviceOrderId
+    && contract.application_id === null;
+}
+
 function resolveFeePln(
   session: Stripe.Checkout.Session,
   commissionRate: number,
@@ -39,15 +91,19 @@ export async function POST(req: NextRequest) {
     }
 
     const contractId = session.metadata?.contract_id;
-    const applicationId = session.metadata?.application_id;
-    const serviceOrderId = session.metadata?.service_order_id;
+    let source: PaymentSource;
+    try {
+      source = resolvePaymentSource(session);
+    } catch {
+      return NextResponse.json({ error: "Invalid session metadata" }, { status: 400 });
+    }
+    const { applicationId, serviceOrderId, sourceType } = source;
     const milestoneIdsJson = session.metadata?.milestone_ids;
 
-    if (!contractId || (!applicationId && !serviceOrderId)) {
+    if (!contractId) {
       return NextResponse.json({ error: "Invalid session metadata" }, { status: 400 });
     }
 
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (
       !UUID_RE.test(contractId)
       || (applicationId && !UUID_RE.test(applicationId))
@@ -58,15 +114,21 @@ export async function POST(req: NextRequest) {
 
     const { data: contract } = await supabase
       .from("contracts")
-      .select("id, company_id, status, commission_rate")
+      .select("id, company_id, status, commission_rate, source_type, application_id, service_order_id")
       .eq("id", contractId)
       .single();
 
-    if (!contract || contract.company_id !== user.id) {
+    const typedContract = contract as PaymentContractRow | null;
+
+    if (!typedContract || typedContract.company_id !== user.id) {
       return NextResponse.json({ error: "Not authorized" }, { status: 403 });
     }
 
-    if (contract.status === "active") {
+    if (!sourceMatchesContract({ applicationId, serviceOrderId, sourceType }, typedContract)) {
+      return NextResponse.json({ error: "Nieprawidlowe powiazanie sesji z kontraktem" }, { status: 400 });
+    }
+
+    if (typedContract.status === "active") {
       return NextResponse.json({
         status: "already_processed",
         message: "Payment already processed",
@@ -83,8 +145,8 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient();
     const commissionRate = resolveCommissionRate({
-      explicitRate: contract.commission_rate ?? (session.metadata?.commission_rate ? Number(session.metadata.commission_rate) : null),
-      sourceType: serviceOrderId ? "service_order" : "application",
+      explicitRate: typedContract.commission_rate ?? (session.metadata?.commission_rate ? Number(session.metadata.commission_rate) : null),
+      sourceType,
       isPlatformService: Boolean(serviceOrderId),
     });
     const resolvedFeePln = resolveFeePln(session, commissionRate);
@@ -113,6 +175,25 @@ export async function POST(req: NextRequest) {
     if (rpcError) {
       console.error("[verify-payment] RPC Error processing payment:", rpcError);
       throw new Error(`Failed to process payment atomically: ${rpcError.message}`);
+    }
+
+    if (serviceOrderId) {
+      const { error: serviceOrderSyncError } = await admin
+        .from("service_orders")
+        .update({ status: "in_progress" })
+        .eq("id", serviceOrderId)
+        .in("status", [
+          "accepted",
+          "active",
+          "pending",
+          "proposal_sent",
+          "pending_confirmation",
+          "pending_student_confirmation",
+        ]);
+
+      if (serviceOrderSyncError) {
+        throw new Error(`Nie udalo sie zaktualizowac statusu zamowienia: ${serviceOrderSyncError.message}`);
+      }
     }
 
     try {
