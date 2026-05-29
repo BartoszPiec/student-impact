@@ -88,7 +88,7 @@ export default function OrderForm({
                                 onChange={(e) => setInquiryMessage(e.target.value)}
                             />
                             <p className="text-xs text-slate-500">
-                                Odpowiedź znajdziesz w zakładce "Wiadomości".
+                                Odpowiedź znajdziesz w zakładce &quot;Wiadomości&quot;.
                             </p>
                         </div>
                     </div>
@@ -198,7 +198,7 @@ export default function OrderForm({
                                     name="company_website"
                                     type="text"
                                     defaultValue={defaultWebsite}
-                                    placeholder="https://twojafirma.pl"
+                                    placeholder="twojafirma.pl"
                                     className="h-12 rounded-xl border-slate-200 bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
                                 />
                             </div>

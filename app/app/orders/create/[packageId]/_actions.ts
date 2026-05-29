@@ -11,6 +11,24 @@ import {
 } from "@/lib/services/service-order-snapshots";
 import { normalizePackageFormSchema } from "@/lib/services/package-customization";
 
+function normalizeOptionalUrl(value: string | null | undefined) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const url = new URL(withProtocol);
+    const hasValidHost = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname);
+    if (!hasValidHost || url.username || url.password) {
+      throw new Error("Nieprawidlowy adres strony.");
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    throw new Error("Podaj prawidlowy adres strony, np. test.pl albo https://test.pl.");
+  }
+}
+
 export async function createOrder(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -24,7 +42,8 @@ export async function createOrder(formData: FormData) {
   const packageId = formData.get("packageId") as string;
   const title = formData.get("title") as string;
   const contactEmail = formData.get("contact_email") as string;
-  const companyWebsite = formData.get("company_website") as string;
+  const companyWebsite = normalizeOptionalUrl(formData.get("company_website") as string);
+  const variantKey = String(formData.get("variantName") ?? "").trim() || null;
 
   const { data: pkgData, error: pkgError } = await supabase
     .from("service_packages")
@@ -34,6 +53,10 @@ export async function createOrder(formData: FormData) {
 
   if (pkgError || !pkgData) {
     throw new Error("Package not found");
+  }
+
+  if (pkgData.student_id && pkgData.student_id === user.id && pkgData.is_system !== true) {
+    throw new Error("Nie mozesz zamowic wlasnej uslugi.");
   }
 
   const entries = Array.from(formData.entries());
@@ -64,6 +87,7 @@ export async function createOrder(formData: FormData) {
       package_id: packageId,
       student_id: pkgData.is_system ? null : pkgData.student_id,
       amount: Number(pkgData.price),
+      variant_key: variantKey,
       requirements: requirementsText,
       request_snapshot: requestSnapshot,
       status: "pending",
@@ -83,9 +107,9 @@ export async function createOrder(formData: FormData) {
   if (pkgData.student_id && pkgData.is_system !== true) {
     let conversationId = null;
 
-    const { data: newConv } = await supabase
+    const { data: newConv, error: conversationError } = await supabase
       .from("conversations")
-      .insert({
+      .upsert({
         company_id: user.id,
         student_id: pkgData.student_id,
         status: "active",
@@ -93,9 +117,13 @@ export async function createOrder(formData: FormData) {
         package_id: packageId,
         application_id: null,
         service_order_id: order.id,
-      })
+      }, { onConflict: "service_order_id" })
       .select("id")
-      .single();
+      .maybeSingle();
+
+    if (conversationError) {
+      throw new Error(conversationError.message);
+    }
 
     if (newConv) {
       conversationId = newConv.id;

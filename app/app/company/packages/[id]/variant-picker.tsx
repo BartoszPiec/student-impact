@@ -26,7 +26,15 @@ export function VariantPicker({ variants, baseDeliveryDays, gradient, packageId 
     useEffect(() => {
         const handleSelectVariant = (e: Event) => {
             const customEvent = e as CustomEvent;
-            const index = variants.findIndex((variant) => variant.name === customEvent.detail);
+            const detail = customEvent.detail;
+            const selectedName =
+                typeof detail === "string"
+                    ? detail
+                    : detail && typeof detail === "object" && typeof (detail as { name?: unknown }).name === "string"
+                        ? String((detail as { name: string }).name)
+                        : null;
+            if (!selectedName) return;
+            const index = variants.findIndex((variant) => variant.name === selectedName);
             if (index !== -1) {
                 setSelectedIdx(index);
             }
@@ -35,6 +43,12 @@ export function VariantPicker({ variants, baseDeliveryDays, gradient, packageId 
         window.addEventListener("selectVariant", handleSelectVariant);
         return () => window.removeEventListener("selectVariant", handleSelectVariant);
     }, [variants]);
+
+    useEffect(() => {
+        const selectedName = variants[selectedIdx]?.name;
+        if (!selectedName) return;
+        window.dispatchEvent(new CustomEvent("variantChanged", { detail: { name: selectedName } }));
+    }, [selectedIdx, variants]);
 
     const deliveryDays = selected.delivery_time_days || baseDeliveryDays;
     const deliveryLabel =
@@ -138,12 +152,13 @@ export function VariantPicker({ variants, baseDeliveryDays, gradient, packageId 
                 </div>
             </div>
 
-            <Button asChild className={`w-full h-auto py-4 text-lg bg-gradient-to-r ${gradient} hover:shadow-xl hover:shadow-indigo-500/30 hover:scale-[1.02] transition-all duration-300 rounded-xl`}>
+            <Button asChild className={`w-full h-auto py-4 text-lg bg-gradient-to-r ${gradient} text-white hover:text-white hover:shadow-xl hover:shadow-indigo-500/30 hover:scale-[1.02] transition-all duration-300 rounded-xl`}>
                 <Link
                     href={{
                         pathname: `/app/company/packages/${packageId}/customize`,
                         query: { variant: selected.name },
                     }}
+                    className="font-bold text-white hover:text-white"
                 >
                     Zamawiam {selected.label}
                     <ArrowRight className="ml-2 w-5 h-5" />

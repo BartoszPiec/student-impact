@@ -120,9 +120,11 @@ function DynamicField({
 function DynamicBriefSection({
   formSchema,
   initialData,
+  selectedVariantName,
 }: {
   formSchema: PackageFormField[];
   initialData: Record<string, string>;
+  selectedVariantName?: string;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
     const normalized = { ...initialData };
@@ -131,6 +133,10 @@ function DynamicBriefSection({
         normalized[field.id] = "";
       }
     });
+    if (selectedVariantName) {
+      normalized.variant = selectedVariantName.toLowerCase();
+      normalized.variantName = selectedVariantName;
+    }
     return normalized;
   });
 
@@ -138,8 +144,8 @@ function DynamicBriefSection({
     () =>
       formSchema.filter((field) => {
         if (!field.showIf) return true;
-        const selectedValue = answers[field.showIf.field] || "";
-        return field.showIf.value.includes(selectedValue);
+        const selectedValue = (answers[field.showIf.field] || "").toLowerCase();
+        return field.showIf.value.some((allowedValue) => allowedValue.toLowerCase() === selectedValue);
       }),
     [answers, formSchema],
   );
@@ -367,7 +373,13 @@ export default function CustomizePackageForm({
         </Card>
       ) : null}
 
-      {useDynamicBrief ? <DynamicBriefSection formSchema={formSchema} initialData={initialData} /> : null}
+      {useDynamicBrief ? (
+        <DynamicBriefSection
+          formSchema={formSchema}
+          initialData={initialData}
+          selectedVariantName={selectedVariant?.name}
+        />
+      ) : null}
 
       {!useDynamicBrief && isVideo ? (
         <LegacySection

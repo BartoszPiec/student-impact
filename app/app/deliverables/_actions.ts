@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import React from "react";
 import { renderPdfToBuffer } from "@/lib/pdf/render";
 import { ContractADocument } from "@/lib/pdf/contract-a-template";
@@ -11,6 +12,7 @@ import { ContractBDocument } from "@/lib/pdf/contract-b-template";
 import { generateStudentInvoice } from "@/lib/pdf/generate-invoice";
 import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
+import { transferLatestPayoutForMilestone } from "@/lib/stripe/payouts";
 import type { ContractData } from "@/lib/pdf/types";
 
 type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -87,6 +89,20 @@ type ReviewPayload = {
   company_id: string;
   student_id: string;
   offer_id?: string;
+};
+
+type ReviewContractRow = {
+  id: string;
+  status: string | null;
+  application_id: string | null;
+  service_order_id: string | null;
+  milestones: Array<{ status: string | null }> | null;
+};
+
+type ContractDocumentAcceptanceRow = {
+  id: string;
+  contract_id: string;
+  document_type: string;
 };
 
 type ProjectResourceInsert = {
@@ -409,6 +425,31 @@ export async function submitReview(applicationId: string, rating: number, commen
   }
 
   // Zabezpieczenie przed review flooding: sprawdź czy użytkownik już ocenił
+  const contractQuery = supabase
+    .from("contracts")
+    .select("id, status, application_id, service_order_id, milestones(status)");
+
+  const { data: contractData, error: contractError } =
+    sourceType === "application"
+      ? await contractQuery.eq("application_id", applicationId).maybeSingle()
+      : await contractQuery.eq("service_order_id", applicationId).maybeSingle();
+
+  if (contractError) {
+    throw new Error("Nie udalo sie sprawdzic statusu kontraktu.");
+  }
+
+  const reviewContract = contractData as ReviewContractRow | null;
+  const reviewMilestones = reviewContract?.milestones ?? [];
+  const allMilestonesReleased =
+    reviewMilestones.length > 0 &&
+    reviewMilestones.every((milestone) =>
+      ["released", "accepted", "completed", "refunded"].includes(String(milestone.status)),
+    );
+
+  if (!reviewContract || (reviewContract.status !== "completed" && !allMilestonesReleased)) {
+    throw new Error("Ocene mozna wystawic dopiero po zakonczeniu i rozliczeniu zlecenia.");
+  }
+
   const existingReviewQuery = supabase
     .from("reviews")
     .select("id")
@@ -460,21 +501,14 @@ export async function submitReview(applicationId: string, rating: number, commen
     await notifyUser(supabase, revieweeId, "review_received", notifPayload);
   } catch {}
 
-  // Mark contract as COMPLETED
-  // Find contract by source ID
-  await supabase.from("contracts")
-    .update({ status: 'completed' })
-    .or(`application_id.eq.${applicationId},service_order_id.eq.${applicationId}`)
-    .neq('status', 'completed');
-
-  // Sync Parent Status
-  if (sourceType === 'application') {
+  // Sync parent status only after the contract itself is completed by escrow/release flow.
+  if (sourceType === 'application' && reviewContract.status === "completed") {
     await supabase.from("applications")
       .update({ status: 'completed', realization_status: 'completed' })
       .eq("id", applicationId)
       .neq("status", "completed")
       .in("status", ["accepted", "in_progress", "delivered"]);
-  } else if (sourceType === 'service_order') {
+  } else if (sourceType === 'service_order' && reviewContract.status === "completed") {
     await supabase.from("service_orders")
       .update({ status: 'completed' })
       .eq("id", applicationId)
@@ -585,6 +619,18 @@ export async function fundContractAction(contractId: string, applicationId: stri
   const supabase = await createClient();
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) redirect("/auth");
+
+  const { data: completedPayment, error: paymentProofError } = await supabase
+    .from("payments")
+    .select("id")
+    .eq("contract_id", contractId)
+    .eq("status", "completed")
+    .limit(1)
+    .maybeSingle();
+
+  if (paymentProofError || !completedPayment) {
+    throw new Error("Kontrakt moze zostac aktywowany dopiero po potwierdzonej platnosci Stripe.");
+  }
 
   // Fund ALL milestones
   // ✅ [Refactor v1] Consolidated RPC
@@ -738,19 +784,36 @@ export async function reviewMilestoneAction(
       console.error("Failed to generate student invoice (non-critical):", invoiceErr);
     }
 
+    try {
+      const transferResult = await transferLatestPayoutForMilestone(milestoneId);
+      if (transferResult.status === "failed" || transferResult.status === "missing_account") {
+        console.warn("Automatic Stripe payout was not completed:", transferResult.message);
+      }
+    } catch (payoutErr) {
+      console.error("Automatic Stripe payout failed (non-critical):", payoutErr);
+    }
+
     // Check if contract became completed (all milestones released)
     const { data: contractRow } = await supabase
       .from("contracts")
-      .select("id, status")
-      .eq("application_id", applicationId)
+      .select("id, status, application_id, service_order_id")
+      .or(`application_id.eq.${applicationId},service_order_id.eq.${applicationId}`)
       .maybeSingle();
 
     if (contractRow?.status === "completed") {
-      await supabase
-        .from("applications")
-        .update({ status: "completed", realization_status: "completed" })
-        .eq("id", applicationId)
-        .in("status", ["in_progress", "accepted"]);
+      if (contractRow.application_id) {
+        await supabase
+          .from("applications")
+          .update({ status: "completed", realization_status: "completed" })
+          .eq("id", contractRow.application_id)
+          .in("status", ["in_progress", "accepted"]);
+      } else if (contractRow.service_order_id) {
+        await supabase
+          .from("service_orders")
+          .update({ status: "completed" })
+          .eq("id", contractRow.service_order_id)
+          .in("status", ["accepted", "active", "in_progress", "revision", "delivered"]);
+      }
     }
   }
 
@@ -1095,6 +1158,18 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
     throw new Error("Nie znaleziono kontraktu: " + (contractError?.message || ""));
   }
 
+  if (actorUserId !== contract.company_id && actorUserId !== contract.student_id) {
+    const { data: actorProfile } = await admin
+      .from("profiles")
+      .select("role")
+      .eq("user_id", actorUserId)
+      .maybeSingle();
+
+    if (actorProfile?.role !== "admin") {
+      throw new Error("Brak uprawnien do wygenerowania dokumentow tego kontraktu.");
+    }
+  }
+
   const { data: milestonesData, error: milestonesError } = await admin
     .from("milestones")
     .select("idx, title, amount, amount_minor, acceptance_criteria, due_at, status")
@@ -1168,6 +1243,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
 
   let offerTitle = "Zlecenie";
   let offerDescription = "";
+  let servicePackage: PackageSummaryRow | null = null;
 
   if (typedContract.application_id) {
     const { data: appData } = await admin
@@ -1188,7 +1264,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
       .single();
 
     const serviceOrder = serviceOrderData as ServiceOrderOfferDetailsRow | null;
-    const servicePackage = unwrapRelation(serviceOrder?.package ?? null);
+    servicePackage = unwrapRelation(serviceOrder?.package ?? null);
     offerTitle = servicePackage?.title || offerTitle;
   }
 
@@ -1349,33 +1425,139 @@ export async function acceptContractDocument(
   }
 
   const now = new Date().toISOString();
+  const requestHeaders = await headers();
+  const acceptedIp =
+    requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || requestHeaders.get("x-real-ip")
+    || null;
   const admin = createAdminClient();
+  const { data: contractDocument, error: contractDocumentError } = await admin
+    .from("contract_documents")
+    .select("id, contract_id, document_type")
+    .eq("id", contractDocumentId)
+    .eq("contract_id", contractId)
+    .maybeSingle();
+
+  if (contractDocumentError || !contractDocument) {
+    throw new Error("Dokument kontraktu nie istnieje albo nie nalezy do tego kontraktu.");
+  }
+
+  const typedDocument = contractDocument as ContractDocumentAcceptanceRow;
+  if (isCompany && typedDocument.document_type !== "contract_a") {
+    throw new Error("Firma moze zaakceptowac tylko umowe A.");
+  }
+  if (isStudent && typedDocument.document_type !== "contract_b") {
+    throw new Error("Student moze zaakceptowac tylko umowe B.");
+  }
 
   // 2. Update contract_documents (use admin to bypass RLS)
   if (isCompany) {
-    await admin
+    const { error: documentUpdateError } = await admin
       .from("contract_documents")
-      .update({ company_accepted_at: now })
-      .eq("id", contractDocumentId);
+      .update({ company_accepted_at: now, company_accepted_ip: acceptedIp })
+      .eq("id", contractDocumentId)
+      .eq("contract_id", contractId);
+
+    if (documentUpdateError) {
+      throw new Error("Nie udalo sie zapisac akceptacji dokumentu.");
+    }
 
     // Also update the contract-level timestamp
-    await admin
+    const { error: contractUpdateError } = await admin
       .from("contracts")
-      .update({ company_contract_accepted_at: now })
+      .update({ company_contract_accepted_at: now, company_contract_accepted_ip: acceptedIp })
       .eq("id", contractId);
-  } else {
-    await admin
-      .from("contract_documents")
-      .update({ student_accepted_at: now })
-      .eq("id", contractDocumentId);
 
-    await admin
+    if (contractUpdateError) {
+      throw new Error("Nie udalo sie zapisac akceptacji kontraktu.");
+    }
+  } else {
+    const { error: documentUpdateError } = await admin
+      .from("contract_documents")
+      .update({ student_accepted_at: now, student_accepted_ip: acceptedIp })
+      .eq("id", contractDocumentId)
+      .eq("contract_id", contractId);
+
+    if (documentUpdateError) {
+      throw new Error("Nie udalo sie zapisac akceptacji dokumentu.");
+    }
+
+    const { error: contractUpdateError } = await admin
       .from("contracts")
-      .update({ student_contract_accepted_at: now })
+      .update({ student_contract_accepted_at: now, student_contract_accepted_ip: acceptedIp })
       .eq("id", contractId);
+
+    if (contractUpdateError) {
+      throw new Error("Nie udalo sie zapisac akceptacji kontraktu.");
+    }
   }
 
   revalidatePath(`/app/deliverables/${applicationId}`);
 
   return { success: true, role: isCompany ? "company" : "student" };
+}
+
+export async function reopenMilestoneNegotiationAction(contractId: string, applicationId: string) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) redirect("/auth");
+
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("id, company_id, student_id, status, company_contract_accepted_at, student_contract_accepted_at, milestones(status)")
+    .eq("id", contractId)
+    .maybeSingle();
+
+  if (!contract) {
+    throw new Error("Nie znaleziono kontraktu.");
+  }
+
+  const isParticipant = userData.user.id === contract.company_id || userData.user.id === contract.student_id;
+  if (!isParticipant) {
+    throw new Error("Brak uprawnien do tego kontraktu.");
+  }
+
+  const milestones = Array.isArray(contract.milestones) ? contract.milestones : [];
+  const hasFundedMilestone = milestones.some((milestone) =>
+    ["funded", "in_progress", "delivered", "accepted", "released", "completed"].includes(String(milestone.status)),
+  );
+
+  if (hasFundedMilestone || !["draft", "awaiting_funding"].includes(String(contract.status))) {
+    throw new Error("Nie mozna cofnac etapow po zasileniu depozytu lub rozpoczeciu realizacji.");
+  }
+
+  if (contract.company_contract_accepted_at || contract.student_contract_accepted_at) {
+    throw new Error("Umowa zostala juz zaakceptowana. Wymagana jest korekta przez administratora.");
+  }
+
+  const admin = createAdminClient();
+  const { error: contractUpdateError } = await admin
+    .from("contracts")
+    .update({
+      terms_status: "draft",
+      status: "draft",
+      documents_generated_at: null,
+      company_approved_version: null,
+      student_approved_version: null,
+    })
+    .eq("id", contractId);
+
+  if (contractUpdateError) {
+    throw new Error("Nie udalo sie cofnac kontraktu do ustalania etapow.");
+  }
+
+  await admin
+    .from("milestone_drafts")
+    .update({ state: "STUDENT_EDITING" })
+    .eq("contract_id", contractId);
+
+  await admin
+    .from("contract_documents")
+    .delete()
+    .eq("contract_id", contractId)
+    .is("company_accepted_at", null)
+    .is("student_accepted_at", null);
+
+  revalidatePath(`/app/deliverables/${applicationId}`);
+  return { success: true };
 }

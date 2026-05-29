@@ -16,6 +16,78 @@ import {
 } from "@/lib/services/package-customization";
 import { fetchAvailableLogoStudents, LOGO_PACKAGE_ID } from "@/lib/services/logo-student-selection";
 
+type SystemServiceStudentCandidate = {
+    user_id: string;
+    public_name?: string | null;
+    categories?: string[] | null;
+    skills?: string[] | null;
+    kompetencje?: string[] | null;
+};
+
+async function requireProfileRole(
+    supabase: Awaited<ReturnType<typeof createClient>>,
+    userId: string,
+    allowedRoles: Array<"company" | "admin">,
+) {
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+    if (error || !profile?.role || !allowedRoles.includes(profile.role as "company" | "admin")) {
+        throw new Error("Brak uprawnien do wykonania tej akcji.");
+    }
+}
+
+async function findSystemServiceStudent(
+    supabase: Awaited<ReturnType<typeof createClient>>,
+    packageCategory: string | null | undefined,
+): Promise<SystemServiceStudentCandidate | null> {
+    const { data: candidates, error } = await supabase
+        .from("student_profiles")
+        .select("user_id, public_name, categories, skills, kompetencje")
+        .not("user_id", "is", null)
+        .limit(25);
+
+    if (error || !candidates || candidates.length === 0) {
+        return null;
+    }
+
+    const candidateIds = candidates
+        .map((candidate) => candidate.user_id)
+        .filter((candidateId): candidateId is string => typeof candidateId === "string" && candidateId.length > 0);
+
+    const activeCounts = new Map<string, number>();
+    if (candidateIds.length > 0) {
+        const { data: activeOrders } = await supabase
+            .from("service_orders")
+            .select("student_id")
+            .in("student_id", candidateIds)
+            .in("status", ["active", "in_progress", "pending_student_confirmation", "pending_confirmation"]);
+
+        activeOrders?.forEach((row: { student_id: string | null }) => {
+            if (row.student_id) {
+                activeCounts.set(row.student_id, (activeCounts.get(row.student_id) ?? 0) + 1);
+            }
+        });
+    }
+
+    const normalizedCategory = packageCategory?.trim().toLowerCase() ?? "";
+    const availableCandidates = (candidates as SystemServiceStudentCandidate[])
+        .filter((candidate) => candidate.user_id && (activeCounts.get(candidate.user_id) ?? 0) < 2);
+
+    return availableCandidates.find((candidate) => {
+        const labels = [
+            ...(candidate.categories ?? []),
+            ...(candidate.skills ?? []),
+            ...(candidate.kompetencje ?? []),
+        ].map((value) => value.toLowerCase());
+
+        return normalizedCategory.length > 0 && labels.some((label) => label.includes(normalizedCategory));
+    }) ?? availableCandidates[0] ?? null;
+}
+
 export async function createOfferFromPackage(packageId: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -23,6 +95,8 @@ export async function createOfferFromPackage(packageId: string) {
     if (!user) {
         throw new Error("Unauthorized");
     }
+
+    await requireProfileRole(supabase, user.id, ["company"]);
 
     // Fetch package details
     const { data: pkg, error: pkgError } = await supabase
@@ -33,6 +107,10 @@ export async function createOfferFromPackage(packageId: string) {
 
     if (pkgError || !pkg) {
         throw new Error(pkgError?.message || "Package not found");
+    }
+
+    if (pkg.student_id && pkg.student_id === user.id) {
+        throw new Error("Nie mozesz zamowic wlasnej uslugi.");
     }
 
     const isPlatformService = pkg.type === 'platform_service';
@@ -75,6 +153,13 @@ export async function createOfferFromPackage(packageId: string) {
 
 export async function resetServices() {
     const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        throw new Error("Unauthorized");
+    }
+
+    await requireProfileRole(supabase, user.id, ["admin"]);
 
     // 1. Delete old platform services (avoid deleting 'Piec' which is a user/student gig)
     await supabase.from("service_packages")
@@ -137,6 +222,8 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
         throw new Error("Unauthorized");
     }
 
+    await requireProfileRole(supabase, user.id, ["company"]);
+
     // Fetch package details
     const { data: pkg, error: pkgError } = await supabase
         .from("service_packages")
@@ -148,7 +235,10 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
         throw new Error(pkgError?.message || "Package not found");
     }
 
-    const isPlatformService = pkg.type === 'platform_service';
+    if (pkg.student_id && pkg.student_id === user.id) {
+        throw new Error("Nie mozesz zamowic wlasnej uslugi.");
+    }
+
     const isSystemPackage = isSystemServicePackage(pkg);
     const formSchema = normalizePackageFormSchema(pkg.form_schema);
     const variants = resolvePackageVariantsWithFallback(pkg.id, pkg.variants);
@@ -273,6 +363,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
                     package_id: packageId,
                     status: "pending_selection",
                     amount: effectivePrice,
+                    variant_key: selectedVariant?.name ?? null,
                     requirements: customDescription,
                     title: effectiveTitle,
                     request_snapshot: requestSnapshot,
@@ -294,6 +385,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
                         package_id: packageId,
                         status: "pending",
                         amount: effectivePrice,
+                        variant_key: selectedVariant?.name ?? null,
                         requirements: customDescription,
                         title: effectiveTitle,
                         request_snapshot: requestSnapshot,
@@ -350,14 +442,14 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
             if (effectiveStudentId) {
                 const { data: conversation } = await supabase
                     .from("conversations")
-                    .insert({
+                    .upsert({
                         package_id: packageId,
                         student_id: effectiveStudentId,
                         company_id: user.id,
                         type: "inquiry",
                         status: "active",
                         service_order_id: logoOrder.id,
-                    })
+                    }, { onConflict: "service_order_id" })
                     .select("id")
                     .maybeSingle();
 
@@ -407,38 +499,72 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
             redirect(`/app/company/orders/${logoOrder.id}`);
         }
 
-        const { data: offer, error: offerError } = await supabase
-            .from("offers")
+        const assignedStudentId = typeof pkg.student_id === "string" && pkg.student_id.length > 0
+            ? pkg.student_id
+            : (await findSystemServiceStudent(supabase, pkg.category))?.user_id ?? null;
+
+        if (!assignedStudentId) {
+            throw new Error("Brak dostepnego studenta do tej uslugi. Sprobuj ponownie pozniej lub skontaktuj sie z obsluga.");
+        }
+
+        const requestSnapshot = buildRequestSnapshot({
+            packageId,
+            packageTitle: effectiveTitle,
+            contactEmail: user.email || "",
+            formAnswers,
+            additionalInfo: notes?.trim() || null,
+        });
+
+        const { data: serviceOrder, error: serviceOrderError } = await supabase
+            .from("service_orders")
             .insert({
                 company_id: user.id,
-                tytul: effectiveTitle,
-                opis: customDescription,
-                stawka: effectivePrice,
-                czas: `${effectiveDeliveryDays} dni`,
-                status: "published",
-                typ: "projekt",
-                is_platform_service: true,
-                service_package_id: pkg.id,
-                commission_rate: resolveCommissionRate({
-                    explicitRate: effectiveCommissionRate,
-                    sourceType: "service_order",
-                    isPlatformService: true,
-                }),
-                technologies: [],
-                contract_type: "B2B",
-                kategoria: pkg.category,
-                wymagania: pkg.features || [],
+                student_id: assignedStudentId,
+                package_id: packageId,
+                status: "pending_student_confirmation",
+                amount: effectivePrice,
+                variant_key: selectedVariant?.name ?? null,
+                requirements: customDescription,
+                title: effectiveTitle,
+                request_snapshot: requestSnapshot,
+                entry_point: "company_request",
+                initiated_by: "company",
             })
             .select("id")
             .single();
 
-        if (offerError) {
-            console.error("Error creating platform offer:", offerError);
-            throw new Error(offerError.message || "Unknown database error");
+        if (serviceOrderError || !serviceOrder) {
+            console.error("Error creating system service order:", serviceOrderError);
+            throw new Error(serviceOrderError?.message || "Nie udalo sie utworzyc zamowienia uslugi.");
         }
 
-        revalidatePath("/app/company/offers");
-        redirect(`/app/offers/${offer.id}`);
+        const { data: conversation } = await supabase
+            .from("conversations")
+            .upsert({
+                package_id: packageId,
+                student_id: assignedStudentId,
+                company_id: user.id,
+                type: "inquiry",
+                status: "active",
+                service_order_id: serviceOrder.id,
+            }, { onConflict: "service_order_id" })
+            .select("id")
+            .maybeSingle();
+
+        await supabase.from("notifications").insert({
+            user_id: assignedStudentId,
+            typ: "application_new",
+            payload: {
+                snippet: `Otrzymales nowe zamowienie uslugi: ${effectiveTitle}`,
+                service_order_id: serviceOrder.id,
+                conversation_id: conversation?.id ?? null,
+            },
+        });
+
+        revalidatePath("/app/company/orders");
+        revalidatePath("/app/company/packages");
+        revalidatePath("/app/services/dashboard");
+        redirect(`/app/company/orders/${serviceOrder.id}`);
     }
 
     // --- Student gig flow (student_id istnieje) ---
@@ -452,6 +578,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
             package_id: packageId,
             status: "inquiry",
             amount: effectivePrice,
+            variant_key: selectedVariant?.name ?? null,
             requirements: customDescription,
             title: effectiveTitle,
         })

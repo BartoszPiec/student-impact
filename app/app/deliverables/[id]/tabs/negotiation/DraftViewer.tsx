@@ -82,8 +82,9 @@ export function DraftViewer({ applicationId, contractId, milestones, diffBase, i
             }
 
             onRefresh();
-        } catch (e: any) {
-            toast.error("Błąd: " + (e?.message || JSON.stringify(e)));
+        } catch (e: unknown) {
+            console.error("Draft approval failed:", e);
+            toast.error("Nie udalo sie zatwierdzic warunkow. Sprobuj ponownie.");
         } finally {
             setLoading(false);
         }

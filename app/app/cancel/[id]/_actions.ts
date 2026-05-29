@@ -54,13 +54,14 @@ export async function cancelCooperation(applicationId: string, formData: FormDat
         if (!conversationId) {
           const { data: created, error: createErr } = await supabase
             .from("conversations")
-            .insert({
+            .upsert({
               application_id: applicationId,
               company_id: companyId,
               student_id: studentId,
               offer_id: appRow.offer_id,
               type: 'application',
-            })
+              status: "active",
+            }, { onConflict: "application_id" })
             .select("id")
             .maybeSingle();
 

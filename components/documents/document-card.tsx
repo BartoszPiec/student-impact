@@ -2,6 +2,7 @@ import { FileBadge2, FileText, Receipt, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   type UserFacingDocument,
+  getContractStatusLabel,
   getDocumentTypeDescription,
   getDocumentTypeLabel,
 } from "@/types/documents";
@@ -25,16 +26,6 @@ function getTone(type: UserFacingDocument["type"]) {
     badge: "border border-emerald-200 bg-emerald-50 text-emerald-700",
     iconWrap: "border border-emerald-100 bg-emerald-50 text-emerald-600",
   };
-}
-
-function getStatusLabel(status: string) {
-  if (status === "active") return "Aktywna";
-  if (status === "completed") return "Zakonczona";
-  if (status === "cancelled") return "Anulowana";
-  if (status === "disputed") return "Sporna";
-  if (status === "awaiting_funding") return "Czeka na finansowanie";
-  if (status === "draft") return "Ustalanie kontraktu";
-  return status;
 }
 
 export function DocumentCard({ document, className }: DocumentCardProps) {
@@ -70,7 +61,7 @@ export function DocumentCard({ document, className }: DocumentCardProps) {
                 {getDocumentTypeLabel(document.type)}
               </span>
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                {getStatusLabel(document.contractStatus)}
+                {getContractStatusLabel(document.contractStatus)}
               </span>
             </div>
 

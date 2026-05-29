@@ -57,6 +57,12 @@ export type PackageVariant = {
   is_recommended?: boolean;
   includes?: string[];
   excludes?: string[];
+  post_types?: Record<string, number>;
+  platforms?: string[];
+  includes_stories?: boolean;
+  stories_count?: number | null;
+  revision_rounds?: number | null;
+  max_revisions?: number | null;
   milestones?: PackageVariantMilestone[];
 };
 
@@ -64,21 +70,25 @@ const LOGO_PACKAGE_ID = "5de0e9f6-3768-4732-987b-5c0073591646";
 
 const LOGO_FALLBACK_VARIANTS: PackageVariant[] = [
   {
-    name: "basic",
-    label: "Basic",
-    price: 350,
+    name: "starter",
+    label: "STARTER",
+    price: 500,
+    commission_rate: 0.2,
     delivery_time_days: 7,
-    description: "Startowy pakiet logo dla mikrofirm i freelancerow.",
+    description: "2 koncepcje, PNG + SVG, 1 runda poprawek, prawa autorskie.",
     is_recommended: false,
     includes: [
-      "2 koncepcje logo",
-      "1 runda poprawek",
-      "Pliki PNG + SVG",
-      "Pelne przeniesienie praw autorskich",
+      "2 propozycje logo",
+      "1 runda poprawek (5 zmian)",
+      "Pliki PNG + SVG (web)",
+      "Wersja kolorowa + monochromatyczna",
+      "1 wersja kompozycji",
+      "Prezentacja na 2 mockupach",
+      "Pelne prawa autorskie",
     ],
     excludes: [
-      "Dodatkowa 3 koncepcja",
-      "Rozszerzona mini-ksiega znaku",
+      "Brak plikow do druku",
+      "Brak mini-ksiegi znaku",
     ],
     milestones: [
       { idx: 1, title: "Brief zatwierdzony", acceptance_criteria: "Brief jest kompletny", due_days: 1 },
@@ -88,17 +98,21 @@ const LOGO_FALLBACK_VARIANTS: PackageVariant[] = [
   },
   {
     name: "standard",
-    label: "Standard",
-    price: 650,
+    label: "STANDARD",
+    price: 849,
+    commission_rate: 0.25,
     delivery_time_days: 10,
-    description: "Rekomendowany pakiet logo z szerszym zakresem plikow i poprawek.",
+    description: "3 koncepcje, pliki do druku, mini-ksiega 2 str., 2 rundy poprawek.",
     is_recommended: true,
     includes: [
-      "3 koncepcje logo",
-      "2 rundy poprawek",
-      "Pliki PNG + SVG + PDF CMYK + AI/EPS",
-      "Mini-ksiega znaku",
-      "Pelne przeniesienie praw autorskich",
+      "3 propozycje logo",
+      "2 rundy poprawek (5 zmian / runda)",
+      "Pliki PNG + SVG (web) + PDF CMYK (druk)",
+      "Wersja kolorowa + mono + negatyw",
+      "Wersje pozioma + pionowa",
+      "Prezentacja na 3 mockupach",
+      "Mini-ksiega znaku 2 str.",
+      "Pelne prawa autorskie",
     ],
     excludes: [],
     milestones: [
@@ -106,6 +120,31 @@ const LOGO_FALLBACK_VARIANTS: PackageVariant[] = [
       { idx: 2, title: "Koncepcje dostarczone", acceptance_criteria: "Firma wybiera 1 z 3 koncepcji", due_days: 5 },
       { idx: 3, title: "Runda poprawek", acceptance_criteria: "Pierwsza iteracja zmian", due_days: 7 },
       { idx: 4, title: "Finalizacja", acceptance_criteria: "Dostarczenie finalnych plikow", due_days: 10 },
+    ],
+  },
+  {
+    name: "pro",
+    label: "PRO",
+    price: 1299,
+    commission_rate: 0.25,
+    delivery_time_days: 14,
+    description: "3 koncepcje, pliki AI/EPS, mini-ksiega 4-6 str. i mockupy aplikacji.",
+    includes: [
+      "3 propozycje logo",
+      "2 rundy poprawek (5 zmian / runda)",
+      "Pliki PNG + SVG + PDF CMYK + AI / EPS",
+      "Wersja kolorowa + mono + negatyw",
+      "Wersje pozioma + pionowa + favicon",
+      "Prezentacja na 5 mockupach",
+      "Mini-ksiega znaku 4-6 str.",
+      "Pelne prawa autorskie",
+    ],
+    excludes: [],
+    milestones: [
+      { idx: 1, title: "Brief zatwierdzony", acceptance_criteria: "Brief jest kompletny", due_days: 1 },
+      { idx: 2, title: "Koncepcje dostarczone", acceptance_criteria: "Firma wybiera 1 z 3 koncepcji", due_days: 7 },
+      { idx: 3, title: "Runda poprawek", acceptance_criteria: "Finalizacja wybranego kierunku", due_days: 11 },
+      { idx: 4, title: "Finalizacja", acceptance_criteria: "Dostarczenie finalnych plikow i mini-ksiegi", due_days: 14 },
     ],
   },
 ];
@@ -143,6 +182,15 @@ function toStringArray(value: unknown) {
   return value
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter((item) => item.length > 0);
+}
+
+function toNumberRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const entries = Object.entries(value as Record<string, unknown>)
+    .map(([key, entryValue]) => [key, toNumber(entryValue)] as const)
+    .filter(([, numberValue]) => typeof numberValue === "number" && Number.isFinite(numberValue));
+
+  return Object.fromEntries(entries) as Record<string, number>;
 }
 
 function toFieldOptions(value: unknown) {
@@ -210,7 +258,7 @@ function normalizeFormField(
   const type =
     rawType === "radio"
       ? "radio"
-      : rawType === "file"
+      : rawType === "file" || rawType === "file_upload"
         ? "file"
         : rawType === "select"
           ? "select"
@@ -283,6 +331,13 @@ export function normalizePackageFormSchema(value: unknown): PackageFormField[] {
 
   if (value && typeof value === "object") {
     const objectSchema = value as Record<string, unknown>;
+    if (Array.isArray(objectSchema.fields)) {
+      return objectSchema.fields
+        .filter((field): field is Record<string, unknown> => Boolean(field && typeof field === "object"))
+        .map((field) => normalizeFormField(field, null))
+        .filter((field): field is PackageFormField => Boolean(field));
+    }
+
     if (Array.isArray(objectSchema.sections)) {
       return objectSchema.sections
         .filter((section): section is Record<string, unknown> => Boolean(section && typeof section === "object"))
@@ -327,6 +382,11 @@ export function normalizePackageVariants(value: unknown): PackageVariant[] {
   return rawVariants
     .map((variant) => {
       const price = toNumber(variant.price);
+      const includes = toStringArray(variant.includes);
+      const deliverables = toStringArray(variant.deliverables);
+      const features = toStringArray(variant.features);
+      const excludes = toStringArray(variant.excludes);
+      const exclusions = toStringArray(variant.exclusions);
       const variantName =
         typeof variant.name === "string"
           ? variant.name
@@ -354,8 +414,14 @@ export function normalizePackageVariants(value: unknown): PackageVariant[] {
               : null,
         description: typeof variant.description === "string" ? variant.description : null,
         is_recommended: Boolean(variant.is_recommended),
-        includes: toStringArray(variant.includes),
-        excludes: toStringArray(variant.excludes),
+        includes: includes.length > 0 ? includes : deliverables.length > 0 ? deliverables : features,
+        excludes: excludes.length > 0 ? excludes : exclusions,
+        post_types: toNumberRecord(variant.post_types),
+        platforms: toStringArray(variant.platforms),
+        includes_stories: typeof variant.includes_stories === "boolean" ? variant.includes_stories : undefined,
+        stories_count: toNumber(variant.stories_count),
+        revision_rounds: toNumber(variant.revision_rounds),
+        max_revisions: toNumber(variant.max_revisions),
         milestones: normalizeMilestones(variant.milestones),
       } satisfies PackageVariant;
     })
@@ -365,10 +431,16 @@ export function normalizePackageVariants(value: unknown): PackageVariant[] {
 export function resolvePackageVariantsWithFallback(packageId: string, value: unknown): PackageVariant[] {
   const normalized = normalizePackageVariants(value);
   if (packageId === LOGO_PACKAGE_ID) {
-    const hasBasic = normalized.some((variant) => variant.name.toLowerCase() === "basic");
     const hasStandard = normalized.some((variant) => variant.name.toLowerCase() === "standard");
+    const hasStarter = normalized.some((variant) => variant.name.toLowerCase() === "starter");
+    const hasBasic = normalized.some((variant) => variant.name.toLowerCase() === "basic");
+    const hasPro = normalized.some((variant) => variant.name.toLowerCase() === "pro");
 
-    if (normalized.length >= 2 && hasBasic && hasStandard) {
+    if (
+      normalized.length >= 2 &&
+      hasStandard &&
+      (hasStarter || hasBasic || hasPro)
+    ) {
       return normalized;
     }
 

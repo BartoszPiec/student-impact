@@ -16,6 +16,7 @@ import EducationSection from "./education-section";
 import SkillsInput from "./skills-input";
 import { Progress } from "@/components/ui/progress";
 import TaxDataSection from "./tax-data-section";
+import { StripeOnboardingButton } from "./stripe-onboarding-button";
 
 export const dynamic = "force-dynamic";
 
@@ -54,9 +55,6 @@ export default async function ProfilePage({
           <p className="mt-3 text-sm leading-6 text-slate-600">
             Spróbuj odświeżyć stronę. Jeśli problem się powtórzy, skontaktuj się z zespołem wsparcia.
           </p>
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
-            Szczegóły techniczne: {profErr.message}
-          </div>
         </div>
       </main>
     );
@@ -93,7 +91,7 @@ export default async function ProfilePage({
       ? (
         await supabase
           .from("student_profiles")
-          .select("public_name, kierunek, rok, sciezka, kompetencje, linki, bio, doswiadczenie, linkedin_url, portfolio_url, tax_residence_pl, birth_date, pesel")
+          .select("public_name, kierunek, rok, sciezka, kompetencje, linki, bio, doswiadczenie, linkedin_url, portfolio_url, tax_residence_pl, birth_date, pesel, stripe_account_id, stripe_onboarding_completed_at")
           .eq("user_id", user.id)
           .maybeSingle()
       ).data
@@ -109,6 +107,24 @@ export default async function ProfilePage({
           .maybeSingle()
       ).data
       : null;
+  const studentStripeAccountId =
+    role === "student"
+    && student
+    && "stripe_account_id" in student
+    && typeof student.stripe_account_id === "string"
+      ? student.stripe_account_id
+      : null;
+  const studentStripeReady =
+    role === "student"
+    && student
+    && "stripe_onboarding_completed_at" in student
+    && typeof student.stripe_onboarding_completed_at === "string"
+    && student.stripe_onboarding_completed_at.length > 0;
+  const studentStripeState = studentStripeReady
+    ? "ready"
+    : studentStripeAccountId
+      ? "pending"
+      : "missing";
 
   // ===== STATYSTYKI & CALCULATIONS =====
   let stats: any = null;
@@ -519,6 +535,31 @@ export default async function ProfilePage({
                     pesel: (student as any)?.pesel ?? null,
                   }}
                 />
+
+                <Card className="rounded-[2rem] border-none bg-white shadow-xl shadow-slate-200/40">
+                  <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white py-6">
+                    <CardTitle className="flex items-center gap-3 text-lg font-black text-slate-800">
+                      <div className="rounded-xl bg-emerald-100 p-2 text-emerald-700">
+                        <Wallet className="h-5 w-5" />
+                      </div>
+                      Wypłaty Stripe
+                    </CardTitle>
+                    <CardDescription>
+                      Połącz konto Stripe, aby platforma mogła wypłacić wynagrodzenie po akceptacji etapu.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4 p-8 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <Badge className={studentStripeReady ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>
+                        {studentStripeReady ? "Konto gotowe do wypłat" : studentStripeAccountId ? "Dokończ weryfikację" : "Wymagana konfiguracja"}
+                      </Badge>
+                      <p className="mt-2 max-w-xl text-sm font-medium leading-6 text-slate-500">
+                        Stripe poprowadzi Cię przez bezpieczną weryfikację. Dane płatnicze nie są przechowywane w Student2Work.
+                      </p>
+                    </div>
+                    <StripeOnboardingButton state={studentStripeState} />
+                  </CardContent>
+                </Card>
 
                 <div id="reviews" className="scroll-mt-24">
                   <ReviewsSection />

@@ -42,10 +42,23 @@ export function getDocumentTypeLabel(type: UserDocumentType) {
 export function getDocumentTypeDescription(type: UserDocumentType) {
   if (type === "contract_a") return "Wersja firmy do archiwum i rozliczen";
   if (type === "contract_b") return "Wersja studenta do pobrania";
-  if (type === "invoice_company") return "Faktura firmy zapisana w storage";
+  if (type === "invoice_company") return "Dokument rozliczeniowy firmy";
   return "Rachunek studenta zapisany po akceptacji etapu";
 }
 
 export function getDocumentKind(type: UserDocumentType): UserDocumentKind {
   return type === "contract_a" || type === "contract_b" ? "contract" : "invoice";
+}
+
+export function getContractStatusLabel(status: string | null | undefined) {
+  if (status === "draft") return "Przygotowanie umowy";
+  if (status === "awaiting_terms_acceptance") return "Czeka na akceptacje umowy";
+  if (status === "awaiting_funding") return "Czeka na platnosc";
+  if (status === "active") return "W realizacji";
+  if (status === "delivered") return "Czeka na odbior";
+  if (status === "completed") return "Zakonczone";
+  if (status === "cancelled") return "Anulowane";
+  if (status === "disputed") return "W sporze";
+  if (status === "refunded") return "Zwrocone";
+  return "W trakcie";
 }

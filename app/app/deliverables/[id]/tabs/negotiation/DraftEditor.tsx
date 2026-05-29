@@ -19,6 +19,15 @@ const uuidv4 = () => {
     );
 };
 
+function getErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === "object" && error && "message" in error) {
+        const message = (error as { message?: unknown }).message;
+        if (typeof message === "string" && message.length > 0) return message;
+    }
+    return fallback;
+}
+
 interface Props {
     draftId: string;
     contractId: string;
@@ -37,7 +46,7 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [allocationMode, setAllocationMode] = useState<'MANUAL' | 'REST_TO_LAST'>('MANUAL');
     const [acceptedDiffs, setAcceptedDiffs] = useState<Set<string>>(new Set());
-    const [lastDebugError, setLastDebugError] = useState<any>(null);
+    const [lastDebugError, setLastDebugError] = useState<unknown>(null);
 
     // Sync initial checks
     useEffect(() => {
@@ -235,10 +244,9 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
             setHasUnsavedChanges(false);
             onRefresh();
             return true;
-        } catch (e: any) {
-            console.error("Save Error Details:", JSON.stringify(e, null, 2));
-            console.error("Original Error:", e);
-            toast.error("Błąd zapisu: " + (e?.message || JSON.stringify(e)));
+        } catch (e: unknown) {
+            console.error("Save Error:", e);
+            toast.error("Nie udalo sie zapisac wersji roboczej. Sprobuj ponownie.");
             return false;
         } finally {
             setLoading(false);
@@ -279,24 +287,23 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
                 } else if (data.status === 'OVER') {
                     toast.error(`Błąd: Przekroczono budżet o ${(data.delta / 100).toFixed(2)} PLN`);
                 } else {
-                    toast.error(`Błąd walidacji: ${data.status} ${data.reason || ''}`);
+                    toast.error("Nie udalo sie zatwierdzic harmonogramu. Sprawdz kwoty i sprobuj ponownie.");
                 }
                 return;
             }
 
             toast.success(role === 'STUDENT' ? "Wysłano do akceptacji" : "Wysłano propozycję zmian");
             onRefresh();
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error("Submit Exception:", e);
             setLastDebugError(e); // Log exception
-            // Explicitly extract properties
-            const msg = e?.message || "Unknown error";
+            const msg = getErrorMessage(e, "Nie udalo sie wyslac propozycji.");
 
             // Handle P0001 from legacy RPC if it exists
             if (msg.includes("Budget validation failed")) {
-                toast.error("Błąd budżetu (Backend): Upewnij się, że suma wynosi dokładnie " + totalBudget.toFixed(2));
+                toast.error("Suma etapow musi wynosic dokladnie " + totalBudget.toFixed(2) + " PLN.");
             } else {
-                toast.error(`Błąd wysyłania: ${msg}`);
+                toast.error("Nie udalo sie wyslac propozycji. Sprobuj ponownie.");
             }
         } finally {
             setLoading(false);

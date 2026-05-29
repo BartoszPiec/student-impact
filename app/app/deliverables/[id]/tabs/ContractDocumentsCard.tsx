@@ -10,6 +10,7 @@ import {
   generateContractDocuments,
   acceptContractDocument,
   getSignedStorageUrl,
+  reopenMilestoneNegotiationAction,
 } from "../../_actions";
 
 interface ContractDocument {
@@ -33,6 +34,7 @@ interface ContractDocumentsCardProps {
   companyAcceptedAt: string | null;
   studentAcceptedAt: string | null;
   termsAgreed: boolean;
+  canReopenTerms?: boolean;
 }
 
 export function ContractDocumentsCard({
@@ -45,6 +47,7 @@ export function ContractDocumentsCard({
   companyAcceptedAt,
   studentAcceptedAt,
   termsAgreed,
+  canReopenTerms = false,
 }: ContractDocumentsCardProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
@@ -68,8 +71,8 @@ export function ContractDocumentsCard({
     try {
       await generateContractDocuments(contractId, applicationId);
       toast.success("Umowy zostały wygenerowane!");
-    } catch (err: any) {
-      toast.error(err.message || "Błąd generowania umów");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Błąd generowania umów");
     } finally {
       setIsGenerating(false);
     }
@@ -80,7 +83,7 @@ export function ContractDocumentsCard({
     try {
       const url = await getSignedStorageUrl("deliverables", doc.storage_path, 300);
       window.open(url, "_blank");
-    } catch (err: any) {
+    } catch {
       toast.error("Błąd pobierania pliku");
     } finally {
       setIsDownloading(null);
@@ -93,8 +96,20 @@ export function ContractDocumentsCard({
     try {
       await acceptContractDocument(myDocument.id, contractId, applicationId);
       toast.success("Umowa zaakceptowana!");
-    } catch (err: any) {
-      toast.error(err.message || "Błąd akceptacji");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Błąd akceptacji");
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
+  const handleReopenTerms = async () => {
+    setIsAccepting(true);
+    try {
+      await reopenMilestoneNegotiationAction(contractId, applicationId);
+      toast.success("Wrocono do ustalania etapow.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Nie udalo sie cofnac etapow");
     } finally {
       setIsAccepting(false);
     }
@@ -132,6 +147,17 @@ export function ContractDocumentsCard({
                 </>
               )}
             </Button>
+            {canReopenTerms ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleReopenTerms}
+                disabled={isAccepting}
+                className="mt-3 rounded-xl border-slate-200"
+              >
+                Wroc do poprawy etapow
+              </Button>
+            ) : null}
           </div>
         )}
 
@@ -158,10 +184,10 @@ export function ContractDocumentsCard({
             {/* Document list */}
             <div className="space-y-3">
               {/* Contract A — for Company */}
-              {contractA && (
+              {isCompany && contractA && (
                 <DocumentRow
-                  label="Umowa o Świadczenie Usługi"
-                  sublabel="Firma ↔ Student Impact"
+                  label="Umowa o swiadczenie uslugi"
+                  sublabel="Firma - Student Impact"
                   doc={contractA}
                   accepted={!!companyAcceptedAt}
                   isMyDoc={isCompany}
@@ -171,10 +197,10 @@ export function ContractDocumentsCard({
               )}
 
               {/* Contract B — for Student */}
-              {contractB && (
+              {isStudent && contractB && (
                 <DocumentRow
-                  label="Umowa o Dzieło z Przeniesieniem Praw Autorskich"
-                  sublabel="Student ↔ Student Impact"
+                  label="Umowa zlecenie"
+                  sublabel="Student - Student Impact"
                   doc={contractB}
                   accepted={!!studentAcceptedAt}
                   isMyDoc={isStudent}
@@ -210,6 +236,20 @@ export function ContractDocumentsCard({
               </div>
             )}
 
+            {canReopenTerms ? (
+              <div className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleReopenTerms}
+                  disabled={isAccepting}
+                  className="w-full rounded-xl border-slate-200"
+                >
+                  Wroc do ustalania etapow
+                </Button>
+              </div>
+            ) : null}
+
             {/* Already accepted */}
             {myAcceptedAt && !otherAcceptedAt && (
               <p className="text-sm text-slate-500 text-center">
@@ -241,7 +281,7 @@ function DocumentRow({
   isDownloading: boolean;
 }) {
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 bg-slate-50/50 rounded-xl border border-slate-200/80 shadow-sm hover:border-indigo-100 transition-colors gap-3">
+    <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 rounded-xl border shadow-sm transition-colors gap-3 ${isMyDoc ? "bg-indigo-50/40 border-indigo-100" : "bg-slate-50/50 border-slate-200/80 hover:border-indigo-100"}`}>
       <div className="flex items-center gap-3 w-full sm:w-auto">
         <FileText className="w-5 h-5 text-indigo-500 shrink-0" />
         <div className="min-w-0">
@@ -266,6 +306,7 @@ function DocumentRow({
           size="sm"
           onClick={onDownload}
           disabled={isDownloading}
+          title={doc.file_name}
         >
           {isDownloading ? (
             <Loader2 className="w-4 h-4 animate-spin" />

@@ -7,6 +7,7 @@ export type CompanyOrderStatusMeta = {
   badgeClass: string;
   bucket: CompanyOrderBucket;
   summaryLabel: string;
+  nextActionLabel: string;
 };
 
 type BucketMeta = {
@@ -20,96 +21,112 @@ const STATUS_META: Record<ServiceOrderStatus, CompanyOrderStatusMeta> = {
     badgeClass: "bg-sky-100 text-sky-700 border border-sky-200",
     bucket: "waiting_for_student",
     summaryLabel: "Student jeszcze nie odpowiedzial na Twoje zapytanie.",
+    nextActionLabel: "Czekaj na wycene",
   },
   pending: {
     label: "Czeka na wycene",
     badgeClass: "bg-amber-100 text-amber-700 border border-amber-200",
     bucket: "waiting_for_student",
     summaryLabel: "Czekasz na pierwsza wycene od studenta.",
+    nextActionLabel: "Czekaj na wycene",
   },
   pending_selection: {
     label: "Wybierz studenta",
     badgeClass: "bg-indigo-100 text-indigo-700 border border-indigo-200",
     bucket: "needs_company_action",
     summaryLabel: "Brief jest gotowy. Wybierz wykonawce z listy kandydatow.",
+    nextActionLabel: "Wybierz studenta",
   },
   pending_student_confirmation: {
     label: "Czeka na potwierdzenie",
     badgeClass: "bg-orange-100 text-orange-700 border border-orange-200",
     bucket: "waiting_for_student",
     summaryLabel: "Student zostal wybrany i czekasz na jego potwierdzenie.",
+    nextActionLabel: "Czekaj na potwierdzenie",
   },
   pending_confirmation: {
     label: "Czeka na potwierdzenie",
     badgeClass: "bg-orange-100 text-orange-700 border border-orange-200",
     bucket: "waiting_for_student",
     summaryLabel: "Student zostal wybrany i czekasz na jego potwierdzenie.",
+    nextActionLabel: "Czekaj na potwierdzenie",
   },
   proposal_sent: {
     label: "Oferta od studenta",
     badgeClass: "bg-violet-100 text-violet-700 border border-violet-200",
     bucket: "needs_company_action",
     summaryLabel: "Student wyslal wycene i czeka na Twoja decyzje.",
+    nextActionLabel: "Zaakceptuj albo negocjuj",
   },
   countered: {
     label: "Kontroferta wyslana",
     badgeClass: "bg-orange-100 text-orange-700 border border-orange-200",
     bucket: "waiting_for_student",
     summaryLabel: "Twoja kontroferta jest u studenta. Czekasz na odpowiedz.",
+    nextActionLabel: "Czekaj na decyzje studenta",
   },
   accepted: {
     label: "Zaakceptowane",
     badgeClass: "bg-emerald-100 text-emerald-700 border border-emerald-200",
     bucket: "active_history",
     summaryLabel: "Warunki sa uzgodnione i zamowienie przeszlo dalej.",
+    nextActionLabel: "Przejdz do umow i platnosci",
   },
   active: {
     label: "Aktywne",
     badgeClass: "bg-emerald-100 text-emerald-700 border border-emerald-200",
     bucket: "active_history",
     summaryLabel: "Student potwierdzil realizacje i projekt trwa.",
+    nextActionLabel: "Przejdz do umow i platnosci",
   },
   in_progress: {
     label: "W realizacji",
     badgeClass: "bg-indigo-100 text-indigo-700 border border-indigo-200",
     bucket: "active_history",
     summaryLabel: "Projekt jest juz w aktywnej realizacji.",
+    nextActionLabel: "Sledz realizacje",
   },
   revision: {
     label: "Poprawki",
     badgeClass: "bg-orange-100 text-orange-700 border border-orange-200",
     bucket: "waiting_for_student",
     summaryLabel: "Zgloszono poprawki i czekasz na kolejna wersje.",
+    nextActionLabel: "Czekaj na poprawki",
   },
   delivered: {
     label: "Dostarczone",
     badgeClass: "bg-cyan-100 text-cyan-700 border border-cyan-200",
     bucket: "active_history",
     summaryLabel: "Praca zostala dostarczona i czeka na finalna decyzje.",
+    nextActionLabel: "Sprawdz i zaakceptuj",
   },
   completed: {
     label: "Zakonczone",
     badgeClass: "bg-slate-100 text-slate-700 border border-slate-200",
     bucket: "active_history",
     summaryLabel: "To zamowienie zostalo domkniete.",
+    nextActionLabel: "Wystaw opinie",
   },
   rejected: {
     label: "Odrzucone",
     badgeClass: "bg-rose-100 text-rose-700 border border-rose-200",
     bucket: "active_history",
     summaryLabel: "Negocjacja zakonczyla sie bez wspolpracy.",
+    nextActionLabel: "Brak akcji",
   },
   cancelled: {
     label: "Anulowane",
     badgeClass: "bg-slate-100 text-slate-700 border border-slate-200",
     bucket: "active_history",
     summaryLabel: "To zamowienie zostalo anulowane.",
+    nextActionLabel: "Brak akcji",
   },
   disputed: {
     label: "Spor",
     badgeClass: "bg-rose-100 text-rose-700 border border-rose-200",
     bucket: "needs_company_action",
     summaryLabel: "Sprawa jest w sporze i moze wymagac Twojej reakcji.",
+    nextActionLabel: "Sprawdz spor",
   },
 };
 
@@ -137,6 +154,7 @@ export function getCompanyOrderStatusMeta(status: string): CompanyOrderStatusMet
     badgeClass: "bg-slate-100 text-slate-700 border border-slate-200",
     bucket: "active_history",
     summaryLabel: "Ten status nie ma jeszcze opisu operacyjnego.",
+    nextActionLabel: "Sprawdz szczegoly",
   };
 }
 
@@ -157,4 +175,3 @@ export function getCompanyOrderStatusOptions() {
     { value: "completed", label: STATUS_META.completed.label },
   ];
 }
-

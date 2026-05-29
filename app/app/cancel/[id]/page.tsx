@@ -8,6 +8,20 @@ import { cancelCooperation } from "./_actions";
 
 export const dynamic = "force-dynamic";
 
+function MissingResourceState({ title }: { title: string }) {
+  return (
+    <main className="mx-auto max-w-2xl space-y-4 p-6">
+      <h1 className="text-xl font-semibold">{title}</h1>
+      <p className="text-sm text-muted-foreground">
+        Nie mozemy otworzyc tego formularza. Wroc do panelu i wybierz aktywne zlecenie z listy.
+      </p>
+      <Button asChild variant="outline">
+        <Link href="/app">Wroc</Link>
+      </Button>
+    </main>
+  );
+}
+
 export default async function CancelPage({
   params,
 }: {
@@ -30,17 +44,7 @@ export default async function CancelPage({
     .maybeSingle();
 
   if (appErr || !appRow) {
-    return (
-      <main className="space-y-4 max-w-2xl">
-        <h1 className="text-xl font-semibold">Nie znaleziono aplikacji</h1>
-        <pre className="rounded-md border p-4 text-sm overflow-auto">
-          {JSON.stringify({ applicationId, appErr, appRow }, null, 2)}
-        </pre>
-        <Button asChild variant="outline">
-          <Link href="/app">Wróć</Link>
-        </Button>
-      </main>
-    );
+    return <MissingResourceState title="Nie znaleziono aplikacji" />;
   }
 
   // oferta (weryfikacja firmy)
@@ -51,17 +55,7 @@ export default async function CancelPage({
     .maybeSingle();
 
   if (offerErr || !offer) {
-    return (
-      <main className="space-y-4 max-w-2xl">
-        <h1 className="text-xl font-semibold">Nie znaleziono oferty</h1>
-        <pre className="rounded-md border p-4 text-sm overflow-auto">
-          {JSON.stringify({ applicationId, offerErr, offer }, null, 2)}
-        </pre>
-        <Button asChild variant="outline">
-          <Link href="/app">Wróć</Link>
-        </Button>
-      </main>
-    );
+    return <MissingResourceState title="Nie znaleziono oferty" />;
   }
 
   const isStudent = user.id === appRow.student_id;

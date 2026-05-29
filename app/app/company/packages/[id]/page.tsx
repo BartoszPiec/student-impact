@@ -41,6 +41,12 @@ import { InteractivePricingCards } from "./interactive-pricing-cards";
 import { MarketComparisonCards } from "./market-comparison-cards";
 import { ProcessTimeline } from "./process-timeline";
 import {
+    VariantContentFormatsSection,
+    VariantPackageCards,
+    VariantSyncedFactsStrip,
+    VariantSyncedSnapshot,
+} from "./variant-linked-ui";
+import {
     groupPackageFormSchemaBySection,
     normalizePackageFormSchema,
     resolvePackageVariantsWithFallback,
@@ -181,7 +187,8 @@ function splitDescriptionIntoSections(description: string): { intro: string | nu
 
     for (const line of lines) {
         const trimmed = line.trim();
-        if (trimmed.startsWith('### ') && !trimmed.startsWith('#### ')) {
+        const headingMatch = trimmed.match(/^#{2,3}\s+(.+)$/);
+        if (headingMatch && !trimmed.startsWith('#### ')) {
             if (currentTitle !== null) {
                 sections.push({
                     title: currentTitle,
@@ -189,7 +196,7 @@ function splitDescriptionIntoSections(description: string): { intro: string | nu
                     type: detectSectionType(currentTitle)
                 });
             }
-            currentTitle = trimmed.replace(/^###\s*/, '');
+            currentTitle = headingMatch[1].trim();
             currentLines = [];
         } else if (currentTitle !== null) {
             currentLines.push(line);
@@ -409,6 +416,23 @@ function extractHeroSubtitle(description: string | null): string {
     return "Sprawdz szczegoly pakietu ponizej.";
 }
 
+function stripRedundantServiceHeading(content: string): string {
+    return content
+        .split("\n")
+        .filter((line) => {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("##")) return true;
+            return !/^\s*##+\s*opis\s+u[sś][\wąćęłńóśźż]*\s*$/i.test(trimmed);
+        })
+        .join("\n")
+        .trim();
+}
+
+function isServiceIntroSectionTitle(title: string): boolean {
+    const normalized = normalizeSearchText(title);
+    return normalized.includes("opis uslug") || normalized.includes("o usludze") || normalized.includes("o pakiecie");
+}
+
 export default async function PackageDetailsPage(props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
     const supabase = await createClient();
@@ -481,36 +505,57 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
     const sectionResult = cleanDescription
         ? splitDescriptionIntoSections(cleanDescription)
         : { intro: null, sections: [] };
-    const introText = sectionResult.intro;
 
-    const hasAudienceSection = sectionResult.sections.some((section) =>
+    const introSectionIndex = sectionResult.sections.findIndex((section) =>
+        isServiceIntroSectionTitle(section.title),
+    );
+    const introSectionContent = introSectionIndex >= 0 ? sectionResult.sections[introSectionIndex].content : null;
+    const sectionListWithoutIntro = introSectionIndex >= 0
+        ? sectionResult.sections.filter((_, idx) => idx !== introSectionIndex)
+        : sectionResult.sections;
+
+    const introTextSource = sectionResult.intro || introSectionContent;
+    const introText = introTextSource ? stripRedundantServiceHeading(introTextSource) : null;
+
+    const hasAudienceSection = sectionListWithoutIntro.some((section) =>
         normalizeSearchText(section.title).includes("dla kogo"),
     );
 
     const sections = isLogoPackage && !hasAudienceSection
         ? (() => {
-            const introIdx = sectionResult.sections.findIndex((section) =>
+            const introIdx = sectionListWithoutIntro.findIndex((section) =>
                 normalizeSearchText(section.title).includes("o co chodzi"),
             );
 
             if (introIdx >= 0) {
                 return [
-                    ...sectionResult.sections.slice(0, introIdx + 1),
+                    ...sectionListWithoutIntro.slice(0, introIdx + 1),
                     LOGO_AUDIENCE_SECTION,
-                    ...sectionResult.sections.slice(introIdx + 1),
+                    ...sectionListWithoutIntro.slice(introIdx + 1),
                 ];
             }
 
-            return [LOGO_AUDIENCE_SECTION, ...sectionResult.sections];
+            return [LOGO_AUDIENCE_SECTION, ...sectionListWithoutIntro];
         })()
-        : sectionResult.sections;
+        : sectionListWithoutIntro;
+    const hasPricingSection = sections.some((section) => section.type === "pricing");
 
     const dbFaqItems: Array<{ question: string; answer: string }> = Array.isArray((pkg as any).faq)
         ? (pkg as any).faq
             .filter((item: any) => item && typeof item === "object")
             .map((item: any) => ({
-                question: typeof item.question === "string" ? item.question : "",
-                answer: typeof item.answer === "string" ? item.answer : "",
+                question:
+                    typeof item.question === "string"
+                        ? item.question
+                        : typeof item.q === "string"
+                            ? item.q
+                            : "",
+                answer:
+                    typeof item.answer === "string"
+                        ? item.answer
+                        : typeof item.a === "string"
+                            ? item.a
+                            : "",
             }))
             .filter((item: any) => item.question.length > 0 && item.answer.length > 0)
         : [];
@@ -643,39 +688,47 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                         </div>
 
                         <div className="hidden lg:block">
-                            <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white/95 p-6 shadow-[0_35px_90px_-45px_rgba(71,85,105,0.35)]">
-                                <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${config.gradient}`} />
-                                <div className="pointer-events-none absolute -right-20 -top-20 h-44 w-44 rounded-full bg-indigo-100/70 blur-2xl" />
-                                <div className="mb-5 flex items-center justify-between">
-                                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Snapshot pakietu</p>
-                                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
-                                        Escrow aktywne
-                                    </span>
+                            {hasVariants ? (
+                                <VariantSyncedSnapshot
+                                    variants={variants}
+                                    baseDeliveryDays={pkg.delivery_time_days}
+                                    gradient={config.gradient}
+                                />
+                            ) : (
+                                <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white/95 p-6 shadow-[0_35px_90px_-45px_rgba(71,85,105,0.35)]">
+                                    <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${config.gradient}`} />
+                                    <div className="pointer-events-none absolute -right-20 -top-20 h-44 w-44 rounded-full bg-indigo-100/70 blur-2xl" />
+                                    <div className="mb-5 flex items-center justify-between">
+                                        <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Snapshot pakietu</p>
+                                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                                            Escrow aktywne
+                                        </span>
+                                    </div>
+                                    <div className="space-y-4">
+                                        <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+                                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Cena startowa</p>
+                                            <p className="mt-2 text-3xl font-extrabold text-slate-900">{minVariantPrice} PLN</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                                                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Realizacja</p>
+                                                <p className="mt-1 text-base font-bold text-slate-800">{deliveryRangeLabel}</p>
+                                            </div>
+                                            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                                                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Platnosc</p>
+                                                <p className="mt-1 text-base font-bold text-slate-800">Po akceptacji</p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
+                                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Zakres wspolpracy</p>
+                                            <div className="h-2 w-full rounded-full bg-slate-100">
+                                                <div className={`h-2 rounded-full bg-gradient-to-r ${config.gradient} w-4/5`} />
+                                            </div>
+                                            <p className="text-sm text-slate-600">Brief, realizacja, poprawki, finalne pliki.</p>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="space-y-4">
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
-                                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Cena startowa</p>
-                                        <p className="mt-2 text-3xl font-extrabold text-slate-900">{minVariantPrice} PLN</p>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Realizacja</p>
-                                            <p className="mt-1 text-base font-bold text-slate-800">{deliveryRangeLabel}</p>
-                                        </div>
-                                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Platnosc</p>
-                                            <p className="mt-1 text-base font-bold text-slate-800">Po akceptacji</p>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
-                                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Zakres wspolpracy</p>
-                                        <div className="h-2 w-full rounded-full bg-slate-100">
-                                            <div className={`h-2 rounded-full bg-gradient-to-r ${config.gradient} w-4/5`} />
-                                        </div>
-                                        <p className="text-sm text-slate-600">Brief, realizacja, poprawki, finalne pliki.</p>
-                                    </div>
-                                </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </PageContainer>
@@ -684,40 +737,78 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
             {/* KEY FACTS STRIP */}
             <PageContainer className="relative z-20 -mt-8 mb-14">
                 <AnimateOnScroll>
-                    <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_25px_60px_-40px_rgba(71,85,105,0.35)]">
-                        <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 md:grid-cols-4 md:divide-y-0">
-                            <div className="p-5 md:p-6">
-                                <div className="mb-2 flex items-center gap-2 text-slate-500">
-                                    <Coins className="h-4 w-4" />
-                                    <span className="text-xs font-bold uppercase tracking-[0.2em]">Cena od</span>
+                    {hasVariants ? (
+                        <VariantSyncedFactsStrip
+                            variants={variants}
+                            baseDeliveryDays={pkg.delivery_time_days}
+                            gradient={config.gradient}
+                        />
+                    ) : (
+                        <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_25px_60px_-40px_rgba(71,85,105,0.35)]">
+                            <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 md:grid-cols-4 md:divide-y-0">
+                                <div className="p-5 md:p-6">
+                                    <div className="mb-2 flex items-center gap-2 text-slate-500">
+                                        <Coins className="h-4 w-4" />
+                                        <span className="text-xs font-bold uppercase tracking-[0.2em]">Cena od</span>
+                                    </div>
+                                    <p className="text-2xl font-extrabold text-slate-900">{minVariantPrice} PLN</p>
                                 </div>
-                                <p className="text-2xl font-extrabold text-slate-900">{minVariantPrice} PLN</p>
-                            </div>
-                            <div className="p-5 md:p-6">
-                                <div className="mb-2 flex items-center gap-2 text-slate-500">
-                                    <Timer className="h-4 w-4" />
-                                    <span className="text-xs font-bold uppercase tracking-[0.2em]">Realizacja</span>
+                                <div className="p-5 md:p-6">
+                                    <div className="mb-2 flex items-center gap-2 text-slate-500">
+                                        <Timer className="h-4 w-4" />
+                                        <span className="text-xs font-bold uppercase tracking-[0.2em]">Realizacja</span>
+                                    </div>
+                                    <p className="text-2xl font-extrabold text-slate-900">{deliveryRangeLabel}</p>
                                 </div>
-                                <p className="text-2xl font-extrabold text-slate-900">{deliveryRangeLabel}</p>
-                            </div>
-                            <div className="p-5 md:p-6">
-                                <div className="mb-2 flex items-center gap-2 text-slate-500">
-                                    <Shield className="h-4 w-4" />
-                                    <span className="text-xs font-bold uppercase tracking-[0.2em]">Platnosc</span>
+                                <div className="p-5 md:p-6">
+                                    <div className="mb-2 flex items-center gap-2 text-slate-500">
+                                        <Shield className="h-4 w-4" />
+                                        <span className="text-xs font-bold uppercase tracking-[0.2em]">Platnosc</span>
+                                    </div>
+                                    <p className="text-2xl font-extrabold text-slate-900">Escrow</p>
                                 </div>
-                                <p className="text-2xl font-extrabold text-slate-900">Escrow</p>
-                            </div>
-                            <div className="p-5 md:p-6">
-                                <div className="mb-2 flex items-center gap-2 text-slate-500">
-                                    <ShieldCheck className="h-4 w-4" />
-                                    <span className="text-xs font-bold uppercase tracking-[0.2em]">Gwarancja</span>
+                                <div className="p-5 md:p-6">
+                                    <div className="mb-2 flex items-center gap-2 text-slate-500">
+                                        <ShieldCheck className="h-4 w-4" />
+                                        <span className="text-xs font-bold uppercase tracking-[0.2em]">Gwarancja</span>
+                                    </div>
+                                    <p className="text-2xl font-extrabold text-slate-900">Satysfakcji</p>
                                 </div>
-                                <p className="text-2xl font-extrabold text-slate-900">Satysfakcji</p>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </AnimateOnScroll>
             </PageContainer>
+
+            {/* SECTION NAV (sticky anchor navigation) */}
+            {hasVariants && !hasPricingSection && (
+                <PageContainer className="mb-14">
+                    <AnimateOnScroll delay={90}>
+                        <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.35)] sm:p-8">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Wybierz pakiet i sprawdz, co zawiera</h2>
+                            </div>
+                            <VariantPackageCards
+                                variants={variants}
+                                baseDeliveryDays={pkg.delivery_time_days}
+                                gradient={config.gradient}
+                                packageId={pkg.id}
+                            />
+                        </div>
+                    </AnimateOnScroll>
+                </PageContainer>
+            )}
+
+            {hasVariants && (
+                <PageContainer className="mb-14">
+                    <AnimateOnScroll delay={95}>
+                        <VariantContentFormatsSection
+                            variants={variants}
+                            gradient={config.gradient}
+                        />
+                    </AnimateOnScroll>
+                </PageContainer>
+            )}
 
             {/* SECTION NAV (sticky anchor navigation) */}
             {navItems.length > 0 && (
@@ -739,16 +830,9 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                         {introText && (
                             <AnimateOnScroll delay={100}>
                                 <div className="relative mb-8 overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] transition-all duration-500 group hover:shadow-[0_40px_90px_-45px_rgba(15,23,42,0.65)] md:p-12">
-                                    <div className={`absolute top-0 left-0 w-2 h-full bg-gradient-to-b ${config.gradient} rounded-l-[2rem] opacity-80 group-hover:opacity-100 transition-opacity`} />
-                                    
-                                    <div className="flex items-start gap-5 mb-8">
-                                        <div className={`w-16 h-16 rounded-2xl ${config.lightBg} flex items-center justify-center shrink-0 border border-white shadow-inner`}>
-                                            <Lightbulb className={`w-8 h-8 ${config.darkText}`} />
-                                        </div>
-                                        <div className="pt-1">
-                                            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">O pakiecie</h2>
-                                            <p className="text-slate-500 mt-1 font-medium text-lg">W skrocie o tym, czego dotyczy ta usluga</p>
-                                        </div>
+                                    <div className="mb-8">
+                                        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">O pakiecie</h2>
+                                        <p className="mt-1 font-medium text-lg text-slate-500">W skrocie o tym, czego dotyczy ta usluga</p>
                                     </div>
                                     <div className="prose prose-lg prose-slate max-w-none text-slate-600 leading-relaxed font-normal">
                                         <MarkdownLite content={introText} />
@@ -760,6 +844,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                         {sections.map((section, index) => {
                             const sConfig = SECTION_CONFIGS[section.type] || SECTION_CONFIGS.default;
                             const sectionId = generateSectionId(section.title, index);
+                            const sectionContent = stripRedundantServiceHeading(section.content);
                             return (
                                 <AnimateOnScroll key={index} delay={150 + index * 80}>
                                     <div
@@ -771,41 +856,45 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                     >
                                         <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 rounded-full blur-3xl -mr-32 -mt-32 opacity-50 pointer-events-none" />
                                         
-                                        <div className="flex items-start gap-5 mb-6 relative z-10">
-                                            <div className={cn(
-                                                "w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 border border-white shadow-sm",
-                                                sConfig.iconBg,
-                                                sConfig.iconColor
-                                            )}>
-                                                {sConfig.icon}
-                                            </div>
-                                            <div className="pt-2">
-                                                <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                                                    {section.title}
-                                                </h2>
-                                                <div className={`w-12 h-1.5 rounded-full bg-gradient-to-r ${sConfig.accentGradient} mt-4`} />
-                                            </div>
+                                        <div className="relative z-10 mb-6">
+                                            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                                                {section.title}
+                                            </h2>
+                                            <div className={`mt-4 h-1.5 w-12 rounded-full bg-gradient-to-r ${sConfig.accentGradient}`} />
                                         </div>
 
                                         <div className="prose prose-lg prose-slate max-w-none text-slate-600 relative z-10 w-full">
                                             {section.type === 'pricing' ? (
-                                                <InteractivePricingCards markdownContent={section.content} gradient={config.gradient} variants={variants} />
+                                                hasVariants ? (
+                                                    <VariantPackageCards
+                                                        variants={variants}
+                                                        baseDeliveryDays={pkg.delivery_time_days}
+                                                        gradient={config.gradient}
+                                                        packageId={pkg.id}
+                                                    />
+                                                ) : (
+                                                    <InteractivePricingCards
+                                                        markdownContent={sectionContent}
+                                                        gradient={config.gradient}
+                                                        variants={variants}
+                                                    />
+                                                )
                                             ) : section.type === 'comparison' ? (
                                                 <MarketComparisonCards
-                                                    markdownContent={section.content}
+                                                    markdownContent={sectionContent}
                                                     gradient={config.gradient}
                                                     studentPriceLabel={comparisonPriceLabel}
                                                 />
                                             ) : section.type === 'process' ? (
                                                 <ProcessTimeline
-                                                    markdownContent={section.content}
+                                                    markdownContent={sectionContent}
                                                     gradient={config.gradient}
                                                     variants={variants}
                                                     fallbackSteps={isLogoPackage ? LOGO_PROCESS_FALLBACK_STEPS : undefined}
                                                 />
                                             ) : (
                                                 <MarkdownLite
-                                                    content={section.content}
+                                                    content={sectionContent}
                                                     listIcon={sConfig.listIcon}
                                                 />
                                             )}
@@ -815,7 +904,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                             );
                         })}
 
-                        {sections.length === 0 && cleanDescription && (
+                        {sections.length === 0 && cleanDescription && !introText && (
                             <AnimateOnScroll delay={100}>
                                 <div className="rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] md:p-12">
                                     <MarkdownLite content={cleanDescription} />
@@ -826,16 +915,11 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                         {briefPreviewSections.length > 0 && (
                             <AnimateOnScroll delay={220}>
                                 <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] sm:p-8 md:p-12">
-                                    <div className="flex items-start gap-5 mb-8">
-                                        <div className={`w-16 h-16 rounded-2xl ${config.lightBg} flex items-center justify-center shrink-0 border border-white shadow-inner`}>
-                                            <FileText className={`w-8 h-8 ${config.darkText}`} />
-                                        </div>
-                                        <div className="pt-1">
-                                            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">O co zapytamy w briefie</h2>
-                                            <p className="text-slate-500 mt-1 font-medium text-lg">
-                                                Po kliknieciu zamowienia poprosimy Cie dokladnie o te informacje.
-                                            </p>
-                                        </div>
+                                    <div className="mb-8">
+                                        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">O co zapytamy w briefie</h2>
+                                        <p className="mt-1 font-medium text-lg text-slate-500">
+                                            Po kliknieciu zamowienia poprosimy Cie dokladnie o te informacje.
+                                        </p>
                                     </div>
 
                                     <div className="grid gap-5 md:grid-cols-2">
@@ -863,16 +947,11 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                     id={FAQ_SECTION_ID}
                                     className="scroll-mt-[120px] rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] sm:p-8 md:p-12"
                                 >
-                                    <div className="flex items-start gap-5 mb-8">
-                                        <div className={`w-16 h-16 rounded-2xl ${config.lightBg} flex items-center justify-center shrink-0 border border-white shadow-inner`}>
-                                            <ShieldCheck className={`w-8 h-8 ${config.darkText}`} />
-                                        </div>
-                                        <div className="pt-1">
-                                            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">FAQ</h2>
-                                            <p className="text-slate-500 mt-1 font-medium text-lg">
-                                                Najczestsze pytania przed startem wspolpracy.
-                                            </p>
-                                        </div>
+                                    <div className="mb-8">
+                                        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">FAQ</h2>
+                                        <p className="mt-1 font-medium text-lg text-slate-500">
+                                            Najczestsze pytania przed startem wspolpracy.
+                                        </p>
                                     </div>
 
                                     <div className="space-y-4">
@@ -892,16 +971,11 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                         {isLogoPackage && (
                             <AnimateOnScroll delay={280}>
                                 <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] sm:p-8 md:p-12">
-                                    <div className="flex items-start gap-5 mb-8">
-                                        <div className={`w-16 h-16 rounded-2xl ${config.lightBg} flex items-center justify-center shrink-0 border border-white shadow-inner`}>
-                                            <Users className={`w-8 h-8 ${config.darkText}`} />
-                                        </div>
-                                        <div className="pt-1">
-                                            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Opinie</h2>
-                                            <p className="text-slate-500 mt-1 font-medium text-lg">
-                                                Ta sekcja uzupelni sie automatycznie po pierwszych realizacjach.
-                                            </p>
-                                        </div>
+                                    <div className="mb-8">
+                                        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Opinie</h2>
+                                        <p className="mt-1 font-medium text-lg text-slate-500">
+                                            Ta sekcja uzupelni sie automatycznie po pierwszych realizacjach.
+                                        </p>
                                     </div>
 
                                     <div className="rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50/80 p-5 text-sm leading-7 text-slate-600">
@@ -914,16 +988,11 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                         {relatedServices.length > 0 && (
                             <AnimateOnScroll delay={300}>
                                 <div className="rounded-[2rem] border border-slate-200/70 bg-white p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] sm:p-8 md:p-12">
-                                    <div className="flex items-start gap-5 mb-8">
-                                        <div className={`w-16 h-16 rounded-2xl ${config.lightBg} flex items-center justify-center shrink-0 border border-white shadow-inner`}>
-                                            <Sparkles className={`w-8 h-8 ${config.darkText}`} />
-                                        </div>
-                                        <div className="pt-1">
-                                            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Co dalej</h2>
-                                            <p className="text-slate-500 mt-1 font-medium text-lg">
-                                                Jesli potrzebujesz wiecej, sprawdz podobne uslugi.
-                                            </p>
-                                        </div>
+                                    <div className="mb-8">
+                                        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Co dalej</h2>
+                                        <p className="mt-1 font-medium text-lg text-slate-500">
+                                            Jesli potrzebujesz wiecej, sprawdz podobne uslugi.
+                                        </p>
                                     </div>
 
                                     <div className="grid gap-4 md:grid-cols-3">

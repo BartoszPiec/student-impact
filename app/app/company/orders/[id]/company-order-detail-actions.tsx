@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -47,7 +49,6 @@ export default function CompanyOrderDetailActions({
     "pending_student_confirmation",
     "pending_confirmation",
     "proposal_sent",
-    "countered",
   ].includes(order.status);
 
   const handleAcceptProposal = async () => {

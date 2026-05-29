@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Building2, FileBadge2, RefreshCw, ShieldCheck } from "lucide-react";
 import { DocumentCard } from "@/components/documents/document-card";
 import { useCompanyDocuments } from "@/hooks/use-company-documents";
+import { getContractStatusLabel } from "@/types/documents";
 
 type DocumentKindFilter = "all" | "contract" | "invoice";
 
@@ -45,8 +46,7 @@ export function CompanyDocumentsPanel() {
               Faktury i umowy do rozliczen
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Widok dokumentow firmy oparty o <code className="text-slate-700">contract_documents</code>.
-              Pokazuje umowy A i faktury firmowe zapisane przy kontraktach.
+              Umowy i faktury firmowe powiazane z realizowanymi zleceniami.
             </p>
           </div>
         </div>
@@ -111,7 +111,7 @@ export function CompanyDocumentsPanel() {
 
       {!isLoading && error ? (
         <div className="mt-8 rounded-[2rem] border border-red-100 bg-red-50 p-6 text-sm text-red-700">
-          Blad pobierania dokumentow firmy: {error}
+          Nie udalo sie pobrac dokumentow firmy. Odswiez widok albo wroc za chwile.
         </div>
       ) : null}
 
@@ -139,8 +139,7 @@ export function CompanyDocumentsPanel() {
                   <h3 className="text-lg font-black text-slate-900">{group.title}</h3>
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-wider text-slate-500">
                     <span>Student: {group.counterpartName}</span>
-                    <span>Kontrakt: {group.contractId.slice(0, 8)}...</span>
-                    <span>Status: {group.contractStatus}</span>
+                    <span>Status: {getContractStatusLabel(group.contractStatus)}</span>
                   </div>
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-black uppercase tracking-wider text-slate-600">

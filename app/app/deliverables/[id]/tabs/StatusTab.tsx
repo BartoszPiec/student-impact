@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any, react/no-unescaped-entities */
+
 import { useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -21,6 +23,7 @@ import {
     generateContractDocuments,
     acceptContractDocument,
     fundContractAction,
+    reopenMilestoneNegotiationAction,
     submitMilestoneWorkAction,
     reviewMilestoneAction,
     getSignedStorageUrl
@@ -56,24 +59,28 @@ export function StatusTab({
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
     // State for Secure Viewer
-    const [viewerState, setViewerState] = useState<{ isOpen: boolean; url: string; fileName: string }>({
+    const [viewerState, setViewerState] = useState<{ isOpen: boolean; url: string; fileName: string; fileType: "image" | "pdf" }>({
         isOpen: false,
         url: "",
-        fileName: ""
+        fileName: "",
+        fileType: "image",
     });
 
     // Filter milestones
     const milestones = contract?.milestones || [];
 
 
-    // Funding model: default to sequential (per milestone). Optional: contract.funding_mode = 'full'
-    const fundingMode = (contract as any)?.funding_mode ?? "sequential";
+    // Checkout charges the selected funding scope from the server, with full-contract funding as the MVP default.
+    const fundingMode = (contract as any)?.funding_mode === "sequential" ? "sequential" : "full";
     const nextToFund = milestones.find((m: any) => m.status === "awaiting_funding") || null;
+    const hasAgreedMilestones = contract?.terms_status === "agreed" && milestones.length > 0;
+    const contractsAccepted = !!contract?.company_contract_accepted_at && !!contract?.student_contract_accepted_at;
+    const canEnterEscrow = hasAgreedMilestones && contractsAccepted;
 
     const isEscrowReady =
-        fundingMode === "full"
+        canEnterEscrow && fundingMode === "full"
             ? (milestones.length > 0 && milestones.every((m: any) => ["funded", "in_progress", "delivered", "released", "accepted", "completed"].includes(m.status)))
-            : !nextToFund; // sequential: ready when no milestone is currently waiting for funding
+            : canEnterEscrow && !nextToFund; // sequential: ready when no milestone is currently waiting for funding
 
     // Progress helpers
     const isAnyFunded = milestones.some((m: any) => ['funded', 'in_progress', 'delivered', 'completed', 'released', 'accepted'].includes(m.status));
@@ -118,19 +125,22 @@ export function StatusTab({
         currentStep = 4; // Verification phase (at least one delivered)
     } else if (isAnyFunded) {
         // In sequential funding, work starts as soon as at least one milestone is funded.
-        progress = 50;
-        currentStep = 3;
-    } else if (contract?.terms_status === 'agreed') {
+        progress = 60;
+        currentStep = 4;
+    } else if (canEnterEscrow) {
         progress = 25;
-        currentStep = 2; // Waiting for funding
+        currentStep = 3; // Waiting for funding
+    } else if (hasAgreedMilestones) {
+        progress = 18;
+        currentStep = 2; // Contract acceptance
     }
 
     // Stepper Configuration
     const steps = [
-        { id: 1, label: "Start" },
-        { id: 2, label: "Escrow" },
-        { id: 3, label: "Realizacja" },
-        { id: 4, label: "Weryfikacja" }, // Changed label slightly
+        { id: 1, label: "Etapy" },
+        { id: 2, label: "Umowy" },
+        { id: 3, label: "Escrow" },
+        { id: 4, label: "Realizacja" },
         { id: 5, label: "Wypłata" }
     ];
 
@@ -143,7 +153,12 @@ export function StatusTab({
 
     // Show if: Company AND No Review AND (Explicit Status OR Implicit Status)
     const showReviewModal = isCompany && !myReview && isContractDone;
-    const canFundWithoutContractSignatures = isPlatformService || isServiceOrder;
+    const canReopenTerms =
+        !!contract &&
+        hasAgreedMilestones &&
+        !contractsAccepted &&
+        !isAnyFunded &&
+        ["draft", "awaiting_funding"].includes(String(contract.status));
 
     // Counter Logic
     const completedCount = milestones.filter((m: any) => ['released', 'accepted', 'completed'].includes(m.status)).length;
@@ -157,6 +172,7 @@ export function StatusTab({
                 onClose={() => setViewerState(prev => ({ ...prev, isOpen: false }))}
                 url={viewerState.url}
                 fileName={viewerState.fileName}
+                fileType={viewerState.fileType}
             />
 
             {/* BLOCKING REVIEW MODAL */}
@@ -182,7 +198,7 @@ export function StatusTab({
             )}
 
             {/* HEADER CARD */}
-            <Card className="rounded-none overflow-hidden border border-slate-200 shadow-xl bg-white/80 backdrop-blur-xl">
+            <Card className="rounded-2xl overflow-hidden border border-slate-200 shadow-xl bg-white/80 backdrop-blur-xl">
                 <div className="p-6 md:p-8">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                         <div>
@@ -256,36 +272,38 @@ export function StatusTab({
                     </div>
 
                     {/* Step Actions */}
-                    <div className="bg-gradient-to-r from-slate-50 to-white rounded-none p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mt-8 relative overflow-hidden">
+                    <div className="bg-gradient-to-r from-slate-50 to-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mt-8 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
 
                         <div className="text-center md:text-left relative z-10">
                             <h3 className="text-lg font-bold text-slate-800 mb-2">
-                                {currentStep === 1 && "Start Zlecenia"}
-                                {currentStep === 2 && "Oczekiwanie na płatność"}
-                                {currentStep >= 3 && "Realizacja Etapów"}
+                                {currentStep === 1 && "Ustalanie etapow"}
+                                {currentStep === 2 && "Akceptacja umow"}
+                                {currentStep === 3 && "Escrow / platnosc"}
+                                {currentStep >= 4 && "Realizacja etapow"}
                             </h3>
                             <p className="text-slate-500 text-sm max-w-lg leading-relaxed">
-                                {currentStep === 1 && "Uzgodnijcie warunki umowy, aby rozpocząć współpracę na jasnych zasadach."}
-                                {currentStep === 2 && (fundingMode === "full" ? "Firma musi wpłacić całość budżetu do bezpiecznego depozytu. Środki zostaną zamrożone do czasu akceptacji prac." : "Firma musi zasilić depozyt dla następnego etapu, aby student mógł bezpiecznie rozpocząć prace.")}
-                                {currentStep >= 3 && "Środki są bezpieczne w depozycie. Student realizuje kolejne etapy zgodnie z harmonogramem."}
+                                {currentStep === 1 && "Najpierw ustalcie zakres i harmonogram etapow."}
+                                {currentStep === 2 && "Po zatwierdzeniu etapow obie strony musza zaakceptowac swoje umowy."}
+                                {currentStep === 3 && (fundingMode === "full" ? "Firma moze teraz wplacic calosc budzetu do bezpiecznego depozytu." : "Firma moze teraz zasilic depozyt dla nastepnego etapu.")}
+                                {currentStep >= 4 && "Srodki sa zabezpieczone w depozycie. Student realizuje kolejne etapy zgodnie z harmonogramem."}
                             </p>
                         </div>
 
-                        {/* Payment Button — platform services skip contract signing, standard flow requires both acceptances */}
-                        {isCompany && !isEscrowReady && contract?.terms_status === 'agreed' && (canFundWithoutContractSignatures || (contract?.company_contract_accepted_at && contract?.student_contract_accepted_at)) && (
+                        {/* Payment Button — visible only after agreed milestones and both contract acceptances */}
+                        {isCompany && !isEscrowReady && canEnterEscrow && (
                             <Button
                                 size="lg"
                                 onClick={() => setIsPaymentModalOpen(true)}
-                                className="relative z-10 w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-white shadow-xl font-bold px-8 h-14 rounded-none transition-all active:scale-[0.98]"
+                                className="relative z-10 w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-white shadow-xl font-bold px-8 h-14 rounded-2xl transition-all active:scale-[0.98]"
                             >
                                 <CircleDollarSign className="w-5 h-5 mr-2" />
                                 Zasil Depozyt ({fundingMode === "full" ? (contractBudget > 0 ? contractBudget : totalAmount) : Number((nextToFund?.amount_minor ? nextToFund.amount_minor / 100 : nextToFund?.amount) ?? 0)} PLN)
                             </Button>
                         )}
 
-                        {isStudent && !isEscrowReady && contract?.terms_status === 'agreed' && (canFundWithoutContractSignatures || (contract?.company_contract_accepted_at && contract?.student_contract_accepted_at)) && (
-                            <div className="relative z-10 px-5 py-3 bg-white border border-slate-200 rounded-none text-slate-500 text-sm font-medium flex items-center gap-3 shadow-sm">
+                        {isStudent && !isEscrowReady && canEnterEscrow && (
+                            <div className="relative z-10 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-slate-500 text-sm font-medium flex items-center gap-3 shadow-sm">
                                 <div className="p-1.5 bg-amber-50 rounded-full">
                                     <Clock className="w-4 h-4 text-amber-500" />
                                 </div>
@@ -309,7 +327,7 @@ export function StatusTab({
             )}
 
             {/* CONTRACT DOCUMENTS (after negotiation, before payment) — hidden for platform services */}
-            {contract && contract?.terms_status === 'agreed' && !isPlatformService && (
+            {contract && contract?.terms_status === 'agreed' && (
                 <ContractDocumentsCard
                     contractId={contract.id}
                     applicationId={applicationId}
@@ -320,12 +338,13 @@ export function StatusTab({
                     companyAcceptedAt={contract.company_contract_accepted_at}
                     studentAcceptedAt={contract.student_contract_accepted_at}
                     termsAgreed={contract.terms_status === 'agreed'}
+                    canReopenTerms={canReopenTerms}
                 />
             )}
 
             {/* STUDENT INSTRUCTIONS (platform service only, hidden from company) */}
             {isStudent && isPlatformService && studentInstructions && (
-                <Card className="rounded-none border-amber-200 bg-amber-50 shadow-sm overflow-hidden">
+                <Card className="rounded-2xl border-amber-200 bg-amber-50 shadow-sm overflow-hidden">
                     <CardHeader className="pb-3 border-b border-amber-200">
                         <CardTitle className="flex items-center gap-2 text-base text-amber-900">
                             <Lock className="w-4 h-4 text-amber-600" />
@@ -353,14 +372,14 @@ export function StatusTab({
                             isCompany={isCompany}
                             applicationId={applicationId}
                             deliverables={deliverables}
-                            onOpenSecureViewer={(url: string, name: string) => setViewerState({ isOpen: true, url, fileName: name })}
+                            onOpenSecureViewer={(url: string, name: string, fileType: "image" | "pdf") => setViewerState({ isOpen: true, url, fileName: name, fileType })}
                         />
                     ))}
                 </div>
             )}
             {/* REVIEW SECTION (Completed Only) */}
             {contract?.status === 'completed' && (
-                <Card className="rounded-none border-slate-200 shadow-sm bg-gradient-to-br from-indigo-50/50 to-white overflow-hidden">
+                <Card className="rounded-2xl border-slate-200 shadow-sm bg-gradient-to-br from-indigo-50/50 to-white overflow-hidden">
                     <CardHeader className="border-b border-indigo-50 bg-white/50">
                         <CardTitle className="flex items-center gap-2 text-indigo-900">
                             <Star className="w-5 h-5 fill-indigo-500 text-indigo-500" />
@@ -374,7 +393,7 @@ export function StatusTab({
                         {isCompany ? (
                             <>
                                 {myReview ? (
-                                    <div className="bg-white p-6 rounded-none border shadow-sm">
+                                    <div className="bg-white p-6 rounded-2xl border shadow-sm">
                                         <div className="flex items-center gap-2 mb-4">
                                             <div className="flex gap-1">
                                                 {[1, 2, 3, 4, 5].map(star => (
@@ -411,7 +430,7 @@ export function StatusTab({
                             <>
                                 {/* Student View - Seeing Company's Review */}
                                 {theirReview ? (
-                                    <div className="bg-white p-6 rounded-none border shadow-sm relative overflow-hidden">
+                                    <div className="bg-white p-6 rounded-2xl border shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 right-0 p-4 opacity-10">
                                             <Medal className="w-24 h-24 text-indigo-500" />
                                         </div>
@@ -430,7 +449,7 @@ export function StatusTab({
                                         <p className="text-slate-700 text-lg relative z-10">"{theirReview.comment}"</p>
                                     </div>
                                 ) : (
-                                    <div className="text-center py-12 bg-slate-50 rounded-none border border-dashed">
+                                    <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed">
                                         <Clock className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                                         <h4 className="text-slate-600 font-medium">Oczekiwanie na opinię</h4>
                                         <p className="text-slate-400 text-sm">Klient jeszcze nie wystawił oceny za to zlecenie.</p>
@@ -442,8 +461,8 @@ export function StatusTab({
                 </Card>
             )}
 
-            {/* DANGER ZONE — Zakończ współpracę (tylko gdy zlecenie w trakcie) */}
-            {applicationStatus === 'accepted' && contract?.status !== 'completed' && (
+            {/* DANGER ZONE — Zakończ współpracę (tylko przed startem realizacji, tj. do etapu 2) */}
+            {applicationStatus === 'accepted' && contract?.status !== 'completed' && currentStep <= 2 && (
                 <Card className="border-red-200 bg-red-50/40 shadow-sm overflow-hidden">
                     <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div className="flex items-start gap-3">
@@ -478,36 +497,31 @@ export function StatusTab({
 }
 
 function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, deliverables, onOpenSecureViewer }: any) {
-    async function openDeliverableFile(file: any) {
+    async function openDeliverableFile(file: any, allowFullAccess = false) {
         try {
-            // New format: { bucket, path }
             let signed = "";
             if (file?.bucket && file?.path) {
                 signed = await getSignedStorageUrl(file.bucket, file.path, 600);
-            }
-            // Legacy format: { url }
-            else if (file?.url) {
+            } else if (file?.url) {
                 signed = await getSignedStorageUrl("deliverables", file.url, 600);
             }
 
             if (!signed) return;
 
-            // Check extension
             const lowerName = (file.name || "").toLowerCase();
             const isImage = lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".gif") || lowerName.endsWith(".webp");
+            const isPdf = lowerName.endsWith(".pdf");
 
-            if (isImage && onOpenSecureViewer) {
-                onOpenSecureViewer(signed, file.name);
-            } else {
-                if (isCompany) {
-                    toast.info("Pliki inne niż obrazy otwierają się w nowym oknie (brak znaku wodnego).");
-                }
+            if (allowFullAccess) {
                 window.open(signed, "_blank");
+            } else if ((isImage || isPdf) && onOpenSecureViewer) {
+                onOpenSecureViewer(signed, file.name, isPdf ? "pdf" : "image");
+            } else {
+                toast.info("Pelny plik bedzie dostepny po akceptacji etapu. Popros studenta o preview w formacie PNG/JPG/PDF.");
             }
-
         } catch (err) {
             console.error(err);
-            alert("Nie udało się otworzyć pliku.");
+            alert("Nie udalo sie otworzyc pliku.");
         }
     }
 
@@ -516,6 +530,9 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
     // Find deliverables linked to this milestone
     const milestoneDeliverables = deliverables?.filter((d: any) => d.milestone_id === milestone.id) || [];
     const latestDeliverable = milestoneDeliverables[0]; // Assuming order by created_at desc
+    const hasFullFileAccess = (deliverable: any) =>
+        ["accepted", "released", "completed"].includes(String(deliverable?.status)) ||
+        ["accepted", "released", "completed"].includes(String(milestone.status));
 
     const statusConfig = {
         'awaiting_funding': { label: 'Oczekuje', color: 'bg-slate-100 text-slate-500' },
@@ -527,7 +544,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
     }[milestone.status as string] || { label: milestone.status, color: 'bg-gray-100' };
 
     return (
-        <Card className={`rounded-none border shadow-sm transition-all overflow-hidden ${milestone.status === 'completed' ? 'opacity-75 hover:opacity-100' : 'border-indigo-100 shadow-md'}`}>
+        <Card className={`rounded-2xl border shadow-sm transition-all overflow-hidden ${milestone.status === 'completed' ? 'opacity-75 hover:opacity-100' : 'border-indigo-100 shadow-md'}`}>
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="p-6 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-white relative z-10">
                     <div className="flex items-start gap-4 flex-1">
@@ -568,7 +585,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
 
                         {/* STUDENT ACTIONS */}
                         {isStudent && ['funded', 'in_progress', 'rejected'].includes(milestone.status) && (
-                            <div className="bg-white p-6 rounded-none border border-slate-200 shadow-sm">
+                            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                                 <h5 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
                                     <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg">
                                         <FileText className="w-4 h-4" />
@@ -584,7 +601,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                 />
                                 {/* Display latest feedback if available */}
                                 {latestDeliverable && latestDeliverable.company_feedback && (
-                                    <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-none flex gap-3 text-red-800 animate-in fade-in slide-in-from-top-2">
+                                    <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 text-red-800 animate-in fade-in slide-in-from-top-2">
                                         <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                                         <div>
                                             <div className="font-bold mb-1 text-sm uppercase tracking-wide opacity-80">Uwagi od firmy</div>
@@ -597,7 +614,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
 
                         {/* COMPANY ACTIONS (REVIEW) */}
                         {isCompany && milestone.status === 'delivered' && latestDeliverable && (
-                            <div className="bg-white rounded-none border border-slate-200 shadow-lg overflow-hidden">
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
                                 <div className="bg-gradient-to-r from-indigo-50 to-white px-6 py-4 border-b border-indigo-100 flex items-center gap-3">
                                     <div className="p-2 bg-white rounded-lg border border-indigo-100 shadow-sm text-indigo-600">
                                         <ShieldCheck className="w-5 h-5" />
@@ -625,7 +642,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                                     <button
                                                         key={i}
                                                         type="button"
-                                                        onClick={() => openDeliverableFile(f)}
+                                                        onClick={() => openDeliverableFile(f, hasFullFileAccess(latestDeliverable))}
                                                         className="group flex items-center gap-3 p-3 bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100 rounded-xl transition-all text-left w-full overflow-hidden"
                                                     >
                                                         <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
@@ -633,7 +650,9 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                                         </div>
                                                         <div className="min-w-0">
                                                             <div className="text-sm font-medium text-slate-700 truncate group-hover:text-indigo-700">{f.name}</div>
-                                                            <div className="text-[10px] text-slate-400 uppercase font-bold group-hover:text-indigo-400">Pobierz</div>
+                                                            <div className="text-[10px] text-slate-400 uppercase font-bold group-hover:text-indigo-400">
+                                                                {hasFullFileAccess(latestDeliverable) ? "Pobierz" : "Podglad z watermarkiem"}
+                                                            </div>
                                                         </div>
                                                     </button>
                                                 )) : (
@@ -669,7 +688,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                                 ${deliv.status === 'accepted' ? 'border-emerald-500' : deliv.status === 'rejected' ? 'border-red-400' : 'border-slate-300'}
                                             `} />
 
-                                            <div className="bg-white p-4 rounded-none border border-slate-200 shadow-sm flex flex-col gap-3 group hover:border-indigo-200 transition-colors">
+                                            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3 group hover:border-indigo-200 transition-colors">
                                                 <div className="flex justify-between items-start gap-4">
                                                     <div>
                                                         <div className="flex items-center gap-2 mb-1">
@@ -682,7 +701,11 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                                     <Badge variant={deliv.status === 'rejected' ? 'destructive' : 'outline'} className={
                                                         deliv.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''
                                                     }>
-                                                        {deliv.status === 'accepted' ? 'Zaakceptowane' : deliv.status === 'rejected' ? 'Odrzucone' : deliv.status}
+                                                        {deliv.status === 'accepted'
+                                                            ? 'Zaakceptowane'
+                                                            : deliv.status === 'rejected'
+                                                              ? 'Odrzucone'
+                                                              : 'Czeka na akceptacje'}
                                                     </Badge>
                                                 </div>
 
@@ -696,6 +719,22 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                                     </div>
                                                 )}
                                             </div>
+
+                                                {Array.isArray(deliv.files) && deliv.files.length > 0 && (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {deliv.files.map((file: any, fileIndex: number) => (
+                                                            <button
+                                                                key={`${deliv.id}-${fileIndex}`}
+                                                                type="button"
+                                                                onClick={() => openDeliverableFile(file, hasFullFileAccess(deliv))}
+                                                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                                                            >
+                                                                <FileText className="h-3.5 w-3.5" />
+                                                                {file.name || "Plik"}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
                                         </div>
                                     ))}
                                 </div>
