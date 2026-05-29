@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/test-results
 test-*.ts
 
 # next.js
@@ -51,3 +52,10 @@ yarn-error.log*
 
 # local agent worktrees / chat artifacts
 .claude/worktrees/
+
+.vercel
+
+# local agent config, dev logs, supabase CLI temp (not for VCS)
+.claude/settings.local.json
+codex-dev.*
+supabase/.temp/

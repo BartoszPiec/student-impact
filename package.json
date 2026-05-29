@@ -3,10 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "prebuild": "node scripts/validate-deploy-env.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:preview": "node scripts/production-readiness-check.mjs --target=preview",
+    "check:production": "node scripts/production-readiness-check.mjs --target=production",
+    "test:mvp-scenarios": "node scripts/mvp-scenario-suite.mjs",
+    "test:ci:e2e": "npm run check:preview && npm run test:mvp-scenarios"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
