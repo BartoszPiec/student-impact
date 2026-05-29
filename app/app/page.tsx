@@ -1,10 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { OfferCard } from "./_components/offer-card";
 import HeroSection from "./_components/hero-section";
 import { PageContainer } from "@/components/ui/page-container";
@@ -16,13 +13,6 @@ type SP = Record<string, string | string[] | undefined>;
 function getStr(sp: SP, key: string) {
   const v = sp[key];
   return typeof v === "string" ? v : "";
-}
-
-function minutesAgo(iso?: string | null) {
-  if (!iso) return null;
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return null;
-  return Math.floor((Date.now() - t) / (60 * 1000));
 }
 
 export default async function OffersPage({
@@ -147,9 +137,26 @@ export default async function OffersPage({
     studentSkills = stData?.kompetencje || [];
   }
 
-  const visibleOffers = offers ?? [];
-  const appliedCount = myAppByOfferId.size;
+  const allOffers = offers ?? [];
+  const lockedOfferIds = new Set<string>();
+  const offerIds = allOffers.map((offer: any) => offer.id).filter(Boolean);
 
+  if (offerIds.length > 0) {
+    const { data: lockedApplications } = await supabase
+      .from("applications")
+      .select("offer_id")
+      .in("offer_id", offerIds)
+      .in("status", ["accepted", "in_progress", "completed"]);
+
+    (lockedApplications ?? []).forEach((application: any) => {
+      if (application?.offer_id) lockedOfferIds.add(application.offer_id);
+    });
+  }
+
+  const visibleOffers = allOffers.filter((offer: any) => {
+    if (offer?.is_platform_service === true) return true;
+    return !lockedOfferIds.has(offer.id);
+  });
   return (
     <main className="pb-20">
       <HeroSection />

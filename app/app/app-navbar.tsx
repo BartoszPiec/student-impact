@@ -234,7 +234,7 @@ export function AppNavbar({
             </Sheet>
 
             <Link
-              href={role === "student" ? "/app/jobs" : role === "admin" ? "/app/admin" : "/app"}
+              href={role === "student" ? "/app/jobs" : role === "admin" ? "/app/admin" : role === "company" ? "/app/company/packages" : "/app"}
               className="flex items-center gap-2.5 group"
             >
               <div className="relative">

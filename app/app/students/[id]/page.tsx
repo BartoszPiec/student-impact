@@ -1,21 +1,28 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MapPin, GraduationCap, Briefcase, Globe, Linkedin, Mail, Calendar, Sparkles, FolderGit2, Star, Award, BookOpen } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  BookOpen,
+  Briefcase,
+  Calendar,
+  ExternalLink,
+  FolderGit2,
+  Globe,
+  GraduationCap,
+  Linkedin,
+  MessageSquare,
+  Sparkles,
+} from "lucide-react";
 import BackButton from "@/components/back-button";
-import { Stars, ReviewCard } from "@/components/ReviewCard";
-
+import { ReviewCard } from "@/components/ReviewCard";
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { PageContainer } from "@/components/ui/page-container";
 
 export const dynamic = "force-dynamic";
-
-// Stars now imported from ReviewCard
 
 function fmtDate(ts?: string | null) {
   if (!ts) return "";
@@ -24,16 +31,6 @@ function fmtDate(ts?: string | null) {
   } catch {
     return ts;
   }
-}
-
-function StatBox({ label, value, icon: Icon }: { label: string; value: string; icon?: any }) {
-  return (
-    <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white hover:shadow-md transition-all group">
-      {Icon && <Icon className="h-5 w-5 text-indigo-500 mb-2 group-hover:scale-110 transition-transform" />}
-      <div className="text-2xl font-bold text-slate-800">{value}</div>
-      <div className="text-xs text-slate-500 uppercase tracking-wide font-medium">{label}</div>
-    </div>
-  );
 }
 
 export default async function StudentProfilePage({
@@ -48,7 +45,6 @@ export default async function StudentProfilePage({
   const user = userData.user;
   if (!user) redirect("/auth");
 
-  // Fetch basic profile
   const { data: sp, error: spErr } = await supabase
     .from("student_profiles")
     .select(
@@ -74,7 +70,6 @@ export default async function StudentProfilePage({
     );
   }
 
-  // Fetch all related data in parallel
   const [projectsRes, reviewsRes, educationRes, completedContractsRes] = await Promise.all([
     supabase
       .from("experience_entries")
@@ -95,7 +90,7 @@ export default async function StudentProfilePage({
       .from("contracts")
       .select(`
         id, created_at, status, service_order_id, application_id, company_id,
-        application:applications!contracts_application_id_fkey(offers(tytul, id)), 
+        application:applications!contracts_application_id_fkey(offers(tytul, id)),
         service_order:service_orders!contracts_service_order_id_fkey(package:service_packages(title, id))
       `)
       .eq("student_id", studentId)
@@ -107,66 +102,46 @@ export default async function StudentProfilePage({
   const education = educationRes.data ?? [];
   const potentialContracts = completedContractsRes.data ?? [];
 
-  // Normalize Contracts into Projects
-  // Show if status is 'completed' OR if a review exists (implies completion)
   const normalizedProjects: any[] = [];
 
   potentialContracts.forEach((c: any) => {
-    // Check if this contract has a review (Review implies completion)
-    // Match by Application ID or Service Order ID
     const hasReview = reviews.some((r: any) =>
       (c.application_id && r.application_id === c.application_id) ||
       (c.service_order_id && r.service_order_id === c.service_order_id)
     );
-
-    // Allow if implicitly reviewed OR explicitly completed/delivered
     const isExplicitlyCompleted = ['completed', 'delivered', 'accepted'].includes(c.status);
 
     if (isExplicitlyCompleted || hasReview) {
       let link = null;
       let title = "Zrealizowany Projekt";
 
-      // Helper to safely get relation object (Supabase can return array or object)
       const app = Array.isArray(c.application) ? c.application[0] : c.application;
       const so = Array.isArray(c.service_order) ? c.service_order[0] : c.service_order;
-
       const offer = app?.offers ? (Array.isArray(app.offers) ? app.offers[0] : app.offers) : null;
       const pkg = so?.package ? (Array.isArray(so.package) ? so.package[0] : so.package) : null;
 
-      // Check Application -> Offer Title
       if (offer?.tytul) {
         title = offer.tytul;
-        // Try to get ID from nested offer
-        if (offer.id) {
-          link = `/app/offers/${offer.id}`;
-        }
-      }
-      // Check Service Order -> Package Title
-      else if (pkg?.title) {
+        if (offer.id) link = `/app/offers/${offer.id}`;
+      } else if (pkg?.title) {
         title = pkg.title;
-        if (pkg.id) {
-          link = `/app/offers/${pkg.id}`;
-        }
+        if (pkg.id) link = `/app/offers/${pkg.id}`;
       }
-
-      // Fallback link to deliverable/application if offer link is missing
       if (!link && c.application_id) {
         link = `/app/deliverables/${c.application_id}`;
       }
 
       normalizedProjects.push({
         id: c.id,
-        title: title,
+        title,
         summary: "Projekt zakończony sukcesem w ramach platformy Student2Work.",
-        link: link,
+        link,
         created_at: c.created_at,
-        company_id: c.company_id
+        company_id: c.company_id,
+        isFromPlatform: true,
       });
     }
   });
-
-
-
 
   const projects = [...manualProjects, ...normalizedProjects]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -189,130 +164,160 @@ export default async function StudentProfilePage({
   const initials = publicName.split(" ").map((n: string) => n[0]).join("").substring(0, 2).toUpperCase();
 
   return (
-    <main className="min-h-screen bg-slate-50/50 pb-20">
-      {/* Header Banner */}
-      <PageContainer className="max-w-6xl pt-6">
-        <PremiumPageHeader
-          badge="Profil Studenta"
-          title={publicName}
-          description="Przeglądaj doświadczenie, projekty i opinie kandydata."
-          icon={
-            <div className="h-full w-full flex items-center justify-center bg-indigo-500 rounded-full text-white text-3xl font-bold">
-              {initials}
-            </div>
-          }
-          actions={
-            <BackButton label="Wróć" variant="secondary" fallbackUrl="/app" />
-          }
-        />
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#f8f9ff_0%,_#f3f5ff_35%,_#edf2ff_100%)] pb-24">
 
-        <div className="grid lg:grid-cols-12 gap-8">
+      <PremiumPageHeader
+        badge="Profil Studenta"
+        title={publicName}
+        description={sp.sciezka ? `${sp.sciezka}${sp.kierunek ? ` · ${sp.kierunek}` : ""}` : "Przeglądaj doświadczenie, projekty i opinie kandydata."}
+        icon={
+          <span className="text-3xl font-black text-indigo-300">{initials}</span>
+        }
+        actions={
+          <BackButton label="Wróć" variant="secondary" fallbackUrl="/app" />
+        }
+      />
+
+      <PageContainer className="max-w-6xl space-y-8">
+
+        {/* QUICK STATS ROW */}
+        <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
+          {[
+            { label: "Projekty", value: projects.length, accent: "text-indigo-600" },
+            { label: "Opinie", value: reviews.length, accent: "text-slate-900" },
+            { label: "Śr. ocena", value: avg ? avg.toFixed(1) : "—", accent: "text-emerald-600" },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className="col-span-1 sm:col-span-2 rounded-[1.5rem] border border-slate-200/70 bg-white p-5 text-center shadow-sm"
+            >
+              <div className={`text-3xl font-black ${stat.accent}`}>{stat.value}</div>
+              <div className="mt-1 text-xs font-bold uppercase tracking-widest text-slate-400">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-8 lg:grid-cols-12">
 
           {/* LEFT SIDEBAR */}
           <div className="lg:col-span-4 space-y-6">
+
             {/* Profile Card */}
-            <Card className="overflow-hidden shadow-xl shadow-indigo-100/50 border-white ring-1 ring-slate-100 bg-white rounded-3xl">
-              <CardContent className="pt-6 px-0 flex flex-col items-center">
-                <div className="text-center px-6 pb-6 w-full">
-                  {sp.sciezka && (
-                    <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 mb-4 scale-125 px-3 py-1 rounded-full border border-indigo-100">
-                      {sp.sciezka}
-                    </Badge>
+            <div className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white shadow-[0_20px_60px_-30px_rgba(71,85,105,0.3)]">
+              {/* Avatar header */}
+              <div className="relative bg-gradient-to-br from-indigo-500 to-purple-600 px-6 pt-10 pb-12 text-center">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(255,255,255,0.1),transparent_60%)]" />
+              </div>
+              <div className="relative -mt-8 flex justify-center">
+                <div className="h-16 w-16 rounded-2xl border-4 border-white bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg flex items-center justify-center text-white text-xl font-black">
+                  {initials}
+                </div>
+              </div>
+
+              <div className="px-6 pb-6 pt-4 text-center space-y-3">
+                <h2 className="text-xl font-extrabold text-slate-900">{publicName}</h2>
+                {sp.sciezka && (
+                  <Badge className="rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
+                    {sp.sciezka}
+                  </Badge>
+                )}
+
+                {/* External links */}
+                <div className="flex justify-center gap-2 pt-1">
+                  {sp.linkedin_url && (
+                    <Button asChild variant="outline" size="sm" className="rounded-full border-slate-200 text-slate-600 hover:border-indigo-200 hover:text-indigo-600">
+                      <a href={sp.linkedin_url} target="_blank" rel="noreferrer">
+                        <Linkedin className="h-3.5 w-3.5 mr-1.5" />
+                        LinkedIn
+                      </a>
+                    </Button>
                   )}
-
-                  <div className="flex justify-center gap-3">
-                    {sp.linkedin_url && (
-                      <Button asChild variant="outline" size="sm" className="rounded-full">
-                        <a href={sp.linkedin_url} target="_blank" rel="noreferrer">
-                          <Linkedin className="h-4 w-4 mr-2" />
-                          LinkedIn
-                        </a>
-                      </Button>
-                    )}
-                    {sp.portfolio_url && (
-                      <Button asChild variant="outline" size="sm" className="rounded-full">
-                        <a href={sp.portfolio_url} target="_blank" rel="noreferrer">
-                          <Globe className="h-4 w-4 mr-2" />
-                          Portfolio
-                        </a>
-                      </Button>
-                    )}
-                  </div>
+                  {sp.portfolio_url && (
+                    <Button asChild variant="outline" size="sm" className="rounded-full border-slate-200 text-slate-600 hover:border-indigo-200 hover:text-indigo-600">
+                      <a href={sp.portfolio_url} target="_blank" rel="noreferrer">
+                        <Globe className="h-3.5 w-3.5 mr-1.5" />
+                        Portfolio
+                      </a>
+                    </Button>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-3 w-full gap-2 px-4 pb-2">
-                  <div className="p-3 text-center group hover:bg-slate-50 transition-colors rounded-2xl">
-                    <div className="text-2xl font-black text-slate-900 mb-1 group-hover:scale-110 transition-transform duration-300">{projects.length}</div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Projekty</div>
-                  </div>
-                  <div className="p-3 text-center group hover:bg-slate-50 transition-colors rounded-2xl">
-                    <div className="text-2xl font-black text-slate-900 mb-1 group-hover:scale-110 transition-transform duration-300">{reviews.length}</div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Oceny</div>
-                  </div>
-                  <div className="p-3 text-center group hover:bg-slate-50 transition-colors rounded-2xl">
-                    <div className="text-2xl font-black text-emerald-500 mb-1 group-hover:scale-110 transition-transform duration-300">{avg ? avg.toFixed(1) : "-"}</div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Średnia</div>
-                  </div>
+                {/* CTA */}
+                <div className="pt-3">
+                  <Button
+                    asChild
+                    className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 font-bold text-white shadow-lg shadow-indigo-500/20 hover:opacity-95"
+                  >
+                    <Link href={`/app/chat?contact=${studentId}`}>
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      Wyślij wiadomość
+                    </Link>
+                  </Button>
                 </div>
+              </div>
 
-                <div className="w-full p-6 space-y-4 bg-slate-50/50">
-                  <h3 className="font-semibold text-sm flex items-center gap-2 text-slate-700">
+              {/* Competencies */}
+              {kompetencje.length > 0 && (
+                <div className="border-t border-slate-50 bg-slate-50/50 px-6 py-5">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700">
                     <Sparkles className="h-4 w-4 text-amber-500" />
-                    Główne Kompetencje
+                    Kompetencje
                   </h3>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {kompetencje.length > 0 ? (
-                      kompetencje.slice(0, 15).map((k: string) => (
-                        <Badge key={k} variant="secondary" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-100 px-3 py-1 text-xs">
-                          {k}
-                        </Badge>
-                      ))
-                    ) : (
-                      <span className="text-sm text-muted-foreground italic">Brak dodanych kompetencji.</span>
-                    )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {kompetencje.slice(0, 15).map((k: string) => (
+                      <Badge
+                        key={k}
+                        className="rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700"
+                      >
+                        {k}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              )}
+            </div>
 
-            {/* Education Card - Simplified / Timeline */}
-            <Card className="shadow-lg shadow-slate-200/50 border-white ring-1 ring-slate-100 rounded-3xl">
-              <CardHeader className="pb-3 border-b border-slate-50">
-                <CardTitle className="text-base flex items-center gap-2">
+            {/* Education Card */}
+            <Card className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white shadow-sm">
+              <CardHeader className="border-b border-slate-50 pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-bold text-slate-700">
                   <GraduationCap className="h-4 w-4 text-indigo-500" />
                   Edukacja
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Show database entries if available, otherwise fallback to simple fields */}
+              <CardContent className="p-5 space-y-4">
                 {education.length > 0 ? (
-                  <div className="space-y-6 relative pl-2 pt-2">
-                    <div className="absolute left-[7px] top-3 bottom-3 w-0.5 bg-indigo-100"></div>
+                  <div className="relative space-y-5 pl-2 pt-2">
+                    <div className="absolute left-[7px] top-3 bottom-3 w-0.5 bg-indigo-100" />
                     {education.map((edu: any) => (
                       <div key={edu.id} className="relative pl-8">
-                        <div className="absolute left-0 top-1.5 h-4 w-4 rounded-full bg-white border-4 border-indigo-500 shadow-sm z-10"></div>
-                        <div className="text-base font-bold text-slate-800">{edu.school_name}</div>
-                        <div className="text-sm text-indigo-600 font-medium mb-1">{edu.field_of_study} {edu.degree ? `(${edu.degree})` : ''}</div>
-                        <div className="text-xs text-slate-400 font-medium flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {edu.start_year} - {edu.is_current ? "Obecnie" : edu.end_year}
+                        <div className="absolute left-0 top-1.5 h-4 w-4 rounded-full border-4 border-indigo-500 bg-white shadow-sm z-10" />
+                        <div className="text-sm font-bold text-slate-800">{edu.school_name}</div>
+                        <div className="text-xs text-indigo-600 font-medium mb-0.5">
+                          {edu.field_of_study}{edu.degree ? ` (${edu.degree})` : ""}
+                        </div>
+                        <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                          <Calendar className="h-3 w-3" />
+                          {edu.start_year} – {edu.is_current ? "Obecnie" : edu.end_year}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : sp.kierunek ? (
                   <div className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                    <div className="h-8 w-8 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
                       <BookOpen className="h-4 w-4 text-indigo-600" />
                     </div>
                     <div>
-                      <div className="font-medium text-sm text-slate-800">Uczelnia Wyższa</div>
+                      <div className="text-sm font-bold text-slate-800">Uczelnia wyższa</div>
                       <div className="text-sm text-slate-600">{sp.kierunek}</div>
-                      {sp.rok && <Badge variant="secondary" className="mt-1 text-[10px] h-5">Rok {sp.rok}</Badge>}
+                      {sp.rok && (
+                        <Badge variant="secondary" className="mt-1 text-[10px] h-5">Rok {sp.rok}</Badge>
+                      )}
                     </div>
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground italic">Brak informacji o edukacji.</div>
+                  <p className="text-sm italic text-slate-400">Brak informacji o edukacji.</p>
                 )}
               </CardContent>
             </Card>
@@ -321,52 +326,103 @@ export default async function StudentProfilePage({
           {/* MAIN CONTENT */}
           <div className="lg:col-span-8 space-y-8">
 
-            {/* Bio / About */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <span className="bg-indigo-600 w-1 h-6 rounded-full inline-block"></span>
+            {/* Bio */}
+            <div className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-[0_20px_60px_-30px_rgba(71,85,105,0.15)]">
+              <h2 className="mb-5 flex items-center gap-2 text-xl font-extrabold text-slate-900">
+                <span className="inline-block h-6 w-1 rounded-full bg-indigo-600" />
                 O mnie
               </h2>
-              <Card className="shadow-lg shadow-slate-200/50 border-white ring-1 ring-slate-100 rounded-3xl bg-white">
-                <CardContent className="p-8">
-                  {sp.bio ? (
-                    <p className="text-slate-600 leading-relaxed whitespace-pre-wrap text-lg">{sp.bio}</p>
-                  ) : (
-                    <p className="text-slate-400 italic">Student nie dodał jeszcze opisu "O mnie".</p>
-                  )}
-                </CardContent>
-              </Card>
+              {sp.bio ? (
+                <p className="text-lg leading-relaxed text-slate-600 whitespace-pre-wrap">{sp.bio}</p>
+              ) : (
+                <p className="italic text-slate-400">Student nie dodał jeszcze opisu &quot;O mnie&quot;.</p>
+              )}
             </div>
 
             {/* Experience */}
             {sp.doswiadczenie && (
-              <div className="space-y-4">
-                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                  <span className="bg-purple-600 w-1 h-6 rounded-full inline-block"></span>
+              <div className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-[0_20px_60px_-30px_rgba(71,85,105,0.15)]">
+                <h2 className="mb-5 flex items-center gap-2 text-xl font-extrabold text-slate-900">
+                  <span className="inline-block h-6 w-1 rounded-full bg-purple-600" />
                   Doświadczenie
                 </h2>
+                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/30 p-5">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-indigo-500">
+                    <Briefcase className="h-3.5 w-3.5" />
+                    Opis doświadczenia
+                  </div>
+                  <p className="text-base leading-relaxed text-slate-700 whitespace-pre-wrap">{sp.doswiadczenie}</p>
+                </div>
+              </div>
+            )}
 
-                <Card className="shadow-none mb-6 border border-indigo-100 bg-indigo-50/30 rounded-3xl">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm uppercase tracking-wide text-indigo-900/60 font-bold flex items-center gap-2">
-                      <Briefcase className="w-4 h-4" />
-                      Opis doświadczenia
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-base text-slate-700 whitespace-pre-wrap leading-relaxed">{sp.doswiadczenie}</p>
-                  </CardContent>
-                </Card>
+            {/* Projects / Portfolio */}
+            {projects.length > 0 && (
+              <div className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-[0_20px_60px_-30px_rgba(71,85,105,0.15)]">
+                <h2 className="mb-6 flex items-center gap-2 text-xl font-extrabold text-slate-900">
+                  <span className="inline-block h-6 w-1 rounded-full bg-emerald-500" />
+                  Portfolio i projekty
+                  <span className="ml-2 rounded-full bg-slate-100 px-2.5 py-0.5 text-sm font-bold text-slate-500">
+                    {projects.length}
+                  </span>
+                </h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {projects.map((project: any) => (
+                    <div
+                      key={project.id}
+                      className="group relative rounded-2xl border border-slate-100 bg-slate-50/80 p-5 transition-all hover:-translate-y-0.5 hover:border-indigo-100 hover:bg-white hover:shadow-md"
+                    >
+                      <div className="mb-3 flex items-start justify-between gap-2">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100">
+                          <FolderGit2 className="h-4 w-4 text-indigo-500" />
+                        </div>
+                        {project.isFromPlatform && (
+                          <Badge className="rounded-full bg-emerald-50 border border-emerald-100 text-emerald-600 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 shrink-0">
+                            Platforma
+                          </Badge>
+                        )}
+                      </div>
+                      <h3 className="font-bold text-slate-900 leading-snug line-clamp-2 mb-2 group-hover:text-indigo-700 transition-colors">
+                        {project.title}
+                      </h3>
+                      {project.summary && (
+                        <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed mb-3">
+                          {project.summary}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium text-slate-400">
+                          {fmtDate(project.created_at)}
+                        </span>
+                        {project.link && (
+                          <a
+                            href={project.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                          >
+                            Otwórz
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
             {/* Reviews */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <span className="bg-amber-500 w-1 h-6 rounded-full inline-block"></span>
+            <div className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-[0_20px_60px_-30px_rgba(71,85,105,0.15)]">
+              <h2 className="mb-6 flex items-center gap-2 text-xl font-extrabold text-slate-900">
+                <span className="inline-block h-6 w-1 rounded-full bg-amber-500" />
                 Referencje
+                {reviews.length > 0 && (
+                  <span className="ml-2 rounded-full bg-slate-100 px-2.5 py-0.5 text-sm font-bold text-slate-500">
+                    {reviews.length}
+                  </span>
+                )}
               </h2>
-
               {reviews.length > 0 ? (
                 <div className="grid gap-4">
                   {reviews.map((r: any) => {
@@ -387,8 +443,8 @@ export default async function StudentProfilePage({
                   })}
                 </div>
               ) : (
-                <div className="text-center py-8 bg-slate-50 rounded-xl">
-                  <p className="text-slate-500">Ten student nie posiada jeszcze opinii.</p>
+                <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 py-10 text-center">
+                  <p className="text-sm font-medium text-slate-400">Ten student nie posiada jeszcze opinii.</p>
                 </div>
               )}
             </div>
@@ -396,9 +452,6 @@ export default async function StudentProfilePage({
           </div>
         </div>
       </PageContainer>
-
-
-
     </main>
   );
 }

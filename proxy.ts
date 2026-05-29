@@ -21,6 +21,14 @@ type AuthState = {
   userId: string | null;
 };
 
+function redirectWithResponseCookies(url: string, request: NextRequest, sourceResponse: NextResponse): NextResponse {
+  const redirectResponse = NextResponse.redirect(new URL(url, request.url));
+  sourceResponse.cookies.getAll().forEach((cookie) => {
+    redirectResponse.cookies.set(cookie);
+  });
+  return redirectResponse;
+}
+
 function isJwtLike(value: string): boolean {
   return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
 }
@@ -228,15 +236,12 @@ export async function proxy(request: NextRequest) {
     authState = await verifyJwtLocal(token);
   }
 
-  const shouldFallbackAuthCheck =
-    isAdminRoute ||
-    (isApp && !authState.isAuthed) ||
-    (isAuth && Boolean(token) && !authState.isAuthed);
+  const shouldFallbackAuthCheck = isApp || isAuth || isAdminRoute;
 
-  // Fallback network auth check only when needed:
-  // - protected app routes with missing/invalid token
-  // - admin routes (stronger check)
-  // - auth routes only when token exists but local JWT verify failed
+  // Keep proxy decisions aligned with the server client used by App Router layouts.
+  // A locally valid JWT can still be unusable by Supabase SSR when cookies are stale,
+  // split, legacy, or need refresh. If /auth trusts only local JWT while /app calls
+  // getUser(), the browser can loop between /auth and /app.
   if (shouldFallbackAuthCheck) {
     const { data } = await supabase.auth.getUser();
     if (data.user) {
@@ -249,11 +254,11 @@ export async function proxy(request: NextRequest) {
   Sentry.setUser(authState.isAuthed && authState.userId ? { id: authState.userId } : null);
 
   if (isApp && !authState.isAuthed) {
-    return NextResponse.redirect(new URL("/auth", request.url));
+    return redirectWithResponseCookies("/auth", request, response);
   }
 
   if (isAuth && authState.isAuthed) {
-    return NextResponse.redirect(new URL("/app", request.url));
+    return redirectWithResponseCookies("/app", request, response);
   }
 
   if (isApp && authState.isAuthed && authState.userId && !isOnboardingRoute) {
@@ -287,7 +292,7 @@ export async function proxy(request: NextRequest) {
     const needsOnboarding = role !== "admin" && !hasDetails;
 
     if (needsOnboarding) {
-      const redirectResponse = NextResponse.redirect(new URL("/app/onboarding", request.url));
+      const redirectResponse = redirectWithResponseCookies("/app/onboarding", request, response);
       redirectResponse.cookies.set("onboarding_complete", "0", {
         path: "/",
         httpOnly: true,

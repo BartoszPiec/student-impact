@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowRight,
   CheckCircle2,
-  DollarSign,
   Loader2,
   RefreshCw,
   Search,
@@ -26,6 +25,8 @@ type PayoutRow = {
   status: string;
   created_at: string;
   paid_at: string | null;
+  stripe_transfer_id?: string | null;
+  stripe_transfer_error?: string | null;
   studentName: string;
   offerTitle: string;
   milestoneTitle: string;
@@ -110,6 +111,8 @@ export default function AdminPayoutsPage() {
           payout.offerTitle,
           payout.milestoneTitle,
           payout.status,
+          payout.stripe_transfer_id ?? "",
+          payout.stripe_transfer_error ?? "",
         ]
           .join(" ")
           .toLowerCase();
@@ -404,6 +407,16 @@ export default function AdminPayoutsPage() {
                           ? `Wyplacono: ${new Date(payout.paid_at).toLocaleDateString("pl-PL")}`
                           : "Jeszcze niezamknieta"}
                       </div>
+                      {payout.stripe_transfer_id ? (
+                        <div className="mt-0.5 font-mono text-[10px] text-emerald-400">
+                          Stripe: {payout.stripe_transfer_id.slice(0, 12)}...
+                        </div>
+                      ) : null}
+                      {payout.stripe_transfer_error ? (
+                        <div className="mt-1 max-w-[220px] whitespace-normal text-[10px] font-medium text-rose-300">
+                          {payout.stripe_transfer_error}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -438,7 +451,7 @@ export default function AdminPayoutsPage() {
                             ) : (
                               <>
                                 <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                                Wyplacone
+                                Wyplac / zamknij
                               </>
                             )}
                           </Button>

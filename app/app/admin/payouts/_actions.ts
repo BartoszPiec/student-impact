@@ -2,6 +2,7 @@
 
 import { requireAdmin } from "@/lib/admin/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { transferPayoutViaStripe } from "@/lib/stripe/payouts";
 import { revalidatePath } from "next/cache";
 
 type PayoutContractRelation = {
@@ -18,8 +19,11 @@ type PayoutRow = {
   contract_id: string | null;
   milestone_id: string | null;
   amount_net: number | string;
+  amount_net_minor?: number | string | null;
   amount_gross: number | string;
   platform_fee: number | string;
+  status?: string;
+  stripe_transfer_id?: string | null;
   contracts: PayoutContractRelation | null;
 };
 
@@ -46,6 +50,20 @@ function getOfferTitleFromPayout(payout: PayoutRow): string {
   return payout.contracts?.applications?.offers?.tytul?.trim() || "Brak tytulu";
 }
 
+function amountNetMinorFromPayout(payout: PayoutRow): number {
+  if (payout.amount_net_minor != null) {
+    const amountMinor = Number(payout.amount_net_minor);
+    if (Number.isInteger(amountMinor) && amountMinor > 0) return amountMinor;
+  }
+
+  const amountNet = Number(payout.amount_net);
+  if (!Number.isFinite(amountNet) || amountNet <= 0) {
+    throw new Error("Nieprawidlowa kwota wyplaty.");
+  }
+
+  return Math.round(amountNet * 100);
+}
+
 export async function markPayoutProcessing(payoutId: string) {
   await requireAdmin();
   const admin = createAdminClient();
@@ -70,7 +88,7 @@ export async function markPayoutPaid(payoutId: string) {
 
   const { data: payout, error: payoutError } = await admin
     .from("payouts")
-    .select("id, contract_id, milestone_id, amount_net, amount_gross, platform_fee, contracts(student_id, applications!contracts_application_id_fkey(offers(tytul)))")
+    .select("id, contract_id, milestone_id, amount_net, amount_net_minor, amount_gross, platform_fee, status, stripe_transfer_id, contracts(student_id, applications!contracts_application_id_fkey(offers(tytul)))")
     .eq("id", payoutId)
     .maybeSingle();
 
@@ -82,10 +100,46 @@ export async function markPayoutPaid(payoutId: string) {
     throw new Error("Nie znaleziono wyplaty");
   }
 
-  const { error: rpcError } = await admin.rpc("process_payout_paid_v1", {
+  const typedPayout = payout as unknown as PayoutRow;
+  const amountNetMinor = amountNetMinorFromPayout(typedPayout);
+
+  if (process.env.STRIPE_PAYOUTS_ENABLED === "true") {
+    const transferResult = await transferPayoutViaStripe(payoutId, {
+      paidByAdminId: user.id,
+      throwOnError: true,
+    });
+
+    if (
+      transferResult.status === "already_paid"
+      || transferResult.status === "marked_paid"
+      || transferResult.status === "transferred"
+    ) {
+      revalidatePath("/app/admin/payouts");
+      return;
+    }
+
+    if (transferResult.status === "not_found") {
+      throw new Error("Nie znaleziono wyplaty");
+    }
+
+    if (transferResult.status === "not_payable_status") {
+      throw new Error("Tej wyplaty nie mozna juz przetworzyc w aktualnym statusie.");
+    }
+  }
+
+  let { error: rpcError } = await admin.rpc("process_payout_paid_v1", {
     p_payout_id: payoutId,
     p_admin_id: user.id,
+    p_amount_net_minor: amountNetMinor,
   });
+
+  if (rpcError?.message?.includes("Could not find the function")) {
+    const fallback = await admin.rpc("process_payout_paid_v1", {
+      p_payout_id: payoutId,
+      p_admin_id: user.id,
+    });
+    rpcError = fallback.error;
+  }
 
   if (rpcError) {
     console.error("RPC Error processing payout:", rpcError);
@@ -103,6 +157,7 @@ export async function getPayouts(statusFilter?: string) {
     .from("payouts")
     .select(`
       id, milestone_id, contract_id, amount_gross, platform_fee, amount_net, status, created_at, paid_at,
+      stripe_transfer_id, stripe_transfer_error,
       milestones!inner(title, idx),
       contracts!inner(
         student_id, company_id,

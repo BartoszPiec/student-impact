@@ -6,17 +6,45 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, Clock, DollarSign, LayoutTemplate, Plus, Zap } from "lucide-react";
 import { DeleteServiceButton } from "./delete-service-button";
 import { ServiceCommissionEditor } from "./service-commission-editor";
+import { ServiceStatusToggle } from "./service-status-toggle";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminSystemServicesPage() {
+type AdminServicePackage = {
+  id: string;
+  title: string;
+  price: number | string;
+  price_max?: number | string | null;
+  delivery_time_days?: number | null;
+  category?: string | null;
+  status?: string | null;
+  commission_rate?: number | null;
+  is_system?: boolean | null;
+};
+
+type AdminServicesView = "active" | "archived" | "all";
+
+export default async function AdminSystemServicesPage(props: {
+  searchParams?: Promise<{ view?: AdminServicesView }>;
+}) {
+  const searchParams = props.searchParams ? await props.searchParams : undefined;
+  const view = searchParams?.view ?? "active";
   const supabase = await createClient();
 
-  const { data: services, error } = await supabase
+  let query = supabase
     .from("service_packages")
     .select("*")
     .eq("type", "platform_service")
+    .eq("is_system", true)
     .order("created_at", { ascending: false });
+
+  if (view === "active") {
+    query = query.eq("status", "active");
+  } else if (view === "archived") {
+    query = query.eq("status", "inactive");
+  }
+
+  const { data: services, error } = await query;
 
   if (error) {
     return (
@@ -61,6 +89,18 @@ export default async function AdminSystemServicesPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="col-span-full mb-1 flex flex-wrap items-center gap-2">
+          <Button asChild variant={view === "active" ? "default" : "outline"} size="sm">
+            <Link href="/app/admin/system-services?view=active">Aktywne</Link>
+          </Button>
+          <Button asChild variant={view === "archived" ? "default" : "outline"} size="sm">
+            <Link href="/app/admin/system-services?view=archived">Archiwalne</Link>
+          </Button>
+          <Button asChild variant={view === "all" ? "default" : "outline"} size="sm">
+            <Link href="/app/admin/system-services?view=all">Wszystkie</Link>
+          </Button>
+        </div>
+
         {(services || []).map((service) => (
           <ServiceCard key={service.id} service={service} />
         ))}
@@ -81,7 +121,7 @@ export default async function AdminSystemServicesPage() {
   );
 }
 
-function ServiceCard({ service }: { service: any }) {
+function ServiceCard({ service }: { service: AdminServicePackage }) {
   return (
     <Card className="overflow-hidden rounded-[2rem] border border-white/5 bg-slate-950/40 shadow-xl shadow-black/20 transition-all duration-300 hover:-translate-y-1 hover:border-white/10">
       <CardHeader className="border-b border-white/5 bg-white/5 pb-4">
@@ -95,7 +135,7 @@ function ServiceCard({ service }: { service: any }) {
                 ? "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.45)]"
                 : "bg-slate-500"
             }`}
-            title={service.status}
+            title={service.status ?? undefined}
           />
         </div>
         <CardTitle className="pt-2 text-xl font-bold leading-tight text-white">
@@ -109,7 +149,11 @@ function ServiceCard({ service }: { service: any }) {
             <span className="flex items-center gap-2 font-medium text-slate-400">
               <DollarSign className="h-4 w-4 text-emerald-400" /> Stawka
             </span>
-            <span className="text-lg font-bold text-white">{service.price} PLN</span>
+            <span className="text-lg font-bold text-white">
+              {service.price_max && Number(service.price_max) > Number(service.price)
+                ? `${service.price}-${service.price_max} PLN`
+                : `${service.price} PLN`}
+            </span>
           </div>
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-2 font-medium text-slate-400">
@@ -123,7 +167,7 @@ function ServiceCard({ service }: { service: any }) {
             <span className="flex items-center gap-2 font-medium text-slate-400">
               <LayoutTemplate className="h-4 w-4 text-purple-400" /> Kategoria
             </span>
-            <span className="max-w-[140px] truncate font-semibold text-slate-200" title={service.category}>
+            <span className="max-w-[140px] truncate font-semibold text-slate-200" title={service.category ?? undefined}>
               {service.category || "Brak"}
             </span>
           </div>
@@ -146,11 +190,12 @@ function ServiceCard({ service }: { service: any }) {
             </Link>
           </Button>
           <div className="mt-2 flex gap-2">
+            <ServiceStatusToggle serviceId={service.id} currentStatus={service.status} />
             <Button
               asChild
               variant="ghost"
               size="sm"
-              className="flex-1 rounded-lg text-slate-400 hover:bg-white/5 hover:text-indigo-300"
+              className="rounded-lg text-slate-400 hover:bg-white/5 hover:text-indigo-300"
             >
               <Link href={`/app/admin/system-services/${service.id}/edit`}>Edytuj</Link>
             </Button>
