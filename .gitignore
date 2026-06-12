@@ -57,5 +57,6 @@ yarn-error.log*
 
 # local agent config, dev logs, supabase CLI temp (not for VCS)
 .claude/settings.local.json
+.codex-temp/
 codex-dev.*
 supabase/.temp/
