@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { PageContainer } from "@/components/ui/page-container";
+import { parseDetailedReviewComment } from "@/lib/reviews";
 import StudentDocumentsPanel from "./student-documents-panel";
 
 export const dynamic = "force-dynamic";
@@ -308,7 +309,7 @@ export default async function FinancesPage() {
                                             <div className="flex text-yellow-300 mb-1 text-xs gap-0.5 shadow-sm">
                                                 {"★".repeat(r.rating)}
                                             </div>
-                                            <p className="text-sm font-medium italic text-indigo-50 line-clamp-2 leading-relaxed">"{r.comment}"</p>
+                                            <p className="text-sm font-medium italic text-indigo-50 line-clamp-2 leading-relaxed">"{parseDetailedReviewComment(r.comment).displayComment || "Bez dodatkowego komentarza."}"</p>
                                         </div>
                                     ))}
                                 </div>

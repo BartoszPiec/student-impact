@@ -30,7 +30,7 @@ export default async function CompanyReviewPage({
     .eq("id", applicationId)
     .maybeSingle();
 
-  if (!appRow) redirect("/app/company/applications");
+  if (!appRow) redirect("/app/company/offers");
 
   const { data: offer } = await supabase
     .from("offers")
@@ -38,7 +38,7 @@ export default async function CompanyReviewPage({
     .eq("id", appRow.offer_id)
     .maybeSingle();
 
-  if (!offer || offer.company_id !== userData.user.id) redirect("/app/company/applications");
+  if (!offer || offer.company_id !== userData.user.id) redirect("/app/company/offers");
 
   const { data: deliverable } = await supabase
     .from("deliverables")

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Star } from "lucide-react";
+import { ReviewBreakdown } from "@/components/reviews/ReviewBreakdown";
+import { parseDetailedReviewComment } from "@/lib/reviews";
 
 interface ReviewCardProps {
     id: string;
@@ -60,6 +62,8 @@ export function ReviewCard({
     reviewerName,
     reviewerLink
 }: ReviewCardProps) {
+    const parsedReview = parseDetailedReviewComment(comment);
+
     return (
         <Card className="border border-slate-100 shadow-lg shadow-indigo-100/20 hover:shadow-xl hover:shadow-indigo-100/40 transition-all duration-300 rounded-3xl overflow-hidden bg-white hover:-translate-y-1">
             <CardContent className="p-6 space-y-4">
@@ -86,11 +90,17 @@ export function ReviewCard({
                     </div>
                 </div>
 
-                <div className="relative">
-                    <div className="text-sm text-slate-700 leading-relaxed italic">
-                        "{comment || "Brak komentarza do oceny."}"
+                <ReviewBreakdown ratings={parsedReview.categories} compact />
+
+                {parsedReview.displayComment ? (
+                    <div className="relative">
+                        <div className="text-sm text-slate-700 leading-relaxed italic">
+                            "{parsedReview.displayComment}"
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="text-sm text-slate-400">Bez dodatkowego komentarza.</div>
+                )}
             </CardContent>
         </Card>
     );

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeFullFundingContractState } from "@/lib/services/full-funding-contract-state";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -13,11 +14,31 @@ import { generateStudentInvoice } from "@/lib/pdf/generate-invoice";
 import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
 import { transferLatestPayoutForMilestone } from "@/lib/stripe/payouts";
+import {
+  calculateOverallReviewRating,
+  normalizeReviewCategoryRatings,
+  serializeDetailedReviewComment,
+  type DetailedReviewInput,
+} from "@/lib/reviews";
 import type { ContractData } from "@/lib/pdf/types";
 
 type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type JsonPayload = Record<string, unknown>;
 type RelationValue<T> = T | T[] | null;
+type DeliverableAttachment =
+  | {
+      kind?: "file";
+      name: string;
+      bucket: string;
+      path: string;
+      size?: number;
+      url?: string;
+    }
+  | {
+      kind: "external_link";
+      name: string;
+      url: string;
+    };
 
 type OfferSummaryRow = {
   company_id: string | null;
@@ -181,7 +202,12 @@ async function notifyUser(
 }
 
 
-export async function getSignedStorageUrl(bucket: string, pathOrUrl: string, expiresInSeconds: number = 600) {
+export async function getSignedStorageUrl(
+  bucket: string,
+  pathOrUrl: string,
+  expiresInSeconds: number = 600,
+  download?: string | boolean,
+) {
   const supabase = await createClient();
 
   let safeBucket = String(bucket || "deliverables");
@@ -202,7 +228,71 @@ export async function getSignedStorageUrl(bucket: string, pathOrUrl: string, exp
   safePath = safePath.replace(/^\/+/, "");
   if (!safePath) throw new Error("Missing file path");
 
-  const { data, error } = await supabase.storage.from(safeBucket).createSignedUrl(safePath, expiresInSeconds);
+  // When `download` is provided, force a Content-Disposition: attachment response
+  // so the browser saves the file instead of opening it inline.
+  const options = download ? { download } : undefined;
+
+  const { data, error } = await supabase.storage.from(safeBucket).createSignedUrl(safePath, expiresInSeconds, options);
+  if (error) throw new Error(error.message);
+  if (!data?.signedUrl) throw new Error("No signed URL returned");
+
+  return data.signedUrl;
+}
+
+/**
+ * Returns a signed URL for a contract document (umowa A/B PDF).
+ *
+ * Contract PDFs are stored under `contracts/<contractId>/...` in the
+ * `deliverables` bucket and are uploaded with the service-role client, so the
+ * `deliverables_read_strict` storage RLS policy (which keys access off an
+ * application/service-order id in the path) denies user-scoped reads and
+ * Supabase reports "Object not found". We therefore verify the caller is a
+ * party to the contract (company, student, or admin) here and sign the URL
+ * with the admin client.
+ */
+export async function getContractDocumentSignedUrl(
+  documentId: string,
+  expiresInSeconds: number = 300,
+  download?: string | boolean,
+) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) redirect("/auth");
+  const userId = userData.user.id;
+
+  const admin = createAdminClient();
+
+  const { data: docRow, error: docError } = await admin
+    .from("contract_documents")
+    .select("id, storage_path, file_name, contract:contracts(company_id, student_id)")
+    .eq("id", documentId)
+    .maybeSingle();
+
+  if (docError) throw new Error(docError.message);
+  if (!docRow?.storage_path) throw new Error("Nie znaleziono dokumentu umowy.");
+
+  const contract = unwrapRelation(
+    (docRow as { contract: RelationValue<{ company_id: string | null; student_id: string | null }> }).contract,
+  );
+
+  const isParty = contract?.company_id === userId || contract?.student_id === userId;
+  if (!isParty) {
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("role")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (profile?.role !== "admin") {
+      throw new Error("Brak uprawnien do pobrania tej umowy.");
+    }
+  }
+
+  const options = download ? { download: download === true ? (docRow.file_name ?? true) : download } : undefined;
+
+  const { data, error } = await admin.storage
+    .from("deliverables")
+    .createSignedUrl(String(docRow.storage_path).replace(/^\/+/, ""), expiresInSeconds, options);
+
   if (error) throw new Error(error.message);
   if (!data?.signedUrl) throw new Error("No signed URL returned");
 
@@ -227,6 +317,51 @@ function extractObjectPathFromPublicUrl(url: string): { bucket: string; path: st
   }
 }
 
+function normalizeExternalLink(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function isSafeExternalLink(raw: string): boolean {
+  try {
+    const parsed = new URL(normalizeExternalLink(raw));
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function normalizeDeliverableAttachments(value: unknown): DeliverableAttachment[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item): DeliverableAttachment[] => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+
+    const row = item as Record<string, unknown>;
+    const kind = typeof row.kind === "string" ? row.kind : "file";
+    const name = typeof row.name === "string" ? row.name.trim() : "";
+    if (!name || name.length > 255) return [];
+
+    if (kind === "external_link") {
+      const url = typeof row.url === "string" ? normalizeExternalLink(row.url) : "";
+      if (!url || !isSafeExternalLink(url)) return [];
+      return [{ kind: "external_link", name, url }];
+    }
+
+    const bucket = typeof row.bucket === "string" ? row.bucket.trim() : "";
+    const path = typeof row.path === "string" ? row.path.trim().replace(/^\/+/, "") : "";
+    if (!bucket || !path) return [];
+
+    const size = typeof row.size === "number" && Number.isFinite(row.size) && row.size >= 0
+      ? row.size
+      : undefined;
+
+    return [{ kind: "file", name, bucket, path, size }];
+  });
+}
+
 export async function submitDeliverable(applicationId: string, formData: FormData) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -240,8 +375,9 @@ export async function submitDeliverable(applicationId: string, formData: FormDat
   } catch {
     throw new Error("Invalid files data");
   }
+  const attachments = normalizeDeliverableAttachments(files);
 
-  if (files.length === 0 && !description) {
+  if (attachments.length === 0 && !description) {
     throw new Error("Musisz dodać pliki lub opis.");
   }
 
@@ -262,7 +398,7 @@ export async function submitDeliverable(applicationId: string, formData: FormDat
     p_source_id: applicationId,
     p_source_type: sourceType,
     p_description: description,
-    p_files: files,
+    p_files: attachments,
   });
   if (error) throw new Error(error.message);
 
@@ -358,14 +494,24 @@ export async function reviewDeliverable(deliverableId: string, status: "accepted
   }
 }
 
-export async function submitReview(applicationId: string, rating: number, comment: string) {
+export async function submitReview(applicationId: string, input: DetailedReviewInput) {
   const supabase = await createClient();
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) redirect("/auth");
 
   const reviewerId = user.user.id;
-  const normalizedRating = Math.max(1, Math.min(5, Math.trunc(rating)));
-  const normalizedComment = comment.trim() || null;
+  const normalizedCategories = normalizeReviewCategoryRatings(input.categories);
+  const hasAtLeastOneRatedCategory = Object.values(normalizedCategories).some((value) => typeof value === "number");
+
+  if (!hasAtLeastOneRatedCategory) {
+    throw new Error("Wybierz przynajmniej jedna kategorie oceny.");
+  }
+
+  const normalizedRating = calculateOverallReviewRating(normalizedCategories);
+  const normalizedComment = serializeDetailedReviewComment({
+    comment: input.comment,
+    categories: normalizedCategories,
+  });
 
   // Try Application first
   let studentId = "";
@@ -691,12 +837,17 @@ export async function submitMilestoneWorkAction(
   } catch {
     throw new Error("Invalid files data");
   }
+  const attachments = normalizeDeliverableAttachments(files);
 
   // ✅ [Refactor v1] Consolidated RPC
+  if (attachments.length === 0 && !description) {
+    throw new Error("Musisz dodać pliki, link lub opis.");
+  }
+
   const { error } = await supabase.rpc("submit_delivery_v2", {
     p_milestone_id: milestoneId,
     p_description: description,
-    p_files: files,
+    p_files: attachments,
     p_contract_id: null // Optional validation, can pass if we have it, but RPC resolves it
   });
 
@@ -751,6 +902,16 @@ export async function reviewMilestoneAction(
 
   // Sync application status after milestone review
   if (decision === "accepted") {
+    const { data: acceptedMilestone } = await supabase
+      .from("milestones")
+      .select("contract_id")
+      .eq("id", milestoneId)
+      .maybeSingle();
+
+    if (acceptedMilestone?.contract_id) {
+      await normalizeFullFundingContractState(acceptedMilestone.contract_id);
+    }
+
     // Generate student invoice for the accepted milestone (non-blocking)
     try {
       const { data: milestoneData } = await supabase

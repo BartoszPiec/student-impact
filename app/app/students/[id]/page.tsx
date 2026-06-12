@@ -63,7 +63,7 @@ export default async function StudentProfilePage({
           <h2 className="text-xl font-semibold text-slate-800">Profil niedostępny</h2>
           <p className="text-muted-foreground">Nie udało się znaleźć profilu studenta lub nie został on jeszcze uzupełniony.</p>
           <Button asChild variant="outline">
-            <Link href="/app/company/applications">Wróć do aplikacji</Link>
+            <Link href="/app/company/offers">Wroc do ogloszen</Link>
           </Button>
         </div>
       </main>

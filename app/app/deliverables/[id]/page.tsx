@@ -12,6 +12,7 @@ import { FilesTab } from "./tabs/FilesTab";
 import { SecretsTab } from "./tabs/SecretsTab";
 import { ChatTab } from "./tabs/ChatTab"; // We might embed Chat or just link
 import { findConversationForServiceOrder } from "@/lib/services/service-order-conversations";
+import { normalizeFullFundingContractState } from "@/lib/services/full-funding-contract-state";
 
 export const dynamic = "force-dynamic";
 
@@ -288,6 +289,22 @@ export default async function RealizationWorkspace({
         .or(`application_id.eq.${applicationId},service_order_id.eq.${applicationId}`)
         .maybeSingle();
 
+    if (contract?.id) {
+        const healed = await normalizeFullFundingContractState(contract.id);
+        if (healed) {
+            const { data: refreshedContract } = await supabase
+                .from("contracts")
+                .select("*, milestones(*)")
+                .order("idx", { foreignTable: "milestones", ascending: true })
+                .eq("id", contract.id)
+                .maybeSingle();
+
+            if (refreshedContract) {
+                contract = refreshedContract;
+            }
+        }
+    }
+
     // [AUTO-HEAL] If contract is missing for a valid Service Order, try to generate it now.
     // This handles cases where the initial status update didn't trigger the RPC or SQL patch wasn't run.
     if (!contract && isServiceOrder && appRow.status !== 'rejected') {
@@ -323,7 +340,7 @@ export default async function RealizationWorkspace({
 
     // --- HELPERS ---
     const currentDeliv = deliverables?.[0]; // Latest deliverable
-    const status = appRow.realization_status ?? appRow.status;
+    const status = appRow.status === "cancelled" ? "cancelled" : (appRow.realization_status ?? appRow.status);
     const myReview = reviews.find((review) => review.reviewer_id === user.id);
     const theirReview = reviews.find((review) => review.reviewer_id !== user.id);
     const agreedAmount = fromMinorUnits(appRow.agreed_stawka_minor) ?? appRow.agreed_stawka ?? offer?.stawka ?? null;
@@ -341,6 +358,7 @@ export default async function RealizationWorkspace({
     const companyAcceptedContract = Boolean(contract?.company_contract_accepted_at);
     const studentAcceptedContract = Boolean(contract?.student_contract_accepted_at);
     const nextActionLabel = (() => {
+        if (appRow.status === "cancelled") return "Współpraca anulowana";
         if (contract?.status === "completed" || status === "completed") return "Wystaw opinię";
         if (!contract || contract.terms_status !== "agreed") return "Uzgodnij etapy";
         if (isCompany && !companyAcceptedContract) return "Zaakceptuj umowę";
@@ -384,13 +402,15 @@ export default async function RealizationWorkspace({
                                             <Badge className={cn(
                                                 "px-4 py-1.5 rounded-full font-black uppercase text-[10px] tracking-widest",
                                                 status === 'completed' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
-                                                    status === 'delivered' ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
+                                                    status === 'cancelled' ? "bg-red-500/20 text-red-400 border-red-500/30" :
+                                                        status === 'delivered' ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
                                                         "bg-indigo-500/20 text-indigo-400 border-indigo-500/30"
                                             )}>
                                                 {status === 'pending' && "Oczekuje"}
                                                 {status === 'in_progress' && "W trakcie"}
                                                 {status === 'delivered' && "W trakcie odbioru"}
                                                 {status === 'completed' && "Zakończone"}
+                                                {status === 'cancelled' && "Anulowane"}
                                             </Badge>
                                         </div>
                                         <p className="text-slate-400 font-medium">

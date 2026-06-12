@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import {
   generateContractDocuments,
   acceptContractDocument,
-  getSignedStorageUrl,
+  getContractDocumentSignedUrl,
   reopenMilestoneNegotiationAction,
 } from "../../_actions";
 
@@ -81,10 +81,25 @@ export function ContractDocumentsCard({
   const handleDownload = async (doc: ContractDocument) => {
     setIsDownloading(doc.id);
     try {
-      const url = await getSignedStorageUrl("deliverables", doc.storage_path, 300);
-      window.open(url, "_blank");
-    } catch {
-      toast.error("Błąd pobierania pliku");
+      const url = await getContractDocumentSignedUrl(
+        doc.id,
+        300,
+        doc.file_name || true,
+      );
+
+      // Trigger the download via an anchor element. `window.open` after an
+      // await is no longer treated as a user gesture and gets blocked by
+      // popup blockers (so nothing happened on click).
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = doc.file_name || "umowa.pdf";
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Contract download failed", err);
+      toast.error(err instanceof Error ? err.message : "Błąd pobierania pliku");
     } finally {
       setIsDownloading(null);
     }

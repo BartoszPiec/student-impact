@@ -29,13 +29,15 @@ import {
     getSignedStorageUrl
 } from "../../_actions";
 import { toast } from "sonner";
-import { Shield, ShieldCheck, AlertCircle, CircleDollarSign, CheckCircle2, Lock, Clock, FileText, ChevronDown, ChevronUp, Star, Medal, MessageSquare, XCircle } from "lucide-react";
+import { Shield, ShieldCheck, AlertCircle, CircleDollarSign, CheckCircle2, Lock, Clock, FileText, ChevronDown, ChevronUp, Star, Medal, MessageSquare, XCircle, Link2 } from "lucide-react";
 import { PaymentModal } from "@/app/components/payment-modal";
 import { MilestoneNegotiation } from "./MilestoneNegotiation";
 import { ContractDocumentsCard } from "./ContractDocumentsCard";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 import { SecureImageViewer } from "@/app/components/SecureImageViewer";
+import { ReviewBreakdown } from "@/components/reviews/ReviewBreakdown";
+import { parseDetailedReviewComment } from "@/lib/reviews";
 
 export function StatusTab({
     status,
@@ -68,6 +70,8 @@ export function StatusTab({
 
     // Filter milestones
     const milestones = contract?.milestones || [];
+    const myReviewDetails = myReview ? parseDetailedReviewComment(myReview.comment) : null;
+    const theirReviewDetails = theirReview ? parseDetailedReviewComment(theirReview.comment) : null;
 
 
     // Checkout charges the selected funding scope from the server, with full-contract funding as the MVP default.
@@ -405,7 +409,10 @@ export function StatusTab({
                                             </div>
                                             <span className="font-bold text-slate-700 ml-2">{myReview.rating}/5</span>
                                         </div>
-                                        <div className="text-slate-600 italic">"{myReview.comment}"</div>
+                                        <ReviewBreakdown ratings={myReviewDetails?.categories ?? {}} compact />
+                                        <div className="text-slate-600 italic mt-3">
+                                            {myReviewDetails?.displayComment ? `"${myReviewDetails.displayComment}"` : "Bez dodatkowego komentarza."}
+                                        </div>
                                         <div className="mt-4 text-xs text-slate-400">Wystawiono: {new Date(myReview.created_at).toLocaleString('pl-PL')}</div>
                                     </div>
                                 ) : (
@@ -446,7 +453,10 @@ export function StatusTab({
                                             </div>
                                             <span className="font-bold text-2xl text-slate-800 ml-2">{theirReview.rating}/5</span>
                                         </div>
-                                        <p className="text-slate-700 text-lg relative z-10">"{theirReview.comment}"</p>
+                                        <ReviewBreakdown ratings={theirReviewDetails?.categories ?? {}} compact />
+                                        <p className="text-slate-700 text-lg relative z-10 mt-3">
+                                            {theirReviewDetails?.displayComment ? `"${theirReviewDetails.displayComment}"` : "Bez dodatkowego komentarza."}
+                                        </p>
                                     </div>
                                 ) : (
                                     <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed">
@@ -500,9 +510,12 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
     async function openDeliverableFile(file: any, allowFullAccess = false) {
         try {
             let signed = "";
-            if (file?.bucket && file?.path) {
+            if (file?.kind === "external_link" && typeof file?.url === "string") {
+                window.open(file.url, "_blank", "noopener,noreferrer");
+                return;
+            } else if (file?.bucket && file?.path) {
                 signed = await getSignedStorageUrl(file.bucket, file.path, 600);
-            } else if (file?.url) {
+            } else if (file?.url && typeof file.url === "string" && !/^https?:\/\//i.test(file.url)) {
                 signed = await getSignedStorageUrl("deliverables", file.url, 600);
             }
 
@@ -600,7 +613,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                     }}
                                 />
                                 {/* Display latest feedback if available */}
-                                {latestDeliverable && latestDeliverable.company_feedback && (
+                                {latestDeliverable && latestDeliverable.company_feedback && latestDeliverable.status === 'rejected' && (
                                     <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 text-red-800 animate-in fade-in slide-in-from-top-2">
                                         <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                                         <div>
@@ -646,12 +659,16 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                                         className="group flex items-center gap-3 p-3 bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100 rounded-xl transition-all text-left w-full overflow-hidden"
                                                     >
                                                         <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                                                            <FileText className="w-4 h-4" />
+                                                            {f?.kind === "external_link" ? <Link2 className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
                                                         </div>
                                                         <div className="min-w-0">
                                                             <div className="text-sm font-medium text-slate-700 truncate group-hover:text-indigo-700">{f.name}</div>
                                                             <div className="text-[10px] text-slate-400 uppercase font-bold group-hover:text-indigo-400">
-                                                                {hasFullFileAccess(latestDeliverable) ? "Pobierz" : "Podglad z watermarkiem"}
+                                                                {f?.kind === "external_link"
+                                                                    ? "Otwórz link"
+                                                                    : hasFullFileAccess(latestDeliverable)
+                                                                      ? "Pobierz"
+                                                                      : "Podglad z watermarkiem"}
                                                             </div>
                                                         </div>
                                                     </button>
@@ -668,7 +685,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                         const feedback = String(formData.get('feedback') ?? "");
                                         await reviewMilestoneAction(milestone.id, applicationId, decision, feedback);
                                     }}>
-                                        <ReviewControls label="Zatwierdź i wypłać środki" />
+                                        <ReviewControls label="Zatwierdź" />
                                     </form>
                                 </div>
                             </div>
@@ -710,10 +727,22 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                                 </div>
 
                                                 {deliv.company_feedback && (
-                                                    <div className="bg-red-50 text-red-800 p-3 rounded-lg text-sm border border-red-100 flex gap-2">
+                                                    <div className={`p-3 rounded-lg text-sm border flex gap-2 ${
+                                                        deliv.status === 'rejected'
+                                                            ? 'bg-red-50 text-red-800 border-red-100'
+                                                            : deliv.status === 'accepted'
+                                                              ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
+                                                              : 'bg-slate-50 text-slate-700 border-slate-200'
+                                                    }`}>
                                                         <MessageSquare className="w-4 h-4 shrink-0 mt-0.5 opacity-60" />
                                                         <div>
-                                                            <span className="font-bold text-xs uppercase opacity-70 block mb-0.5">Powód odrzucenia:</span>
+                                                            <span className="font-bold text-xs uppercase opacity-70 block mb-0.5">
+                                                                {deliv.status === 'rejected'
+                                                                    ? 'Pow?d odrzucenia:'
+                                                                    : deliv.status === 'accepted'
+                                                                      ? 'Komentarz firmy:'
+                                                                      : 'Uwagi firmy:'}
+                                                            </span>
                                                             {deliv.company_feedback}
                                                         </div>
                                                     </div>
@@ -729,7 +758,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                                                 onClick={() => openDeliverableFile(file, hasFullFileAccess(deliv))}
                                                                 className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
                                                             >
-                                                                <FileText className="h-3.5 w-3.5" />
+                                                                {file?.kind === "external_link" ? <Link2 className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
                                                                 {file.name || "Plik"}
                                                             </button>
                                                         ))}
