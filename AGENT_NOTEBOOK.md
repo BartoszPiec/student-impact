@@ -784,3 +784,28 @@ Policy intent:
 
 Next verification target:
 - rerun private proposal QA after this migration is applied
+
+
+## 2026-06-12 - Fable 5 full app audit + pilot fixes
+
+Status: done (report: FABLE5_AUDIT_AND_FIX_REPORT.md)
+
+Changed areas:
+- payments/security: pilot-mode live-key guard in lib/stripe.ts; generic Polish error responses in stripe API catch-alls (create-checkout, verify-payment, connect/onboarding)
+- commission: new partner rates (platform_service 0.25, job 0.15, allowed +0.25) in lib/commission.ts; frozen per-contract rates untouched
+- routes: /app/orders/market disarmed (legacy accept bypassed contracts+payment, redirected to non-existent /app/orders/[id]); page is now a redirect to /app/jobs, _actions.ts deleted
+- orders/create/[packageId]: company role guard in createOrder, system packages redirected to customize flow, variant price respected
+- admin/disputes: no raw DB error in UI, typed rows instead of as any[]
+- types: application-chat-closure.ts uses SupabaseClient instead of any; removed `as any` casts in verify-payment and stripe-event-processor
+- migrations hygiene: 13 non-timestamped SQL files moved from supabase/migrations/ to supabase/_archive/ (CLI ignored them anyway); 8-digit-prefixed migrations NOT touched
+
+Test commands:
+- npm run build -> PASS
+- npx eslint <changed files> -> mixed: Fable-touched narrow set clean, but Codex follow-up target over all remaining changed TS/TSX files failed with 53 errors / 28 warnings, mostly legacy `any` debt in modified areas; repo-wide lint still red
+- npm run check:preview -> 21/23 PASS (2 env-shape FAILs expected locally: HTTPS + webhook URL)
+- npm run test:mvp-scenarios -- --base-url=http://localhost:3000 -> 14/15 PASS; only FAIL = missing TEST_COMPANY_EMAIL/PASSWORD + TEST_STUDENT_EMAIL/PASSWORD (env limitation)
+
+Known limitations:
+- repo-wide lint still red (legacy any debt, ~234 errors) - build unaffected
+- security-definer RPC semantics (cancel_application, company_fund_contract_v2, process_stripe_payment_v4) need read-only verification in Supabase SQL editor
+- P0-1 pilot banner/PDF/mail prefix and P0-3 contract naming remain open (Codex backlog)
