@@ -4,12 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { ensureConversationForServiceOrder } from "@/lib/services/service-order-conversations";
 import {
   buildLegacyRequirementsText,
   buildRequestSnapshot,
   extractRequestFormAnswers,
 } from "@/lib/services/service-order-snapshots";
-import { normalizePackageFormSchema } from "@/lib/services/package-customization";
+import {
+  normalizePackageFormSchema,
+  resolvePackageVariantsWithFallback,
+  resolveSelectedPackageVariant,
+} from "@/lib/services/package-customization";
 
 function normalizeOptionalUrl(value: string | null | undefined) {
   const trimmed = String(value || "").trim();
@@ -39,6 +44,16 @@ export async function createOrder(formData: FormData) {
     throw new Error("Unauthorized");
   }
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (profile?.role !== "company") {
+    throw new Error("Zamowienia uslug moze skladac tylko konto firmowe.");
+  }
+
   const packageId = formData.get("packageId") as string;
   const title = formData.get("title") as string;
   const contactEmail = formData.get("contact_email") as string;
@@ -47,12 +62,19 @@ export async function createOrder(formData: FormData) {
 
   const { data: pkgData, error: pkgError } = await supabase
     .from("service_packages")
-    .select("student_id, is_system, form_schema, price, title")
+    .select("student_id, is_system, type, form_schema, price, title, variants")
     .eq("id", packageId)
     .single();
 
   if (pkgError || !pkgData) {
     throw new Error("Package not found");
+  }
+
+  // Pakiety systemowe (Quick Task) mają dedykowany flow z wariantami,
+  // przypisaniem studenta i poprawną ceną — to legacy entry point nie może
+  // tworzyć zamówień bez wykonawcy (status pending, student_id NULL).
+  if (pkgData.is_system === true || pkgData.type === "platform_service" || !pkgData.student_id) {
+    redirect(`/app/company/packages/${packageId}/customize`);
   }
 
   if (pkgData.student_id && pkgData.student_id === user.id && pkgData.is_system !== true) {
@@ -80,13 +102,19 @@ export async function createOrder(formData: FormData) {
     additionalInfo,
   });
 
+  const selectedVariant = resolveSelectedPackageVariant(
+    resolvePackageVariantsWithFallback(packageId, pkgData.variants),
+    variantKey ?? "",
+  );
+  const orderAmount = Number(selectedVariant?.price ?? pkgData.price);
+
   const { data: order, error } = await supabase
     .from("service_orders")
     .insert({
       company_id: user.id,
       package_id: packageId,
-      student_id: pkgData.is_system ? null : pkgData.student_id,
-      amount: Number(pkgData.price),
+      student_id: pkgData.student_id,
+      amount: orderAmount,
       variant_key: variantKey,
       requirements: requirementsText,
       request_snapshot: requestSnapshot,
@@ -107,27 +135,14 @@ export async function createOrder(formData: FormData) {
   if (pkgData.student_id && pkgData.is_system !== true) {
     let conversationId = null;
 
-    const { data: newConv, error: conversationError } = await supabase
-      .from("conversations")
-      .upsert({
-        company_id: user.id,
-        student_id: pkgData.student_id,
-        status: "active",
-        type: "inquiry",
-        package_id: packageId,
-        application_id: null,
-        service_order_id: order.id,
-      }, { onConflict: "service_order_id" })
-      .select("id")
-      .maybeSingle();
+    const newConv = await ensureConversationForServiceOrder(supabase, {
+      serviceOrderId: order.id,
+      companyId: user.id,
+      studentId: pkgData.student_id,
+      packageId,
+    });
 
-    if (conversationError) {
-      throw new Error(conversationError.message);
-    }
-
-    if (newConv) {
-      conversationId = newConv.id;
-    }
+    conversationId = newConv.id;
 
     if (conversationId) {
       await supabase.from("messages").insert({

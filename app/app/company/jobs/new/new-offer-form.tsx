@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createOffer } from "./_actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,9 @@ import {
   Globe,
   Info,
   Loader2,
+  Plus,
   ShieldAlert,
+  Trash2,
   UploadCloud,
   Zap,
 } from "lucide-react";
@@ -72,6 +74,13 @@ const inputClass =
 const textareaClass =
   "min-h-[170px] rounded-[1.75rem] border-slate-200 bg-white px-5 py-4 text-base leading-7 text-slate-900 placeholder:text-slate-400 focus-visible:ring-4";
 
+type RealizationMode = "student_defined" | "company_defined";
+
+type CompanyMilestoneDraft = {
+  title: string;
+  acceptance_criteria: string;
+};
+
 type OfferFormData = {
   typ: "micro" | "job";
   is_platform_service: boolean;
@@ -101,6 +110,8 @@ type OfferFormData = {
   przeniesienie_praw_autorskich: boolean;
   portfolio_dozwolone: boolean;
   materialy_legalnie_udostepnione: boolean;
+  realization_mode: RealizationMode;
+  company_milestones: CompanyMilestoneDraft[];
 };
 
 export default function NewOfferForm({
@@ -113,6 +124,7 @@ export default function NewOfferForm({
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const wizardTopRef = useRef<HTMLDivElement | null>(null);
   const [formData, setFormData] = useState<OfferFormData>({
     typ: defaultType || "micro",
     is_platform_service: false,
@@ -142,11 +154,27 @@ export default function NewOfferForm({
     przeniesienie_praw_autorskich: false,
     portfolio_dozwolone: true,
     materialy_legalnie_udostepnione: false,
+    realization_mode: "student_defined",
+    company_milestones: [],
   });
 
   const isJob = formData.typ === "job";
   const showEmploymentWarning =
     isJob && (formData.contract_type === "UoP" || formData.contract_type === "Staz");
+
+  useEffect(() => {
+    if (step < 3) return;
+
+    const node = wizardTopRef.current;
+    if (!node) return;
+
+    const top = node.getBoundingClientRect().top + window.scrollY - 96;
+    window.scrollTo({
+      top: Math.max(0, top),
+      behavior: "smooth",
+    });
+  }, [step]);
+
   const buildTimeSummary = () => {
     if (formData.czas_typ === "date" && formData.czas_data) {
       return `Do ${formData.czas_data}`;
@@ -175,6 +203,55 @@ export default function NewOfferForm({
     setFormData((prev) => ({
       ...prev,
       czas_typ: value,
+    }));
+  };
+
+  const handleOfferTypeChange = (value: OfferFormData["typ"]) => {
+    setFormData((prev) => ({
+      ...prev,
+      typ: value,
+      realization_mode: value === "micro" ? prev.realization_mode : "student_defined",
+      company_milestones: value === "micro" ? prev.company_milestones : [],
+    }));
+  };
+
+  const handleRealizationModeChange = (value: RealizationMode) => {
+    setFormData((prev) => ({
+      ...prev,
+      realization_mode: value,
+      company_milestones:
+        value === "company_defined"
+          ? prev.company_milestones.length > 0
+            ? prev.company_milestones
+            : [{ title: "", acceptance_criteria: "" }]
+          : [],
+    }));
+  };
+
+  const addCompanyMilestone = () => {
+    setFormData((prev) => ({
+      ...prev,
+      company_milestones: [...prev.company_milestones, { title: "", acceptance_criteria: "" }],
+    }));
+  };
+
+  const updateCompanyMilestone = (
+    index: number,
+    field: keyof CompanyMilestoneDraft,
+    value: string,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      company_milestones: prev.company_milestones.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item,
+      ),
+    }));
+  };
+
+  const removeCompanyMilestone = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      company_milestones: prev.company_milestones.filter((_, itemIndex) => itemIndex !== index),
     }));
   };
 
@@ -281,6 +358,16 @@ export default function NewOfferForm({
         const budget = Number(formData.stawka);
         if (!Number.isFinite(budget) || budget <= 0) {
           validationError = "Podaj poprawny budzet zlecenia.";
+        } else if (formData.realization_mode === "company_defined") {
+          const cleanedMilestones = formData.company_milestones.filter(
+            (milestone) => milestone.title.trim().length > 0 || milestone.acceptance_criteria.trim().length > 0,
+          );
+
+          if (cleanedMilestones.length === 0) {
+            validationError = "Dodaj przynajmniej jeden etap realizacji ustalany przez firme.";
+          } else if (cleanedMilestones.some((milestone) => milestone.title.trim().length === 0)) {
+            validationError = "Kazdy etap ustalany przez firme musi miec nazwe.";
+          }
         }
       }
     }
@@ -302,12 +389,16 @@ export default function NewOfferForm({
     const payload = new FormData();
 
     Object.entries(formData).forEach(([key, value]) => {
+      if (key === "company_milestones") return;
+
       if (typeof value === "boolean") {
         if (value) payload.append(key, "on");
         return;
       }
 
-      payload.append(key, value);
+      if (typeof value === "string") {
+        payload.append(key, value);
+      }
     });
 
     payload.set("czas", buildTimeSummary());
@@ -322,6 +413,19 @@ export default function NewOfferForm({
     } else {
       payload.set("czas_dni", "");
     }
+
+    const companyMilestones =
+      formData.typ === "micro" && formData.realization_mode === "company_defined"
+        ? formData.company_milestones
+            .map((milestone) => ({
+              title: milestone.title.trim(),
+              acceptance_criteria: milestone.acceptance_criteria.trim(),
+            }))
+            .filter((milestone) => milestone.title.length > 0 || milestone.acceptance_criteria.length > 0)
+        : [];
+
+    payload.set("realization_mode", formData.typ === "micro" ? formData.realization_mode : "student_defined");
+    payload.set("company_milestones", JSON.stringify(companyMilestones));
 
     if (uploadedFileUrl) {
       const currentMaterials = String(payload.get("obligations") || "");
@@ -351,7 +455,7 @@ export default function NewOfferForm({
       <div className="grid gap-4 md:grid-cols-2">
         <button
           type="button"
-          onClick={() => handleChange("typ", "micro")}
+          onClick={() => handleOfferTypeChange("micro")}
           className={cn(
             "rounded-[2rem] border p-6 text-left transition-all hover:-translate-y-1",
             formData.typ === "micro"
@@ -370,7 +474,7 @@ export default function NewOfferForm({
 
         <button
           type="button"
-          onClick={() => handleChange("typ", "job")}
+          onClick={() => handleOfferTypeChange("job")}
           className={cn(
             "rounded-[2rem] border p-6 text-left transition-all hover:-translate-y-1",
             formData.typ === "job"
@@ -754,6 +858,138 @@ export default function NewOfferForm({
           </div>
         </div>
 
+        <div className="rounded-[1.75rem] border border-indigo-200 bg-indigo-50/70 p-6">
+          <div className="mb-4 flex items-start gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600">
+              <FileText className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Plan realizacji po akceptacji</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Wybierz, kto ustala etapy. Jesli firma ma gotowy plan wykonania, student zobaczy go jeszcze przed
+                aplikowaniem, a po akceptacji etap uzgodnienia bedzie od razu zamkniety.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => handleRealizationModeChange("student_defined")}
+              className={cn(
+                "rounded-[1.5rem] border p-5 text-left transition-colors",
+                formData.realization_mode === "student_defined"
+                  ? "border-slate-900 bg-slate-900 text-white shadow-lg"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/40",
+              )}
+            >
+              <p className="text-sm font-bold">Student ustala etapy po akceptacji</p>
+              <p
+                className={cn(
+                  "mt-2 text-xs leading-6",
+                  formData.realization_mode === "student_defined" ? "text-slate-200" : "text-slate-500",
+                )}
+              >
+                Obecny standard platformy. Student rozpisuje milestone&apos;y, a firma je zatwierdza przed finansowaniem.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleRealizationModeChange("company_defined")}
+              className={cn(
+                "rounded-[1.5rem] border p-5 text-left transition-colors",
+                formData.realization_mode === "company_defined"
+                  ? "border-indigo-300 bg-white text-slate-900 shadow-lg shadow-indigo-100"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/40",
+              )}
+            >
+              <p className="text-sm font-bold">Firma ustala etapy z gory</p>
+              <p className="mt-2 text-xs leading-6 text-slate-500">
+                Dobre dla zadan z gotowym harmonogramem. Etapy beda widoczne dla studenta przed aplikacja, a wyplata
+                nastapi po odbiorze calego zadania.
+              </p>
+            </button>
+          </div>
+
+          {formData.realization_mode === "company_defined" && (
+            <div className="mt-6 space-y-4">
+              <div className="rounded-2xl border border-indigo-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600">
+                System utworzy te etapy automatycznie po akceptacji studenta. W v1 wczesniejsze etapy sluza jako plan
+                pracy, a rozliczenie calej kwoty zostanie przypisane do finalnego etapu.
+              </div>
+
+              <div className="space-y-4">
+                {formData.company_milestones.map((milestone, index) => (
+                  <div key={`company-milestone-${index}`} className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-indigo-500">
+                          Etap {index + 1}
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-slate-500">
+                          Student zobaczy ten etap na ofercie i w kontrakcie po akceptacji.
+                        </p>
+                      </div>
+                      {formData.company_milestones.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="rounded-2xl border-slate-200 text-slate-600"
+                          onClick={() => removeCompanyMilestone(index)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Usun
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <Label className={fieldLabelClass}>
+                          Nazwa etapu <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          className={cn(inputClass, "h-14 focus-visible:ring-indigo-100")}
+                          value={milestone.title}
+                          onChange={(e) => updateCompanyMilestone(index, "title", e.target.value)}
+                          placeholder="np. Makiety i akceptacja kierunku"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className={fieldLabelClass}>
+                          Co ma byc gotowe po tym etapie
+                          <span className="normal-case tracking-normal text-slate-400"> (opcjonalnie)</span>
+                        </Label>
+                        <Textarea
+                          className={cn("min-h-[120px]", textareaClass, "focus-visible:ring-indigo-100")}
+                          value={milestone.acceptance_criteria}
+                          onChange={(e) => updateCompanyMilestone(index, "acceptance_criteria", e.target.value)}
+                          placeholder={`np.
+- zaakceptowany kierunek wizualny
+- komplet plikow roboczych
+- lista uwag po stronie firmy`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addCompanyMilestone}
+                className="rounded-2xl border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Dodaj kolejny etap
+              </Button>
+            </div>
+          )}
+        </div>
+
         <div className="rounded-[1.75rem] border border-amber-200 bg-amber-50/70 p-6">
           <div className="mb-4 flex items-start gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
@@ -893,6 +1129,14 @@ export default function NewOfferForm({
                 <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Czas realizacji</div>
                 <div className="text-sm font-semibold text-slate-900">{buildTimeSummary() || "Do ustalenia"}</div>
               </div>
+              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Plan realizacji</div>
+                <div className="text-sm font-semibold text-slate-900">
+                  {formData.realization_mode === "company_defined"
+                    ? "Firma ustala etapy z gory"
+                    : "Student ustala etapy po akceptacji"}
+                </div>
+              </div>
             </>
           )}
 
@@ -964,12 +1208,36 @@ export default function NewOfferForm({
             </Badge>
           </div>
         </div>
+
+        {!isJob && formData.realization_mode === "company_defined" && formData.company_milestones.length > 0 && (
+          <div className="mt-6 rounded-[1.5rem] border border-indigo-200 bg-indigo-50/60 p-5">
+            <div className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600">
+              Etapy widoczne dla studenta
+            </div>
+            <div className="space-y-3">
+              {formData.company_milestones
+                .filter((milestone) => milestone.title.trim().length > 0 || milestone.acceptance_criteria.trim().length > 0)
+                .map((milestone, index) => (
+                  <div key={`preview-milestone-${index}`} className="rounded-2xl border border-indigo-100 bg-white p-4">
+                    <p className="text-sm font-bold text-slate-900">
+                      {index + 1}. {milestone.title || "Etap bez nazwy"}
+                    </p>
+                    {milestone.acceptance_criteria.trim() && (
+                      <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">
+                        {milestone.acceptance_criteria}
+                      </p>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div ref={wizardTopRef} className="mx-auto max-w-4xl">
       <div className="mb-12 px-4">
         <div className="relative mx-auto flex max-w-3xl items-center justify-between">
           <div className="absolute left-0 top-[24px] h-[4px] w-full rounded-full bg-slate-200" />

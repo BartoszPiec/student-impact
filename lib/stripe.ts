@@ -9,6 +9,13 @@ export function getStripe(): Stripe {
     if (!process.env.STRIPE_SECRET_KEY) {
       throw new Error('STRIPE_SECRET_KEY is not set in environment variables');
     }
+    // Pilot mode nie może użyć kluczy live (CODEX_WYTYCZNE P0-1).
+    if (
+      process.env.NEXT_PUBLIC_PILOT_MODE === 'true'
+      && process.env.STRIPE_SECRET_KEY.startsWith('sk_live_')
+    ) {
+      throw new Error('PILOT_MODE wymaga kluczy testowych Stripe (sk_test_), wykryto sk_live_');
+    }
     _stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
       apiVersion: '2026-02-25.clover' as Stripe.LatestApiVersion,
       typescript: true,

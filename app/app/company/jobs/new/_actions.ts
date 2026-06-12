@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { parseCommissionRateInput, resolveCommissionRate } from "@/lib/commission";
 
 const ALLOWED_OFFER_TYPES = new Set(["micro", "job"]);
+const ALLOWED_REALIZATION_MODES = new Set(["student_defined", "company_defined"]);
 const ALLOWED_CONTRACT_TYPES = new Set(["B2B", "UoP", "UZ", "Staz", "Staż"]);
 const ALLOWED_WORK_MODES = new Set(["remote", "onsite", "hybrid"]);
 const ALLOWED_CATEGORIES = new Set([
@@ -46,6 +47,11 @@ const ALLOWED_CATEGORIES = new Set([
   "Inne",
 ]);
 
+type CompanyMilestoneTemplate = {
+  title: string;
+  acceptance_criteria: string;
+};
+
 function isValidHttpsUrl(value: string) {
   try {
     const parsed = new URL(value);
@@ -80,6 +86,48 @@ function validateOfferMaterials(value: string | null) {
     //   }
     // }
   }
+}
+
+function parseCompanyMilestones(rawValue: FormDataEntryValue | null): CompanyMilestoneTemplate[] {
+  if (typeof rawValue !== "string" || rawValue.trim().length === 0) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawValue);
+  } catch {
+    throw new Error("Nie udalo sie odczytac etapow realizacji.");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("Etapy realizacji musza byc lista.");
+  }
+
+  if (parsed.length > 12) {
+    throw new Error("Mozesz zapisac maksymalnie 12 etapow realizacji.");
+  }
+
+  return parsed.map((entry, index) => {
+    if (!entry || typeof entry !== "object") {
+      throw new Error(`Etap ${index + 1} ma nieprawidlowy format.`);
+    }
+
+    const title = String((entry as { title?: unknown }).title ?? "").trim();
+    const acceptance_criteria = String(
+      (entry as { acceptance_criteria?: unknown }).acceptance_criteria ?? "",
+    ).trim();
+
+    if (!title) {
+      throw new Error(`Etap ${index + 1} musi miec nazwe.`);
+    }
+    if (title.length > 120) {
+      throw new Error(`Nazwa etapu ${index + 1} jest za dluga (max 120 znakow).`);
+    }
+    if (acceptance_criteria.length > 600) {
+      throw new Error(`Opis etapu ${index + 1} jest za dlugi (max 600 znakow).`);
+    }
+
+    return { title, acceptance_criteria };
+  });
 }
 
 export async function createOffer(formData: FormData) {
@@ -137,6 +185,12 @@ export async function createOffer(formData: FormData) {
     offerType: typ,
     isPlatformService: is_platform_service,
   });
+  const realization_mode_raw = String(formData.get("realization_mode") ?? "").trim() || "student_defined";
+  const realization_mode = typ === "micro" ? realization_mode_raw : "student_defined";
+  const company_milestones =
+    typ === "micro" && realization_mode === "company_defined"
+      ? parseCompanyMilestones(formData.get("company_milestones"))
+      : [];
 
   const stawkaRaw = String(formData.get("stawka") ?? "").trim();
   const stawka = stawkaRaw ? Number(stawkaRaw) : null;
@@ -218,8 +272,14 @@ export async function createOffer(formData: FormData) {
   if (technologies.length > 20) {
     throw new Error("Mozesz dodac maksymalnie 20 technologii.");
   }
+  if (!ALLOWED_REALIZATION_MODES.has(realization_mode)) {
+    throw new Error("Wybierz poprawny sposob ustalania etapow realizacji.");
+  }
   if (typ === "micro" && (!Number.isFinite(stawka) || stawka == null || stawka <= 0)) {
     throw new Error("Podaj poprawny budzet mikrozlecenia.");
+  }
+  if (typ === "micro" && realization_mode === "company_defined" && company_milestones.length === 0) {
+    throw new Error("Dodaj przynajmniej jeden etap realizacji ustalany przez firme.");
   }
   if (typ === "job") {
     if (salary_range_min != null && salary_range_min < 0) {
@@ -264,6 +324,8 @@ export async function createOffer(formData: FormData) {
     przeniesienie_praw_autorskich,
     portfolio_dozwolone,
     materialy_legalnie_udostepnione,
+    realization_mode,
+    company_milestones: company_milestones.length > 0 ? company_milestones : null,
     is_platform_service,
     commission_rate,
     status: "published",

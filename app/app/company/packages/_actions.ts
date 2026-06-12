@@ -15,6 +15,7 @@ import {
     splitPackageBriefDescription,
 } from "@/lib/services/package-customization";
 import { fetchAvailableLogoStudents, LOGO_PACKAGE_ID } from "@/lib/services/logo-student-selection";
+import { ensureConversationForServiceOrder } from "@/lib/services/service-order-conversations";
 
 type SystemServiceStudentCandidate = {
     user_id: string;
@@ -440,20 +441,18 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
             const effectiveStudentId = assignedStudentId || logoOrder.student_id;
             let conversationId: string | null = null;
             if (effectiveStudentId) {
-                const { data: conversation } = await supabase
-                    .from("conversations")
-                    .upsert({
-                        package_id: packageId,
-                        student_id: effectiveStudentId,
-                        company_id: user.id,
-                        type: "inquiry",
-                        status: "active",
-                        service_order_id: logoOrder.id,
-                    }, { onConflict: "service_order_id" })
-                    .select("id")
-                    .maybeSingle();
+                try {
+                    const conversation = await ensureConversationForServiceOrder(supabase, {
+                        serviceOrderId: logoOrder.id,
+                        companyId: user.id,
+                        studentId: effectiveStudentId,
+                        packageId,
+                    });
 
-                conversationId = conversation?.id || null;
+                    conversationId = conversation.id;
+                } catch (error) {
+                    console.error("Error creating conversation for logo order:", error);
+                }
 
                 await supabase.from("notifications").insert({
                     user_id: effectiveStudentId,
@@ -538,18 +537,19 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
             throw new Error(serviceOrderError?.message || "Nie udalo sie utworzyc zamowienia uslugi.");
         }
 
-        const { data: conversation } = await supabase
-            .from("conversations")
-            .upsert({
-                package_id: packageId,
-                student_id: assignedStudentId,
-                company_id: user.id,
-                type: "inquiry",
-                status: "active",
-                service_order_id: serviceOrder.id,
-            }, { onConflict: "service_order_id" })
-            .select("id")
-            .maybeSingle();
+        let conversationId: string | null = null;
+        try {
+            const conversation = await ensureConversationForServiceOrder(supabase, {
+                serviceOrderId: serviceOrder.id,
+                companyId: user.id,
+                studentId: assignedStudentId,
+                packageId,
+            });
+
+            conversationId = conversation.id;
+        } catch (error) {
+            console.error("Error creating conversation for service order:", error);
+        }
 
         await supabase.from("notifications").insert({
             user_id: assignedStudentId,
@@ -557,7 +557,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
             payload: {
                 snippet: `Otrzymales nowe zamowienie uslugi: ${effectiveTitle}`,
                 service_order_id: serviceOrder.id,
-                conversation_id: conversation?.id ?? null,
+                conversation_id: conversationId,
             },
         });
 
