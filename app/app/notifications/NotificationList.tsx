@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { pl } from "date-fns/locale";
-import { Bell, MessageSquare, Briefcase, FileText, Inbox, Sparkles, Filter, CircleDollarSign, CheckCircle2, XCircle, Star, Ban } from "lucide-react";
+import { Bell, MessageSquare, Briefcase, FileText, Inbox, Sparkles, Filter, CircleDollarSign, CheckCircle2, XCircle, Star, Ban, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getNotificationTitle } from "./utils";
@@ -93,6 +93,13 @@ function NotificationIcon({ type }: { type: string }) {
             return (
                 <div className="bg-red-100 text-red-500 p-2.5 rounded-xl group-hover:bg-red-500 group-hover:text-white transition-colors duration-300">
                     <Ban className="w-5 h-5" />
+                </div>
+            );
+        // Zgłoszenie problemu / spór
+        case "problem_reported":
+            return (
+                <div className="bg-amber-100 text-amber-600 p-2.5 rounded-xl group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
+                    <AlertTriangle className="w-5 h-5" />
                 </div>
             );
         default:
@@ -212,7 +219,8 @@ export default function NotificationList({ notifications }: NotificationListProp
 
                         // Link logic:
                         let href = "/app/notifications"; // Fallback
-                        if (notification.payload?.conversation_id) href = `/app/chat/${notification.payload.conversation_id}`;
+                        if (notification.payload?.redirect_path) href = notification.payload.redirect_path;
+                        else if (notification.payload?.conversation_id) href = `/app/chat/${notification.payload.conversation_id}`;
                         else if (notification.payload?.application_id) href = `/app/deliverables/${notification.payload.application_id}`;
                         else if (notification.payload?.contract_id) href = `/app/deliverables/${notification.payload.contract_id}`;
 

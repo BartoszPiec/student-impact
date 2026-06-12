@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
+import { rejectCompetingApplicationsForOffer } from "@/lib/services/application-chat-closure";
 import Stripe from "stripe";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -22,6 +23,16 @@ type PaymentContractRow = {
   source_type: "application" | "service_order" | null;
   application_id: string | null;
   service_order_id: string | null;
+};
+
+type TargetApplicationRow = {
+  id: string;
+  offer_id: string;
+  offers: {
+    tytul: string | null;
+  } | {
+    tytul: string | null;
+  }[] | null;
 };
 
 function normalizeMetadataId(value: string | null | undefined): string | null {
@@ -144,6 +155,43 @@ export async function POST(req: NextRequest) {
     }
 
     const admin = createAdminClient();
+
+    if (applicationId) {
+      const { data: targetApplicationData, error: targetApplicationError } = await admin
+        .from("applications")
+        .select("id, offer_id, offers!inner(tytul)")
+        .eq("id", applicationId)
+        .single();
+
+      if (targetApplicationError || !targetApplicationData) {
+        throw new Error(targetApplicationError?.message ?? "Nie znaleziono aplikacji dla sesji płatności");
+      }
+
+      const targetApplication = targetApplicationData as TargetApplicationRow;
+      const offerDetails = Array.isArray(targetApplication.offers)
+        ? targetApplication.offers[0]
+        : targetApplication.offers;
+
+      const rejectedApplications = await rejectCompetingApplicationsForOffer(admin, {
+        offerId: targetApplication.offer_id,
+        acceptedApplicationId: applicationId,
+        companyId: typedContract.company_id,
+        senderId: user.id,
+        content: "Niestety tym razem firma wybrała kogoś innego.",
+        statuses: ["sent", "countered", "accepted"],
+        cancelContracts: true,
+      });
+
+      for (const rejectedApplication of rejectedApplications) {
+        await trySendNotification(rejectedApplication.studentId, "offer_closed", {
+          offer_id: targetApplication.offer_id,
+          offer_title: offerDetails?.tytul ?? "Oferta",
+          reason: "accepted_other",
+          conversation_id: rejectedApplication.conversationId,
+        });
+      }
+    }
+
     const commissionRate = resolveCommissionRate({
       explicitRate: typedContract.commission_rate ?? (session.metadata?.commission_rate ? Number(session.metadata.commission_rate) : null),
       sourceType,
@@ -220,8 +268,10 @@ export async function POST(req: NextRequest) {
       message: "Payment verified and contract activated",
     });
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : "Failed to verify payment";
     console.error("[verify-payment] Error:", error);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json(
+      { error: "Nie udalo sie zweryfikowac platnosci. Sprobuj ponownie za chwile." },
+      { status: 500 },
+    );
   }
 }

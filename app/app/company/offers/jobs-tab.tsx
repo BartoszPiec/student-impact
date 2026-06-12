@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { AlertTriangle, Archive, ClipboardCheck, Search, Timer, Users } from "lucide-react";
+import { AlertTriangle, Archive, ClipboardCheck, Search, SlidersHorizontal, Timer, Users } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -222,7 +222,7 @@ export default function JobsTab({ offers, serviceOrders, statsMap }: JobsTabProp
 
   return (
     <div className="space-y-7">
-      <div className="rounded-[1.5rem] border border-slate-200 bg-white p-2 shadow-sm">
+      <div className="rounded-[1.75rem] border border-slate-200 bg-white p-2 shadow-sm">
         <div className="grid gap-1 md:grid-cols-4">
           <SummaryTile icon={<AlertTriangle className="h-4 w-4" />} label="Do decyzji" value={actionItems.length} tone="amber" />
           <SummaryTile icon={<Users className="h-4 w-4" />} label="Kandydaci" value={candidatesItems.length} tone="emerald" />
@@ -231,54 +231,89 @@ export default function JobsTab({ offers, serviceOrders, statsMap }: JobsTabProp
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-[1.5rem] border border-slate-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap gap-1.5 rounded-2xl bg-slate-100/80 p-1.5">
-          {filters.map((item) => {
-            const count =
-              item.key === "action"
-                ? actionItems.length
-                : item.key === "candidates"
-                  ? candidatesItems.length
-                  : item.key === "terms"
-                    ? termsItems.length
-                    : item.key === "delivery"
-                      ? deliveryItems.length
-                      : item.key === "review"
-                        ? reviewItems.length
-                        : item.key === "closed"
-                          ? closedItems.length
-                          : activeItems.length;
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-2xl font-black tracking-tight text-slate-950">Moje ogloszenia i uslugi</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              {actionItems.length > 0
+                ? `${actionItems.length} elementow czeka teraz na decyzje firmy.`
+                : "Brak pozycji wymagajacych natychmiastowej reakcji."}
+            </p>
+          </div>
 
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setFilter(item.key)}
-                className={cn(
-                  "rounded-xl px-3 py-2 text-sm font-bold transition",
-                  filter === item.key
-                    ? "bg-white text-indigo-700 shadow-md shadow-slate-200/70"
-                    : "text-slate-600 hover:bg-white/60 hover:text-slate-900",
-                )}
-              >
-                {item.label}
-                <span className={cn("ml-2 rounded-full px-1.5 py-0.5 text-xs", filter === item.key ? "bg-white/15" : "bg-slate-100")}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
+          <label className="relative block w-full lg:w-[320px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Szukaj po tytule lub studencie"
+              className="h-11 rounded-2xl border-slate-200 bg-white pl-9 font-medium shadow-inner"
+            />
+          </label>
         </div>
 
-        <label className="relative block w-full lg:w-[340px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Szukaj po tytule lub studencie"
-            className="h-11 rounded-2xl border-slate-200 bg-white pl-9 font-medium shadow-inner"
-          />
-        </label>
+        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {filters.map((item) => {
+              const count =
+                item.key === "action"
+                  ? actionItems.length
+                  : item.key === "candidates"
+                    ? candidatesItems.length
+                    : item.key === "terms"
+                      ? termsItems.length
+                      : item.key === "delivery"
+                        ? deliveryItems.length
+                        : item.key === "review"
+                          ? reviewItems.length
+                          : item.key === "closed"
+                            ? closedItems.length
+                            : activeItems.length;
+
+              const isActive = filter === item.key;
+              const isActionTab = item.key === "action";
+
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setFilter(item.key)}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition",
+                    isActive
+                      ? isActionTab
+                        ? "border-amber-200 bg-amber-50 text-amber-800"
+                        : "border-indigo-200 bg-indigo-600 text-white"
+                      : isActionTab
+                        ? "border-amber-200 bg-white text-amber-700 hover:bg-amber-50"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+                  )}
+                >
+                  {isActionTab ? <span className="h-2 w-2 rounded-full bg-amber-400" /> : null}
+                  {item.label}
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-xs",
+                      isActive
+                        ? isActionTab
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-500",
+                    )}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600">
+            <SlidersHorizontal className="h-4 w-4 text-slate-400" />
+            Widok operacyjny firmy
+          </div>
+        </div>
       </div>
 
       {filter === "active" ? (

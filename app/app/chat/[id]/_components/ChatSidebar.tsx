@@ -2,8 +2,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, FileText, AlertTriangle, CheckCircle, Package, Briefcase } from "lucide-react";
+import { ExternalLink, CheckCircle, Package, Briefcase } from "lucide-react";
 import Link from "next/link";
+import { ReportProblemButton } from "./ReportProblemButton";
 
 function fromMinorUnits(value: number | null | undefined) {
     if (value == null || !Number.isFinite(value)) return null;
@@ -82,7 +83,7 @@ export function ChatSidebar({
         } else {
             // Negotiation Phase -> Go to Application/Offer
             if (isCompany && offer?.id) {
-                targetLink = `/app/company/applications?offerId=${offer.id}`;
+                targetLink = `/app/company/offers/${offer.id}`;
                 showAction = true;
                 buttonLabel = "Przejdź do zgłoszenia";
                 ButtonIcon = ExternalLink;
@@ -154,9 +155,9 @@ export function ChatSidebar({
                             </Button>
                         )}
 
-                        <Button variant="ghost" className="w-full h-auto p-0 text-xs text-slate-400 hover:text-red-500 hover:bg-transparent justify-center">
-                            <AlertTriangle className="w-3 h-3 mr-1.5" /> Zgłoś problem
-                        </Button>
+                        {conversation?.id && (
+                            <ReportProblemButton conversationId={conversation.id} />
+                        )}
                     </div>
                 </CardContent>
             </Card>

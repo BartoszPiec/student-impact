@@ -51,6 +51,7 @@ type ApplicationItem = {
   stage: ApplicationStage;
   created_at: string | null;
   message_to_company: string | null;
+  cancel_reason?: string | null;
   proposed_stawka: number | null;
   counter_stawka: number | null;
   agreed_stawka: number | null;
@@ -226,6 +227,15 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                       Twoja notatka:
                     </span>
                     &quot;{app.message_to_company}&quot;
+                  </div>
+                )}
+
+                {stage === "cancelled" && app.cancel_reason && (
+                  <div className="relative p-4 bg-red-50/70 border border-red-100 rounded-2xl text-sm text-red-700 leading-relaxed max-w-2xl">
+                    <span className="font-bold text-red-600 not-italic block text-[10px] uppercase tracking-widest mb-1">
+                      Powód anulowania:
+                    </span>
+                    {app.cancel_reason}
                   </div>
                 )}
               </div>

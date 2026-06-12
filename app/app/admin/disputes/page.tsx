@@ -4,6 +4,10 @@ import { AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
+function idleDaysSince(updatedAt: string, nowMs: number): number {
+  return Math.max(0, Math.floor((nowMs - new Date(updatedAt).getTime()) / 86400000));
+}
+
 export default async function AdminDisputesPage() {
   const supabase = createAdminClient();
   const { data, error } = await supabase
@@ -31,19 +35,49 @@ export default async function AdminDisputesPage() {
     .order("updated_at", { ascending: true });
 
   if (error) {
+    console.error("[admin/disputes] failed to load disputes:", error.message);
     return (
-      <div className="p-8 text-red-500">Blad pobierania sporow: {error.message}</div>
+      <div className="p-8 text-red-400">
+        Nie udalo sie pobrac listy sporow. Odswiez strone lub sprobuj ponownie za chwile.
+      </div>
     );
   }
 
-  const disputes = ((data || []) as any[]).map((row) => {
+  type DisputeContractRow = {
+    id: string;
+    created_at: string;
+    updated_at: string;
+    company_contract_accepted_at: string | null;
+    student_contract_accepted_at: string | null;
+    application_id: string | null;
+    service_order_id: string | null;
+    status: string | null;
+    terms_status: string | null;
+    total_amount: number | null;
+    currency: string | null;
+    commission_rate: number | null;
+    source_type: string | null;
+    company_id: string | null;
+    student_id: string | null;
+    student: { public_name: string | null } | { public_name: string | null }[] | null;
+    company: { nazwa: string | null } | { nazwa: string | null }[] | null;
+  };
+
+  const unwrapRelation = <T,>(value: T | T[] | null): T | null =>
+    Array.isArray(value) ? value[0] ?? null : value;
+
+  const disputes = ((data || []) as DisputeContractRow[]).map((row) => {
     const acceptedCandidates = [
       row.company_contract_accepted_at,
       row.student_contract_accepted_at,
-    ].filter(Boolean) as string[];
+    ].filter((value): value is string => Boolean(value));
 
     return {
       ...row,
+      status: (row.status === "cancelled" ? "cancelled" : "disputed") as "disputed" | "cancelled",
+      commission_rate: row.commission_rate ?? 0,
+      student: unwrapRelation(row.student),
+      company: unwrapRelation(row.company),
       accepted_at:
         acceptedCandidates.length > 0
           ? acceptedCandidates.sort(
@@ -54,16 +88,10 @@ export default async function AdminDisputesPage() {
   });
   const disputedCount = disputes.filter((row) => row.status === "disputed").length;
   const cancelledCount = disputes.filter((row) => row.status === "cancelled").length;
+  const nowMs = new Date().getTime();
   const oldestIdleDays =
     disputes.length > 0
-      ? Math.max(
-          ...disputes.map((row) =>
-            Math.max(
-              0,
-              Math.floor((Date.now() - new Date(row.updated_at).getTime()) / 86400000),
-            ),
-          ),
-        )
+      ? Math.max(...disputes.map((row) => idleDaysSince(row.updated_at, nowMs)))
       : 0;
 
   return (

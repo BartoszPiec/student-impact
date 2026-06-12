@@ -10,8 +10,10 @@ const WEBHOOK_SECRET = process.env.NOTIFICATIONS_WEBHOOK_SECRET;
 
 type NotificationPayload = {
   cancelled_by?: string | null;
+  cancel_reason?: string | null;
   milestone_title?: string | null;
   offer_title?: string | null;
+  redirect_path?: string | null;
   snippet?: string | null;
 };
 
@@ -39,6 +41,7 @@ function escapeHtml(value: string | null | undefined) {
 function getEmailContent(type: string, payload: NotificationPayload = {}) {
   const safePayload = {
     cancelled_by: escapeHtml(payload.cancelled_by),
+    cancel_reason: escapeHtml(payload.cancel_reason),
     milestone_title: escapeHtml(payload.milestone_title),
     offer_title: escapeHtml(payload.offer_title),
     snippet: escapeHtml(payload.snippet),
@@ -53,6 +56,7 @@ function getEmailContent(type: string, payload: NotificationPayload = {}) {
       html = `
         <h2>Zlecenie zostalo anulowane</h2>
         <p>Uzytkownik (${safePayload.cancelled_by || "druga strona"}) anulowal zlecenie <strong>${safePayload.offer_title || ""}</strong>.</p>
+        <p>Powod anulowania: ${safePayload.cancel_reason || "Brak dodatkowej informacji."}</p>
         <p>Szczegoly: ${safePayload.snippet || ""}</p>
       `;
       break;

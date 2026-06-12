@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generateCompanyInvoice } from "@/lib/pdf/generate-invoice";
 import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
+import { rejectCompetingApplicationsForOffer } from "@/lib/services/application-chat-closure";
 
 type StripeEventRow = {
   id: string;
@@ -21,12 +22,23 @@ type PaymentSource = {
 };
 
 type PaymentContractRow = {
+  company_id?: string | null;
   source_type?: "application" | "service_order" | null;
   application_id?: string | null;
   service_order_id?: string | null;
   commission_rate?: number | null;
   student_id?: string | null;
   applications?: { offers?: { tytul?: string | null } | null } | { offers?: { tytul?: string | null } | null }[] | null;
+};
+
+type TargetApplicationRow = {
+  id: string;
+  offer_id: string;
+  offers: {
+    tytul: string | null;
+  } | {
+    tytul: string | null;
+  }[] | null;
 };
 
 function normalizeMetadataId(value: string | null | undefined): string | null {
@@ -236,7 +248,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   const { data: contractData, error: contractError } = await supabase
     .from("contracts")
-    .select("source_type, application_id, service_order_id, commission_rate, student_id, applications!contracts_application_id_fkey(offers(tytul))")
+    .select("company_id, source_type, application_id, service_order_id, commission_rate, student_id, applications!contracts_application_id_fkey(offers(tytul))")
     .eq("id", contractId)
     .maybeSingle();
 
@@ -246,6 +258,42 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   const contract = contractData as PaymentContractRow | null;
   assertSourceMatchesContract(session.id, { applicationId, serviceOrderId, sourceType }, contract);
+
+  if (applicationId && contract?.company_id) {
+    const { data: targetApplicationData, error: targetApplicationError } = await supabase
+      .from("applications")
+      .select("id, offer_id, offers!inner(tytul)")
+      .eq("id", applicationId)
+      .single();
+
+    if (targetApplicationError || !targetApplicationData) {
+      throw new Error(targetApplicationError?.message ?? `Application ${applicationId} not found for paid session ${session.id}`);
+    }
+
+    const targetApplication = targetApplicationData as TargetApplicationRow;
+    const offerDetails = Array.isArray(targetApplication.offers)
+      ? targetApplication.offers[0]
+      : targetApplication.offers;
+
+    const rejectedApplications = await rejectCompetingApplicationsForOffer(supabase, {
+      offerId: targetApplication.offer_id,
+      acceptedApplicationId: applicationId,
+      companyId: contract.company_id,
+      senderId: session.metadata?.user_id || contract.company_id,
+      content: "Niestety tym razem firma wybrała kogoś innego.",
+      statuses: ["sent", "countered", "accepted"],
+      cancelContracts: true,
+    });
+
+    for (const rejectedApplication of rejectedApplications) {
+      await trySendNotification(rejectedApplication.studentId, "offer_closed", {
+        offer_id: targetApplication.offer_id,
+        offer_title: offerDetails?.tytul ?? "Oferta",
+        reason: "accepted_other",
+        conversation_id: rejectedApplication.conversationId,
+      });
+    }
+  }
 
   const commissionRate = resolveCommissionRate({
     explicitRate: contract?.commission_rate ?? (session.metadata?.commission_rate ? Number(session.metadata.commission_rate) : null),

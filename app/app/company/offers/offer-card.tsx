@@ -1,12 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, CalendarClock, CheckCircle2, MessageSquare, Users, Zap } from "lucide-react";
+import {
+  Briefcase,
+  CalendarClock,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  HandCoins,
+  MessageSquare,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Zap,
+} from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { openChatForApplication } from "../../chat/_actions";
+import {
+  COMPANY_CARD_TOKENS,
+  CompanyMetricTile,
+  CompanyStatePill,
+  type CompanyCardTone,
+} from "../_components/company-card-theme";
 
 export type CompanyOffer = {
   id: string;
@@ -46,7 +62,7 @@ export type OfferCardModel = {
   stage: OfferStage;
   stageLabel: string;
   label: string;
-  tone: "red" | "amber" | "blue" | "emerald" | "slate";
+  tone: CompanyCardTone;
   actionRequired: boolean;
   actionLabel: string;
   actionHref: string;
@@ -68,18 +84,17 @@ function formatMoney(value: number | null | undefined) {
 function getBudgetLabel(offer: CompanyOffer, stats: CompanyOfferStats, isInProgress: boolean) {
   if (isInProgress && stats.agreedStawka) return formatMoney(stats.agreedStawka);
   if (offer.salary_range_min && offer.salary_range_min > 0) {
-    const max = offer.salary_range_max && offer.salary_range_max > offer.salary_range_min
-      ? ` - ${offer.salary_range_max.toLocaleString("pl-PL")}`
-      : "+";
+    const max =
+      offer.salary_range_max && offer.salary_range_max > offer.salary_range_min
+        ? ` - ${offer.salary_range_max.toLocaleString("pl-PL")}`
+        : "+";
     return `${offer.salary_range_min.toLocaleString("pl-PL")}${max} PLN`;
   }
   return formatMoney(offer.stawka);
 }
 
 function getDetailHref(offer: CompanyOffer) {
-  return offer.itemType === "service_order"
-    ? `/app/company/orders/${offer.id}`
-    : `/app/company/offers/${offer.id}`;
+  return offer.itemType === "service_order" ? `/app/company/orders/${offer.id}` : `/app/company/offers/${offer.id}`;
 }
 
 function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
@@ -91,12 +106,12 @@ function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
       workState: "closed",
       stage: "done",
       stageLabel: "Archiwum",
-      label: "Zakończone",
+      label: "Zakonczone",
       tone: "slate",
       actionRequired: false,
-      actionLabel: "Podgląd",
+      actionLabel: "Podglad",
       actionHref: detailHref,
-      note: "Zakończone zamówienie usługi.",
+      note: "Zakonczone zamowienie uslugi.",
     };
   }
 
@@ -104,13 +119,13 @@ function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
     return {
       workState: "action",
       stage: "candidates",
-      stageLabel: "Wybór wykonawcy",
-      label: "Wymaga wyboru",
-      tone: "amber",
+      stageLabel: "Wybor wykonawcy",
+      label: "Wymaga decyzji",
+      tone: "indigo",
       actionRequired: true,
       actionLabel: "Wybierz studenta",
       actionHref: detailHref,
-      note: "Wybierz wykonawcę, aby uruchomić realizację.",
+      note: "Wybierz wykonawce, aby uruchomic realizacje.",
     };
   }
 
@@ -119,12 +134,12 @@ function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
       workState: "action",
       stage: "terms",
       stageLabel: "Warunki",
-      label: "Wymaga decyzji",
+      label: "Negocjacje",
       tone: "amber",
       actionRequired: true,
-      actionLabel: "Sprawdź warunki",
+      actionLabel: "Sprawdz warunki",
       actionHref: detailHref,
-      note: "Zamówienie czeka na decyzję lub uzgodnienie warunków.",
+      note: "Zamowienie czeka na decyzje lub uzgodnienie warunkow.",
     };
   }
 
@@ -132,13 +147,13 @@ function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
     return {
       workState: "action",
       stage: "review",
-      stageLabel: "Odbiór pracy",
-      label: "Wymaga sprawdzenia",
+      stageLabel: "Odbior pracy",
+      label: "Do sprawdzenia",
       tone: "red",
       actionRequired: true,
-      actionLabel: "Sprawdź pracę",
+      actionLabel: "Sprawdz prace",
       actionHref: detailHref,
-      note: "Student dostarczył materiał do akceptacji.",
+      note: "Student dostarczyl material do akceptacji.",
     };
   }
 
@@ -150,9 +165,9 @@ function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
       label: "Czeka na studenta",
       tone: "amber",
       actionRequired: false,
-      actionLabel: "Podgląd",
+      actionLabel: "Podglad",
       actionHref: detailHref,
-      note: "Student potwierdza przyjęcie realizacji.",
+      note: "Student potwierdza przyjecie realizacji.",
     };
   }
 
@@ -161,11 +176,11 @@ function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
     stage: "delivery",
     stageLabel: "Realizacja",
     label: "W realizacji",
-    tone: "blue",
+    tone: "emerald",
     actionRequired: false,
     actionLabel: "Panel realizacji",
     actionHref: detailHref,
-    note: "Zamówienie usługi jest aktywne.",
+    note: "Zamowienie uslugi jest aktywne.",
   };
 }
 
@@ -184,12 +199,12 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
       workState: "closed",
       stage: "done",
       stageLabel: "Archiwum",
-      label: "Zakończone",
+      label: "Zakonczone",
       tone: "slate",
       actionRequired: false,
-      actionLabel: "Podgląd",
+      actionLabel: "Podglad",
       actionHref: detailHref,
-      note: "Archiwalne ogłoszenie.",
+      note: "Archiwalne ogloszenie.",
     };
   }
 
@@ -197,13 +212,13 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
     return {
       workState: "action",
       stage: "review",
-      stageLabel: "Odbiór pracy",
-      label: "Wymaga sprawdzenia",
+      stageLabel: "Odbior pracy",
+      label: "Do sprawdzenia",
       tone: "red",
       actionRequired: true,
-      actionLabel: "Sprawdź pracę",
+      actionLabel: "Sprawdz prace",
       actionHref: acceptedHref,
-      note: "Student dostarczył materiał do akceptacji.",
+      note: "Student dostarczyl material do akceptacji.",
     };
   }
 
@@ -217,7 +232,7 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
       actionRequired: true,
       actionLabel: "Uzgodnij warunki",
       actionHref: acceptedHref,
-      note: "Warunki są jeszcze w negocjacji.",
+      note: "Warunki sa jeszcze w negocjacji.",
     };
   }
 
@@ -226,12 +241,12 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
       workState: "action",
       stage: "candidates",
       stageLabel: "Kandydaci",
-      label: "Nowe aplikacje",
-      tone: "amber",
+      label: "Nowe zgloszenia",
+      tone: "indigo",
       actionRequired: true,
-      actionLabel: "Przejrzyj kandydatów",
+      actionLabel: "Przejrzyj kandydatow",
       actionHref: detailHref,
-      note: `${stats.sent} kandydatów czeka na decyzję.`,
+      note: `${stats.sent} kandydatow czeka na decyzje.`,
     };
   }
 
@@ -241,13 +256,11 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
       stage: "delivery",
       stageLabel: "Realizacja",
       label: "W realizacji",
-      tone: "blue",
+      tone: "emerald",
       actionRequired: false,
       actionLabel: "Panel realizacji",
       actionHref: acceptedHref,
-      note: stats.acceptedProfile
-        ? `Realizuje: ${stats.acceptedProfile.first_name}`
-        : "Realizacja jest aktywna.",
+      note: stats.acceptedProfile ? `Realizuje: ${stats.acceptedProfile.first_name}` : "Realizacja jest aktywna.",
     };
   }
 
@@ -255,29 +268,13 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
     workState: "collecting",
     stage: "candidates",
     stageLabel: "Kandydaci",
-    label: "Zbiera kandydatów",
-    tone: "emerald",
+    label: "Zbiera kandydatow",
+    tone: "slate",
     actionRequired: false,
-    actionLabel: "Szczegóły",
+    actionLabel: "Szczegoly",
     actionHref: detailHref,
-    note: stats.total > 0 ? `${stats.total} aplikacji łącznie.` : "Ogłoszenie jest widoczne dla studentów.",
+    note: stats.total > 0 ? `${stats.total} aplikacji lacznie.` : "Ogloszenie jest widoczne dla studentow.",
   };
-}
-
-function statusClasses(tone: OfferCardModel["tone"]) {
-  if (tone === "red") return "border-red-200 bg-red-50 text-red-700";
-  if (tone === "amber") return "border-amber-200 bg-amber-50 text-amber-800";
-  if (tone === "blue") return "border-blue-200 bg-blue-50 text-blue-700";
-  if (tone === "emerald") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  return "border-slate-200 bg-slate-50 text-slate-600";
-}
-
-function stripClasses(tone: OfferCardModel["tone"]) {
-  if (tone === "red") return "bg-red-500";
-  if (tone === "amber") return "bg-amber-500";
-  if (tone === "blue") return "bg-blue-500";
-  if (tone === "emerald") return "bg-emerald-500";
-  return "bg-slate-300";
 }
 
 export default function OfferCard({
@@ -295,102 +292,170 @@ export default function OfferCard({
   const detailHref = getDetailHref(offer);
   const isServiceOrder = offer.itemType === "service_order";
   const itemLabel = offer.itemLabel || (isServiceOrder ? "Usluga" : "Ogloszenie");
-  const performerFallback = isServiceOrder && ["pending_selection", "pending"].includes(offer.status ?? "")
-    ? "Do wyboru wykonawcy"
-    : isServiceOrder
-      ? "Szczegóły w zamówieniu"
-      : "Bez wykonawcy";
+  const performerFallback =
+    isServiceOrder && ["pending_selection", "pending"].includes(offer.status ?? "")
+      ? "Do wyboru wykonawcy"
+      : isServiceOrder
+        ? "Szczegoly w zamowieniu"
+        : "Bez wykonawcy";
+  const tone = COMPANY_CARD_TOKENS[model.tone];
+
+  const banner =
+    model.stage === "review"
+      ? {
+          icon: <ShieldCheck className="h-4 w-4" />,
+          title: "Praca czeka na Twoj odbior",
+          sub: model.note,
+          pill: "Wymagana akcja",
+        }
+      : model.stage === "terms"
+        ? {
+            icon: <HandCoins className="h-4 w-4" />,
+            title: model.actionRequired ? "Trwa uzgadnianie warunkow" : "Czekamy na finalne potwierdzenie",
+            sub: model.note,
+            pill: model.actionRequired ? "Wymagana akcja" : "Czeka na studenta",
+            pillIcon: model.actionRequired ? null : <Clock3 className="h-3 w-3" />,
+          }
+        : model.stage === "candidates"
+          ? {
+              icon: <Users className="h-4 w-4" />,
+              title: model.actionRequired ? "Nowe zgloszenia do przejrzenia" : "Ogloszenie zbiera kandydatow",
+              sub: model.note,
+              pill: model.actionRequired ? "Wymagana akcja" : "Nowe zgloszenia",
+              pillIcon: model.actionRequired ? null : <Sparkles className="h-3 w-3" />,
+            }
+          : model.stage === "delivery"
+            ? {
+                icon: <Zap className="h-4 w-4" />,
+                title: "Projekt jest w realizacji",
+                sub: model.note,
+                pill: "W realizacji",
+                pillIcon: <Sparkles className="h-3 w-3" />,
+              }
+            : model.stage === "done"
+              ? {
+                  icon: <CheckCircle2 className="h-4 w-4" />,
+                  title: "Element zakonczony lub archiwalny",
+                  sub: model.note,
+                  pill: "Zakonczone",
+                  pillIcon: <CheckCircle2 className="h-3 w-3" />,
+                }
+              : null;
 
   return (
-    <article className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md">
+    <article
+      className="relative overflow-hidden bg-white"
+      style={{
+        borderRadius: compact ? 24 : 28,
+        border: "1px solid #eef0f4",
+        boxShadow: model.actionRequired
+          ? `0 0 0 2px ${tone.ring}, 0 18px 50px -12px ${tone.glow}, 0 4px 12px rgba(15,36,96,0.04)`
+          : "0 4px 18px rgba(15,36,96,0.05)",
+      }}
+    >
       <div className="flex">
-        <div className={cn("w-1.5 shrink-0 transition group-hover:w-2", stripClasses(model.tone))} />
-        <div className={cn("grid flex-1 gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_auto]", compact && "p-5")}>
-          <div className="min-w-0 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {model.actionRequired ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900 ring-1 ring-amber-200">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Akcja
-                </span>
-              ) : null}
-              <Badge variant="outline" className={cn("rounded-full px-3 py-1 font-bold", statusClasses(model.tone))}>
-                {model.label}
-              </Badge>
-              <Badge variant="outline" className="rounded-full border-indigo-100 bg-indigo-50/70 px-3 py-1 font-bold text-indigo-700">
-                Etap: {model.stageLabel}
-              </Badge>
-              <Badge variant="outline" className="rounded-full border-slate-200 bg-white px-3 py-1 font-bold text-slate-500">
-                {itemLabel}
-              </Badge>
-            </div>
+        <div className="w-2 shrink-0" style={{ background: tone.barGrad }} />
 
-            <div>
-              <Link
-                href={detailHref}
-                className="block truncate text-xl font-black leading-tight text-slate-950 transition hover:text-indigo-700"
+        <div className={`flex-1 ${compact ? "p-5" : "p-6"}`}>
+          {banner ? (
+            <div
+              className="mb-5 flex items-center gap-3 rounded-2xl px-4 py-3"
+              style={{ background: tone.bannerBg, border: `1px solid ${tone.bannerBorder}` }}
+            >
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-white"
+                style={{ color: tone.bar, boxShadow: `0 2px 8px ${tone.glow}` }}
               >
-                {offer.tytul || (isServiceOrder ? "Zamówienie usługi" : "Ogłoszenie bez tytułu")}
+                {banner.icon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13.5px] font-extrabold text-slate-900">{banner.title}</div>
+                <div className="mt-0.5 text-xs font-semibold" style={{ color: tone.text }}>
+                  {banner.sub}
+                </div>
+              </div>
+              <CompanyStatePill tone={model.tone} solid icon={banner.pillIcon}>
+                {banner.pill}
+              </CompanyStatePill>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-5 xl:flex-row">
+            <div className="min-w-0 flex-1">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <CompanyStatePill tone={model.tone}>{model.label}</CompanyStatePill>
+                <CompanyStatePill tone={model.tone}>{model.stageLabel}</CompanyStatePill>
+                <CompanyStatePill tone="slate">{itemLabel}</CompanyStatePill>
+              </div>
+
+              <Link href={detailHref} className="block text-xl font-black leading-tight text-slate-950 transition hover:text-indigo-700">
+                {offer.tytul || (isServiceOrder ? "Zamowienie uslugi" : "Ogloszenie bez tytulu")}
               </Link>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                <span className="font-semibold text-slate-700">Następny krok:</span> {model.note}
-              </p>
-            </div>
 
-            <div className="flex flex-wrap gap-2 text-sm text-slate-600">
-              <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-1.5 font-medium ring-1 ring-slate-200">
-                <CalendarClock className="h-4 w-4 text-slate-400" />
-                {formatDate(offer.created_at)}
-              </span>
-              {isServiceOrder ? null : (
-                <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-1.5 font-medium ring-1 ring-slate-200">
-                  <Zap className="h-4 w-4 text-amber-500" />
-                  {stats.total} aplikacji
+              <div className="mb-3 mt-3 flex flex-wrap gap-3 text-[11.5px] font-semibold text-slate-400">
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  {formatDate(offer.created_at)}
                 </span>
-              )}
-              {stats.acceptedProfile ? (
-                <Link
-                  href={`/app/students/${stats.acceptedProfile.id}`}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-1.5 font-bold text-indigo-700 ring-1 ring-indigo-100 hover:bg-indigo-100"
-                >
-                  <Users className="h-4 w-4" />
-                  {stats.acceptedProfile.first_name}
-                </Link>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-1.5 font-medium text-slate-500 ring-1 ring-slate-200">
-                  <Users className="h-4 w-4" />
-                  {performerFallback}
+                <span className="inline-flex items-center gap-1.5">
+                  <Briefcase className="h-3.5 w-3.5" />
+                  {isServiceOrder ? "Usluga systemowa" : offer.typ || "Ogloszenie"}
                 </span>
-              )}
-            </div>
-          </div>
+                <span className="inline-flex items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5" />
+                  {isServiceOrder ? "Panel firmy" : `${stats.total} aplikacji`}
+                </span>
+              </div>
 
-          <div className="flex flex-col justify-between gap-4 lg:min-w-[220px] lg:items-end">
-            <div className="lg:text-right">
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
-                {isInProgress && stats.agreedStawka ? "Uzgodniona stawka" : "Budżet"}
-              </p>
-              <p className="mt-1 text-2xl font-black text-slate-950">{getBudgetLabel(offer, stats, isInProgress)}</p>
+              <div className="mb-4 rounded-r-xl border-l-[3px] bg-slate-50 px-4 py-3 text-sm italic leading-6 text-slate-600" style={{ borderLeftColor: tone.bar }}>
+                {model.note}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {stats.acceptedProfile ? (
+                  <Link
+                    href={`/app/students/${stats.acceptedProfile.id}`}
+                    className="inline-flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                  >
+                    <Users className="h-4 w-4" />
+                    {stats.acceptedProfile.first_name}
+                  </Link>
+                ) : (
+                  <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">
+                    <Users className="h-4 w-4" />
+                    {performerFallback}
+                  </span>
+                )}
+
+                {chatAction ? (
+                  <form action={chatAction}>
+                    <Button type="submit" variant="outline" className="h-9 rounded-xl border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      Czat
+                    </Button>
+                  </form>
+                ) : null}
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button asChild className="h-11 rounded-xl bg-slate-950 px-5 font-bold text-white shadow-lg shadow-slate-200 transition hover:bg-indigo-700 hover:shadow-indigo-200">
+            <div className="flex w-full flex-col gap-3 xl:w-[248px] xl:shrink-0">
+              <div className="flex gap-2">
+                <CompanyMetricTile
+                  label={isInProgress && stats.agreedStawka ? "Stawka uzgodniona" : "Budzet"}
+                  value={getBudgetLabel(offer, stats, isInProgress)}
+                  sub={isServiceOrder ? "Zamowienie firmy" : "Kwota oferty"}
+                  noWrapValue
+                />
+                {model.actionRequired ? (
+                  <CompanyMetricTile label="Status" value={model.stageLabel} sub={model.label} tone={model.tone} emphasize />
+                ) : null}
+              </div>
+
+              <Button asChild className="h-11 rounded-2xl bg-gradient-to-r from-slate-950 to-slate-800 font-extrabold text-white hover:from-indigo-700 hover:to-indigo-600">
                 <Link href={model.actionHref}>
-                  {model.actionRequired ? (
-                    <AlertTriangle className="mr-2 h-4 w-4" />
-                  ) : model.workState === "closed" ? (
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                  ) : null}
                   {model.actionLabel}
                 </Link>
               </Button>
-              {chatAction ? (
-                <form action={chatAction}>
-                  <Button type="submit" variant="outline" size="icon" className="h-11 w-11 rounded-xl border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700">
-                    <MessageSquare className="h-4 w-4" />
-                  </Button>
-                </form>
-              ) : null}
             </div>
           </div>
         </div>

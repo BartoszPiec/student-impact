@@ -51,10 +51,14 @@ export function ChatList({
     messages,
     userId,
     conversationId,
+    applicationStatus,
+    conversationStatus,
 }: {
     messages: ChatMessageRecord[];
     userId: string;
     conversationId: string;
+    applicationStatus?: string | null;
+    conversationStatus?: string | null;
 }) {
     const supabase = useMemo(() => createClient(), []);
     const router = useRouter();
@@ -137,6 +141,11 @@ export function ChatList({
         }
         return null;
     }, [normalizedMessages]);
+
+    const isConversationLocked =
+        conversationStatus === "inactive" ||
+        applicationStatus === "rejected" ||
+        applicationStatus === "cancelled";
 
 
     const lastMessageId = liveMessages.length > 0 ? liveMessages[liveMessages.length - 1].id : null;
@@ -309,7 +318,8 @@ export function ChatList({
                                         isLatest={msg.id === latestRateProposalId}
                                         conversationId={conversationId}
                                         messageId={msg.id}
-                                        status={statusMap.get(msg.id) || "pending"}
+                                        status={isConversationLocked ? "rejected" : (statusMap.get(msg.id) || "pending")}
+                                        locked={isConversationLocked}
                                     />
                                 );
                             })()}
@@ -321,7 +331,7 @@ export function ChatList({
                                     isLatest={msg.id === latestDeadlineProposalId}
                                     conversationId={conversationId}
                                     messageId={msg.id}
-                                    status={statusMap.get(msg.id) || "pending"}
+                                    status={isConversationLocked ? "rejected" : (statusMap.get(msg.id) || "pending")}
                                 />
                             )}
 

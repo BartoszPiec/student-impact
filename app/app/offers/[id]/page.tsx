@@ -10,7 +10,9 @@ import SaveButton from "./save-button";
 import { openChatForApplication, openChatForOfferInquiry } from "@/app/app/chat/_actions";
 import { Clock, MapPin, Building2, Briefcase, GraduationCap, ArrowLeft, CheckCircle2, MessageSquare, Lock, HelpCircle, Star, Zap } from "lucide-react";
 import { PageContainer } from "@/components/ui/page-container";
+import { ReviewBreakdown } from "@/components/reviews/ReviewBreakdown";
 import { parsePackageBriefDescription } from "@/lib/services/package-customization";
+import { parseDetailedReviewComment } from "@/lib/reviews";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +43,8 @@ type OfferDetails = {
   portfolio_dozwolone?: boolean | null;
   materialy_legalnie_udostepnione?: boolean | null;
   obligations?: string | string[] | null;
+  realization_mode?: "student_defined" | "company_defined" | null;
+  company_milestones?: unknown;
 };
 
 type ReviewSummary = {
@@ -51,6 +55,11 @@ type ReviewSummary = {
 type MetaItem = {
   label: string;
   value: string;
+};
+
+type CompanyMilestoneTemplate = {
+  title: string;
+  acceptance_criteria: string;
 };
 
 function getCompanyName(companyProfiles: CompanyProfileRelation) {
@@ -120,6 +129,25 @@ function splitTaskLines(value: unknown) {
     .split(/\r?\n|•|(?:^|\s)-\s+/)
     .map((line) => line.trim())
     .filter((line) => isMeaningfulText(line) && !/^https?:\/\//i.test(line));
+}
+
+function parseCompanyMilestones(value: unknown): CompanyMilestoneTemplate[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+
+      const title = String((entry as { title?: unknown }).title ?? "").trim();
+      const acceptance_criteria = String(
+        (entry as { acceptance_criteria?: unknown }).acceptance_criteria ?? "",
+      ).trim();
+
+      if (!title) return null;
+
+      return { title, acceptance_criteria };
+    })
+    .filter((entry): entry is CompanyMilestoneTemplate => Boolean(entry));
 }
 
 function InlineText({ text }: { text: string }) {
@@ -353,6 +381,7 @@ export default async function OfferDetailsPage({
       .maybeSingle();
     myReview = rev as ReviewSummary | null;
   }
+  const parsedMyReview = myReview ? parseDetailedReviewComment(myReview.comment) : null;
 
   let isLockedForNewApplications = false;
   if (!offerRow.is_platform_service) {
@@ -481,6 +510,9 @@ export default async function OfferDetailsPage({
     offerRow.materialy_legalnie_udostepnione ? "Materialy firmy zweryfikowane" : null,
   ].filter((signal): signal is string => Boolean(signal));
   const responsibilityLines = splitTaskLines(offerRow.obligations || offer.wymagania);
+  const companyMilestones = parseCompanyMilestones(offerRow.company_milestones);
+  const hasCompanyDefinedMilestones =
+    offerRow.realization_mode === "company_defined" && companyMilestones.length > 0;
   const obligationsForApplyCard = Array.isArray(offerRow.obligations)
     ? offerRow.obligations.join("\n")
     : offerRow.obligations ?? undefined;
@@ -689,6 +721,45 @@ export default async function OfferDetailsPage({
               </section>
             )}
 
+            {hasCompanyDefinedMilestones && (
+              <section className="bg-white rounded-[2rem] p-8 md:p-12 border border-indigo-100 shadow-xl shadow-slate-200/30">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
+                  <span className="w-8 h-1 bg-indigo-500 rounded-full"></span>
+                  Etapy realizacji ustalone przez firme
+                </h3>
+
+                <div className="mb-8 rounded-[1.75rem] border border-indigo-100 bg-indigo-50/70 p-5">
+                  <p className="text-sm font-semibold leading-7 text-slate-700">
+                    Firma publikujac to mikrozlecenie od razu ustalila plan pracy. Po akceptacji kandydata te etapy
+                    przejda do kontraktu bez dodatkowej negocjacji, a rozliczenie calej kwoty nastapi po odbiorze
+                    finalnego etapu.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  {companyMilestones.map((milestone, index) => (
+                    <div key={`${milestone.title}-${index}`} className="rounded-[1.75rem] border border-slate-100 bg-slate-50/80 p-6">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Badge className="rounded-full bg-indigo-600 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white">
+                          Etap {index + 1}
+                        </Badge>
+                        <p className="text-lg font-black text-slate-900">{milestone.title}</p>
+                      </div>
+                      {milestone.acceptance_criteria ? (
+                        <p className="mt-4 whitespace-pre-line text-base font-medium leading-8 text-slate-600">
+                          {milestone.acceptance_criteria}
+                        </p>
+                      ) : (
+                        <p className="mt-4 text-sm font-medium text-slate-500">
+                          Szczegolowe kryteria tego etapu zostana doprecyzowane w realizacji.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Technologies / Skills */}
             {offer.technologies && offer.technologies.length > 0 && (
               <section className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
@@ -790,7 +861,12 @@ export default async function OfferDetailsPage({
                               <div className="font-bold text-slate-900">Ocena Klienta: {myReview.rating}/5</div>
                             </div>
                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-sm text-slate-600 italic text-center">
-                              &ldquo;{myReview.comment}&rdquo;
+                              <div className="space-y-3">
+                                <ReviewBreakdown ratings={parsedMyReview?.categories ?? {}} compact />
+                                <div>
+                                  {parsedMyReview?.displayComment ? `“${parsedMyReview.displayComment}”` : "Bez dodatkowego komentarza."}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         ) : (
@@ -857,6 +933,8 @@ export default async function OfferDetailsPage({
                     offerTitle={offer.tytul}
                     offerDescription={offer.opis}
                     obligations={obligationsForApplyCard}
+                    realizationMode={offerRow.realization_mode}
+                    companyMilestones={companyMilestones}
                   />
                 ) : (
                   <Card className="border-none rounded-[2.5rem] bg-slate-50 p-8 text-center border border-dashed border-slate-200">

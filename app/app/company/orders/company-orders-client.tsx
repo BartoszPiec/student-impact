@@ -1,97 +1,340 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { format } from "date-fns";
-import { pl } from "date-fns/locale";
-import { ArrowRight, Briefcase, Calendar, Search, SlidersHorizontal, Sparkles, UserRound, Wallet, X } from "lucide-react";
+import { Archive, ClipboardCheck, Search, SlidersHorizontal, Timer, Users } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getRequestSnapshotPreview, isRequestSnapshot } from "@/lib/services/service-order-snapshots";
+import { cn } from "@/lib/utils";
+import OfferCard, {
+  resolveOfferCardModel,
+  type CompanyOffer,
+  type CompanyOfferStats,
+} from "../offers/offer-card";
+import { getCompanyOrderStatusOptions } from "./company-order-status";
 
-import {
-  COMPANY_ORDER_BUCKETS,
-  getCompanyOrderBucket,
-  getCompanyOrderStatusMeta,
-  getCompanyOrderStatusOptions,
-} from "./company-order-status";
+type ServiceOrderRow = {
+  id: string;
+  created_at: string | null;
+  status: string | null;
+  amount: number | null;
+  counter_amount: number | null;
+  student_id: string | null;
+  package:
+    | {
+        id?: string | null;
+        title?: string | null;
+      }
+    | {
+        id?: string | null;
+        title?: string | null;
+      }[]
+    | null;
+};
 
-interface CompanyOrdersClientProps {
-  initialOrders: any[];
-  studentData: Record<string, any>;
+type StudentProfilePreview = {
+  public_name: string | null;
+};
+
+type CompanyOrdersClientProps = {
+  initialOrders: ServiceOrderRow[];
+  studentData: Record<string, StudentProfilePreview>;
+};
+
+type FilterKey = "all" | "action" | "terms" | "delivery" | "closed";
+
+type OrderListItem = {
+  order: ServiceOrderRow;
+  offer: CompanyOffer;
+  stats: CompanyOfferStats;
+  state: ReturnType<typeof resolveOfferCardModel>["workState"];
+  stage: ReturnType<typeof resolveOfferCardModel>["stage"];
+  actionRequired: boolean;
+};
+
+const emptyStats: CompanyOfferStats = {
+  total: 0,
+  sent: 0,
+  accepted: 0,
+  hasApproved: false,
+  hasDelivered: false,
+  acceptedAppId: null,
+  acceptedProfile: null,
+  acceptedStudentId: null,
+  agreedStawka: null,
+  contractStatus: null,
+};
+
+const filters: Array<{ key: FilterKey; label: string }> = [
+  { key: "all", label: "Wszystkie" },
+  { key: "action", label: "Do decyzji" },
+  { key: "terms", label: "Warunki" },
+  { key: "delivery", label: "W realizacji" },
+  { key: "closed", label: "Archiwum" },
+];
+
+function SummaryTile({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  tone: "indigo" | "amber" | "emerald" | "slate";
+}) {
+  const toneClass =
+    tone === "indigo"
+      ? "bg-indigo-100 text-indigo-700"
+      : tone === "amber"
+        ? "bg-amber-100 text-amber-700"
+        : tone === "emerald"
+          ? "bg-emerald-100 text-emerald-700"
+          : "bg-slate-100 text-slate-600";
+
+  return (
+    <div className="rounded-2xl px-4 py-3 transition hover:bg-slate-50">
+      <div className="flex items-center justify-between gap-3">
+        <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", toneClass)}>{icon}</div>
+        <span className="text-2xl font-black text-slate-950">{value}</span>
+      </div>
+      <p className="mt-3 text-sm font-bold text-slate-600">{label}</p>
+    </div>
+  );
+}
+
+function EmptyState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 px-5 py-10 text-center shadow-sm">
+      <p className="font-semibold text-slate-900">{title}</p>
+      <p className="mt-1 text-sm text-slate-500">{description}</p>
+    </div>
+  );
+}
+
+function Section({
+  title,
+  description,
+  items,
+}: {
+  title: string;
+  description: string;
+  items: OrderListItem[];
+}) {
+  if (items.length === 0) return null;
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-200 pb-3">
+        <div>
+          <h2 className="text-lg font-black text-slate-950">{title}</h2>
+          <p className="mt-1 text-sm font-medium text-slate-500">{description}</p>
+        </div>
+        <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-black text-indigo-700">{items.length}</span>
+      </div>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <OfferCard key={item.order.id} offer={item.offer} stats={item.stats} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function orderToOffer(order: ServiceOrderRow): CompanyOffer {
+  const pkg = Array.isArray(order.package) ? order.package[0] ?? null : order.package;
+
+  return {
+    id: order.id,
+    itemType: "service_order",
+    itemLabel: "Usluga",
+    tytul: pkg?.title || "Zamowienie uslugi",
+    typ: "service_order",
+    stawka: order.amount,
+    status: order.status,
+    created_at: order.created_at,
+    location: null,
+    salary_range_min: null,
+    salary_range_max: null,
+    is_remote: null,
+    contract_type: null,
+    is_platform_service: true,
+  };
 }
 
 export default function CompanyOrdersClient({ initialOrders, studentData }: CompanyOrdersClientProps) {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState("newest");
+  const [filter, setFilter] = useState<FilterKey>("all");
 
-  const filteredOrders = useMemo(() => {
-    let result = [...initialOrders];
+  const allItems = useMemo<OrderListItem[]>(
+    () =>
+      initialOrders.map((order) => {
+        const offer = orderToOffer(order);
+        const preview = order.student_id ? studentData[order.student_id] : null;
+        const stats: CompanyOfferStats = {
+          ...emptyStats,
+          acceptedStudentId: order.student_id,
+          acceptedProfile: order.student_id
+            ? {
+                id: order.student_id,
+                first_name: preview?.public_name || "Student",
+                last_name: "",
+              }
+            : null,
+        };
+        const model = resolveOfferCardModel(offer, stats);
+        return {
+          order,
+          offer,
+          stats,
+          state: model.workState,
+          stage: model.stage,
+          actionRequired: model.actionRequired,
+        };
+      }),
+    [initialOrders, studentData],
+  );
 
-    if (searchTerm) {
-      const lowerSearch = searchTerm.toLowerCase();
-      result = result.filter((order) => {
-        const title = order.package?.title?.toLowerCase() || "";
-        const studentName = studentData[order.student_id]?.public_name?.toLowerCase() || "";
-        return title.includes(lowerSearch) || studentName.includes(lowerSearch);
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    let result = [...allItems];
+
+    if (normalizedQuery) {
+      result = result.filter((item) => {
+        const title = item.offer.tytul?.toLowerCase() ?? "";
+        const performer = item.stats.acceptedProfile?.first_name.toLowerCase() ?? "";
+        return title.includes(normalizedQuery) || performer.includes(normalizedQuery);
       });
     }
 
     if (status !== "all") {
-      result = result.filter((order) => order.status === status);
+      result = result.filter((item) => item.order.status === status);
     }
 
     result.sort((a, b) => {
-      if (sort === "newest") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      if (sort === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      if (sort === "amount_desc") return (b.counter_amount ?? b.amount ?? 0) - (a.counter_amount ?? a.amount ?? 0);
-      if (sort === "amount_asc") return (a.counter_amount ?? a.amount ?? 0) - (b.counter_amount ?? b.amount ?? 0);
-      return 0;
+      if (sort === "oldest") {
+        return new Date(a.order.created_at ?? 0).getTime() - new Date(b.order.created_at ?? 0).getTime();
+      }
+      if (sort === "amount_desc") {
+        return (b.order.counter_amount ?? b.order.amount ?? 0) - (a.order.counter_amount ?? a.order.amount ?? 0);
+      }
+      if (sort === "amount_asc") {
+        return (a.order.counter_amount ?? a.order.amount ?? 0) - (b.order.counter_amount ?? b.order.amount ?? 0);
+      }
+      return new Date(b.order.created_at ?? 0).getTime() - new Date(a.order.created_at ?? 0).getTime();
     });
 
     return result;
-  }, [initialOrders, searchTerm, status, sort, studentData]);
+  }, [allItems, query, sort, status]);
 
-  const sectionedOrders = useMemo(
-    () =>
-      COMPANY_ORDER_BUCKETS.map((bucket) => ({
-        ...bucket,
-        orders: filteredOrders.filter((order) => getCompanyOrderBucket(order.status) === bucket.key),
-      })),
-    [filteredOrders],
-  );
+  const actionItems = filteredItems.filter((item) => item.actionRequired);
+  const termsItems = filteredItems.filter((item) => item.stage === "terms");
+  const deliveryItems = filteredItems.filter((item) => item.stage === "delivery");
+  const closedItems = filteredItems.filter((item) => item.state === "closed");
+  const inProgressItems = filteredItems.filter((item) => !item.actionRequired && item.state !== "closed");
 
-  const clearFilters = () => {
-    setSearchTerm("");
-    setStatus("all");
-    setSort("newest");
-  };
+  const visibleItems =
+    filter === "action"
+      ? actionItems
+      : filter === "terms"
+        ? termsItems
+        : filter === "delivery"
+          ? deliveryItems
+          : filter === "closed"
+            ? closedItems
+            : filteredItems;
 
   return (
-    <div className="space-y-8">
-      <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-xl shadow-slate-200/40">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center">
-          <div className="relative w-full md:flex-1">
-            <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            <Input
-              placeholder="Szukaj po nazwie usługi albo studencie..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-12 font-medium focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
-            />
+    <div className="space-y-7">
+      <div className="rounded-[1.75rem] border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="grid gap-1 md:grid-cols-4">
+          <SummaryTile icon={<Users className="h-4 w-4" />} label="Do decyzji" value={actionItems.length} tone="indigo" />
+          <SummaryTile icon={<SlidersHorizontal className="h-4 w-4" />} label="Warunki" value={termsItems.length} tone="amber" />
+          <SummaryTile icon={<Timer className="h-4 w-4" />} label="W realizacji" value={deliveryItems.length} tone="emerald" />
+          <SummaryTile icon={<ClipboardCheck className="h-4 w-4" />} label="Archiwum" value={closedItems.length} tone="slate" />
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-2xl font-black tracking-tight text-slate-950">Moje zamowienia uslug</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              {actionItems.length > 0
+                ? `${actionItems.length} pozycji czeka teraz na reakcje firmy.`
+                : "Brak pozycji wymagajacych natychmiastowej reakcji."}
+            </p>
           </div>
 
-          <div className="no-scrollbar flex w-full gap-3 overflow-x-auto pb-2 md:w-auto md:pb-0">
+          <label className="relative block w-full lg:w-[320px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Szukaj po tytule lub studencie"
+              className="h-11 rounded-2xl border-slate-200 bg-white pl-9 font-medium shadow-inner"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {filters.map((item) => {
+              const count =
+                item.key === "action"
+                  ? actionItems.length
+                  : item.key === "terms"
+                    ? termsItems.length
+                    : item.key === "delivery"
+                      ? deliveryItems.length
+                      : item.key === "closed"
+                        ? closedItems.length
+                        : filteredItems.length;
+
+              const isActive = filter === item.key;
+
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setFilter(item.key)}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition",
+                    isActive
+                      ? item.key === "action"
+                        ? "border-indigo-200 bg-indigo-600 text-white"
+                        : item.key === "terms"
+                          ? "border-amber-200 bg-amber-50 text-amber-800"
+                          : item.key === "delivery"
+                            ? "border-emerald-200 bg-emerald-600 text-white"
+                            : item.key === "closed"
+                              ? "border-slate-300 bg-slate-700 text-white"
+                              : "border-indigo-200 bg-indigo-600 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+                  )}
+                >
+                  {item.label}
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-xs",
+                      isActive ? "bg-white/20 text-current" : "bg-slate-100 text-slate-500",
+                    )}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="h-12 w-[220px] rounded-2xl border-slate-200 bg-white font-bold text-slate-700">
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="h-4 w-4 text-slate-400" />
-                  <SelectValue placeholder="Status" />
-                </div>
+              <SelectTrigger className="h-11 w-full rounded-2xl border-slate-200 bg-white font-bold text-slate-700 sm:w-[230px]">
+                <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 {getCompanyOrderStatusOptions().map((option) => (
@@ -103,172 +346,61 @@ export default function CompanyOrdersClient({ initialOrders, studentData }: Comp
             </Select>
 
             <Select value={sort} onValueChange={setSort}>
-              <SelectTrigger className="h-12 w-[180px] rounded-2xl border-slate-200 bg-white font-bold text-slate-700">
+              <SelectTrigger className="h-11 w-full rounded-2xl border-slate-200 bg-white font-bold text-slate-700 sm:w-[190px]">
                 <SelectValue placeholder="Sortowanie" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="newest">Najnowsze</SelectItem>
                 <SelectItem value="oldest">Najstarsze</SelectItem>
-                <SelectItem value="amount_desc">Kwota: najwyższa</SelectItem>
-                <SelectItem value="amount_asc">Kwota: najniższa</SelectItem>
+                <SelectItem value="amount_desc">Kwota malejaco</SelectItem>
+                <SelectItem value="amount_asc">Kwota rosnaco</SelectItem>
               </SelectContent>
             </Select>
-
-            {(status !== "all" || sort !== "newest" || searchTerm) && (
-              <Button
-                onClick={clearFilters}
-                variant="ghost"
-                size="icon"
-                className="h-12 w-12 shrink-0 rounded-2xl text-slate-400 hover:bg-red-50 hover:text-red-500"
-                title="Wyczyść filtry"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            )}
           </div>
         </div>
       </div>
 
-      {filteredOrders.length === 0 ? (
-        <div className="py-24 text-center">
-          <div className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-[2.5rem] border border-slate-100 bg-slate-50">
-            <Sparkles className="h-10 w-10 text-slate-200" />
-          </div>
-          <h3 className="mb-2 text-2xl font-black text-slate-900">
-            {searchTerm || status !== "all" ? "Brak wyników wyszukiwania" : "Brak aktywnych zamówień usług"}
-          </h3>
-          <p className="mx-auto mb-10 max-w-sm font-medium text-slate-500">
-            {searchTerm || status !== "all"
-              ? "Spróbuj zmienić kryteria wyszukiwania lub zresetuj filtry."
-              : "Gdy zamówisz usługę od studenta, pojawi się ona tutaj razem z negocjacjami i dalszymi krokami."}
-          </p>
-          <Link href="/app/company/packages">
-            <Button className="h-14 rounded-2xl bg-slate-900 px-10 font-black text-white hover:bg-indigo-600">
-              Przejdź do katalogu usług
-            </Button>
-          </Link>
+      {filteredItems.length === 0 ? (
+        <EmptyState
+          title="Brak zamowien w tym widoku"
+          description="Zmien filtr albo wpisz inna fraze w wyszukiwarce."
+        />
+      ) : filter === "all" ? (
+        <div className="space-y-8">
+          <Section
+            title="Wymaga reakcji firmy"
+            description="Wyceny, wybor wykonawcy i etapy, w ktorych decyzja jest teraz po Twojej stronie."
+            items={actionItems}
+          />
+          <Section
+            title="W toku"
+            description="Zamowienia po uzgodnieniach, ktore nie wymagaja teraz bezposredniej reakcji firmy."
+            items={inProgressItems}
+          />
+          {closedItems.length > 0 ? (
+            <details className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+                <Archive className="h-4 w-4" />
+                Zakonczone elementy ({closedItems.length})
+              </summary>
+              <div className="mt-4 space-y-3">
+                {closedItems.map((item) => (
+                  <OfferCard key={item.order.id} offer={item.offer} stats={item.stats} compact />
+                ))}
+              </div>
+            </details>
+          ) : null}
         </div>
+      ) : visibleItems.length === 0 ? (
+        <EmptyState
+          title="Brak elementow w tym widoku"
+          description="Zmien filtr lub status, aby zobaczyc inne zamowienia."
+        />
       ) : (
-        <div className="space-y-10">
-          {sectionedOrders.map((section) => {
-            if (section.orders.length === 0) {
-              return null;
-            }
-
-            return (
-              <section key={section.key} className="space-y-4">
-                <div className="flex flex-col gap-3 rounded-[2rem] border border-slate-100 bg-white p-6 shadow-lg shadow-slate-200/30 md:flex-row md:items-end md:justify-between">
-                  <div className="space-y-2">
-                    <div className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                      <Briefcase className="h-3.5 w-3.5" />
-                      {section.title}
-                    </div>
-                    <h2 className="text-2xl font-black text-slate-900">{section.title}</h2>
-                    <p className="max-w-3xl text-sm font-medium leading-relaxed text-slate-500">{section.description}</p>
-                  </div>
-                  <div className="inline-flex h-12 min-w-[88px] items-center justify-center rounded-2xl bg-slate-900 px-4 text-xl font-black text-white">
-                    {section.orders.length}
-                  </div>
-                </div>
-
-                <div className="grid gap-6">
-                  {section.orders.map((order: any) => {
-                    const statusMeta = getCompanyOrderStatusMeta(order.status);
-                    const studentName = order.student_id
-                      ? (studentData[order.student_id]?.public_name || "Student wykonawca")
-                      : "Do wyboru";
-                    const amountLabel = order.status === "countered" && order.counter_amount ? order.counter_amount : order.amount;
-
-                    return (
-                      <Card
-                        key={order.id}
-                        className="group relative overflow-hidden rounded-[2rem] border-none bg-white shadow-xl shadow-slate-200/50 ring-1 ring-slate-100 transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/10"
-                      >
-                        <CardContent className="p-0">
-                          <div className="flex flex-col lg:flex-row">
-                            <div className="flex flex-col justify-between gap-6 border-r border-slate-100 bg-slate-50 p-8 transition-colors group-hover:bg-indigo-50/30 lg:w-72">
-                              <div className="space-y-4">
-                                <span className={`inline-flex rounded-full px-4 py-1.5 text-[10px] font-black uppercase tracking-widest ${statusMeta.badgeClass}`}>
-                                  {statusMeta.label}
-                                </span>
-
-                                <div className="flex flex-col gap-1">
-                                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                    {order.status === "proposal_sent" ? "OFERTA STUDENTA" : order.status === "countered" ? "TWOJA KONTROFERTA" : "WYNAGRODZENIE"}
-                                  </p>
-                                  <div className="flex items-center gap-2 text-2xl font-black tabular-nums text-slate-900">
-                                    <Wallet className="h-5 w-5 text-indigo-500" />
-                                    {amountLabel}
-                                    <span className="text-xs font-bold text-slate-400">PLN</span>
-                                  </div>
-                                  {order.status === "countered" && typeof order.amount === "number" && order.amount !== order.counter_amount ? (
-                                    <p className="text-xs font-medium text-slate-500">Wycena studenta: {order.amount} PLN</p>
-                                  ) : null}
-                                </div>
-                              </div>
-
-                              <div className="space-y-3">
-                                <p className="text-sm font-semibold leading-relaxed text-slate-600">{statusMeta.summaryLabel}</p>
-                                <div className="rounded-xl border border-white bg-white/80 px-3 py-2 text-xs font-black uppercase tracking-widest text-indigo-700 shadow-sm">
-                                  Następna akcja: {statusMeta.nextActionLabel}
-                                </div>
-                                <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                                  <Calendar className="h-3.5 w-3.5" />
-                                  {format(new Date(order.created_at), "d MMM yyyy", { locale: pl }).toUpperCase()}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-1 flex-col p-8">
-                              <div className="flex-1 space-y-6">
-                                <div className="space-y-2">
-                                  <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">ZAMÓWIONA USŁUGA</p>
-                                  <Link href={`/app/company/orders/${order.id}`} className="block">
-                                    <h3 className="line-clamp-1 text-2xl font-black text-slate-900 transition-colors group-hover:text-indigo-600">
-                                      {order.package?.title || "Usługa archiwalna"}
-                                    </h3>
-                                  </Link>
-                                </div>
-
-                                <div className="flex items-center gap-3">
-                                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-400 transition-all group-hover:bg-white group-hover:shadow-md">
-                                    <UserRound className="h-5 w-5" />
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">WYKONAWCA</p>
-                                    <p className="font-bold text-slate-700">{studentName}</p>
-                                  </div>
-                                </div>
-
-                                <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-6 transition-all group-hover:border-indigo-100 group-hover:bg-white">
-                                  <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">BRIEF I ZAKRES</p>
-                                  <p className="line-clamp-2 text-sm font-medium leading-relaxed text-slate-600">
-                                    {getRequestSnapshotPreview(
-                                      isRequestSnapshot(order.request_snapshot) ? order.request_snapshot : null,
-                                      order.requirements,
-                                    )}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-center p-8 lg:border-l lg:border-slate-50">
-                              <Link href={`/app/company/orders/${order.id}`} className="w-full lg:w-auto">
-                                <Button className="group/btn flex h-14 w-full items-center gap-3 rounded-2xl border-none bg-slate-900 px-8 font-black text-white shadow-xl transition-all hover:bg-indigo-600 lg:w-auto">
-                                  SZCZEGÓŁY
-                                  <ArrowRight className="h-5 w-5 transition-transform group-hover/btn:translate-x-1" />
-                                </Button>
-                              </Link>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
+        <div className="space-y-3">
+          {visibleItems.map((item) => (
+            <OfferCard key={item.order.id} offer={item.offer} stats={item.stats} />
+          ))}
         </div>
       )}
     </div>

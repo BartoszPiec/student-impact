@@ -452,8 +452,10 @@ export async function POST(req: NextRequest) {
       sessionId: session.id,
     });
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : "Nie udalo sie przygotowac platnosci.";
     console.error("Stripe checkout error:", error);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json(
+      { error: "Nie udalo sie przygotowac platnosci. Sprobuj ponownie za chwile." },
+      { status: 500 },
+    );
   }
 }

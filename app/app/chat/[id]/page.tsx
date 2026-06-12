@@ -29,6 +29,7 @@ type ChatPackage = {
 
 type ChatConversation = {
   id: string;
+  status: string | null;
   company_id: string;
   student_id: string;
   offer_id: string | null;
@@ -36,6 +37,19 @@ type ChatConversation = {
   application_id: string | null;
   offers: ChatOffer | ChatOffer[] | null;
   package: ChatPackage | ChatPackage[] | null;
+};
+
+type ChatMessageRecord = {
+  id: string;
+  sender_id: string;
+  content: string | null;
+  created_at: string;
+  read_at?: string | null;
+  attachment_url?: string | null;
+  attachment_type?: string | null;
+  flagged_by?: string[] | null;
+  event?: string | null;
+  payload?: Record<string, unknown> | null;
 };
 
 function unwrapRelation<T>(value: T | T[] | null | undefined): T | null {
@@ -56,7 +70,7 @@ export default async function ChatPage({
 
   const { data: conv, error: convErr } = await supabase
     .from("conversations")
-    .select("id, company_id, student_id, offer_id, package_id, application_id, offers(id, tytul, stawka, typ, is_private, service_package_id, status), package:service_packages(title, price, is_system)")
+    .select("id, status, company_id, student_id, offer_id, package_id, application_id, offers(id, tytul, stawka, typ, is_private, service_package_id, status), package:service_packages(title, price, is_system)")
     .eq("id", id)
     .single();
 
@@ -109,11 +123,31 @@ export default async function ChatPage({
     if (fb) appRow = fb;
   }
 
-  const { data: msgs } = await supabase
+  let { data: msgs, error: msgsErr } = await supabase
     .from("messages")
     .select("id, sender_id, content, created_at, read_at, flagged_by, attachment_url, attachment_type, event, payload")
     .eq("conversation_id", conversation.id)
     .order("created_at", { ascending: true });
+
+  if (msgsErr && (msgsErr.code === "42703" || msgsErr.message.includes("flagged_by"))) {
+    const fallback = await supabase
+      .from("messages")
+      .select("id, sender_id, content, created_at, read_at, attachment_url, attachment_type, event, payload")
+      .eq("conversation_id", conversation.id)
+      .order("created_at", { ascending: true });
+
+    msgs = (fallback.data ?? []).map((message) => ({
+      ...message,
+      flagged_by: [],
+    }));
+    msgsErr = fallback.error;
+  }
+
+  if (msgsErr) {
+    console.error("Nie udalo sie pobrac wiadomosci czatu:", msgsErr);
+  }
+
+  const chatMessages = (msgs ?? []) as ChatMessageRecord[];
 
   // Fetch Service Order if needed (System Context)
   let serviceOrderRow = null;
@@ -131,6 +165,11 @@ export default async function ChatPage({
 
     serviceOrderRow = so;
   }
+
+  const isApplicationConversationLocked =
+    conversation.status === "inactive" ||
+    appRow?.status === "rejected" ||
+    appRow?.status === "cancelled";
 
   return (
     <div className="flex flex-col md:flex-row h-full gap-4 p-4 w-full ml-0 max-w-[1920px] mx-auto">
@@ -173,9 +212,11 @@ export default async function ChatPage({
         <div className="flex-1 overflow-y-auto px-2 md:px-6 bg-slate-50/30 scroll-smooth">
           <div className="max-w-3xl mx-auto py-6">
             <ChatList
-              messages={msgs ?? []}
+              messages={chatMessages}
               userId={user.id}
               conversationId={conversation.id}
+              applicationStatus={appRow?.status ?? null}
+              conversationStatus={conversation.status}
             />
           </div>
         </div>
@@ -183,7 +224,11 @@ export default async function ChatPage({
         {/* Input */}
         <div className="p-6 bg-white border-t border-slate-50 z-20">
           <div className="max-w-3xl mx-auto">
-            <ChatInput conversationId={conv.id} />
+            <ChatInput
+              conversationId={conv.id}
+              locked={isApplicationConversationLocked}
+              lockedMessage="Niestety tym razem firma wybrała kogoś innego."
+            />
           </div>
         </div>
       </div>

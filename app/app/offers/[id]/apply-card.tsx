@@ -16,6 +16,11 @@ import { ApplySheet } from "@/app/app/jobs/apply-sheet";
 import { JobOffer } from "@/app/app/jobs/job-card";
 import { cn } from "@/lib/utils";
 
+type CompanyMilestoneTemplate = {
+  title: string;
+  acceptance_criteria: string;
+};
+
 export default function ApplyCard({
   offerId,
   offerStawka,
@@ -25,7 +30,9 @@ export default function ApplyCard({
   isPlatformService,
   offerTitle,
   obligations,
-  offerDescription
+  offerDescription,
+  realizationMode,
+  companyMilestones,
 }: {
   offerId: string;
   offerStawka?: number | null;
@@ -36,6 +43,8 @@ export default function ApplyCard({
   offerTitle?: string;
   obligations?: string;
   offerDescription?: string;
+  realizationMode?: "student_defined" | "company_defined" | null;
+  companyMilestones?: CompanyMilestoneTemplate[];
 }) {
   const [message, setMessage] = useState("");
   const [negotiating, setNegotiating] = useState(false);
@@ -54,6 +63,8 @@ export default function ApplyCard({
   const [ok, setOk] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const hasCompanyDefinedMilestones =
+    realizationMode === "company_defined" && (companyMilestones?.length ?? 0) > 0;
 
   // Platform Service Logic
   if (isPlatformService) {
@@ -290,6 +301,38 @@ export default function ApplyCard({
             </div>
           )}
         </div>
+
+        {hasCompanyDefinedMilestones && (
+          <div className="rounded-[2rem] border border-indigo-200 bg-indigo-50/70 p-6">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl bg-white p-3 text-indigo-600 shadow-sm">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-900">Firma ustalila plan realizacji z gory</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  Te etapy wejda do kontraktu od razu po akceptacji. Czesciowe kroki sluza jako plan pracy, a
+                  rozliczenie calej kwoty nastapi po odbiorze finalnego etapu.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {(companyMilestones ?? []).map((milestone, index) => (
+                <div key={`${milestone.title}-${index}`} className="rounded-[1.5rem] border border-indigo-100 bg-white p-4">
+                  <p className="text-sm font-bold text-slate-900">
+                    {index + 1}. {milestone.title}
+                  </p>
+                  {milestone.acceptance_criteria ? (
+                    <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">
+                      {milestone.acceptance_criteria}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* CV UPLOAD */}
         {isJobOrInternship && (

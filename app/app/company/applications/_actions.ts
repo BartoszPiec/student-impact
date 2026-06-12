@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { trySendNotification } from "@/lib/notifications/server";
+import { ensureConversationIdForApplication } from "@/lib/services/service-order-conversations";
+import { closeRejectedApplicationConversation } from "@/lib/services/application-chat-closure";
 
 interface OfferRow {
   id: string;
@@ -35,6 +37,22 @@ function isMultiInstanceOffer(offer: OfferRow): boolean {
   return offer.is_platform_service === true;
 }
 
+async function hasAnotherLockedApplication(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  offerId: string,
+  applicationId: string,
+) {
+  const { count, error } = await supabase
+    .from("applications")
+    .select("id", { count: "exact", head: true })
+    .eq("offer_id", offerId)
+    .neq("id", applicationId)
+    .in("status", ["accepted", "in_progress", "completed"]);
+
+  if (error) throw new Error(error.message);
+  return (count ?? 0) > 0;
+}
+
 async function notifyUser(
   _supabase: any,
   userId: string,
@@ -53,29 +71,12 @@ async function ensureConversationForApplication(
     student_id: string;
   }
 ) {
-  const { data: existing } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("application_id", args.application_id)
-    .maybeSingle();
-
-  if (existing?.id) return existing.id as string;
-
-  const { data: created, error } = await supabase
-    .from("conversations")
-    .upsert({
-      application_id: args.application_id,
-      company_id: args.company_id,
-      student_id: args.student_id,
-      offer_id: args.offer_id,
-      type: 'application',
-      status: "active",
-    }, { onConflict: "application_id" })
-    .select("id")
-    .maybeSingle();
-
-  if (error || !created?.id) throw new Error(error?.message ?? "Nie udało się utworzyć rozmowy");
-  return created.id as string;
+  return ensureConversationIdForApplication(supabase, {
+    applicationId: args.application_id,
+    offerId: args.offer_id,
+    companyId: args.company_id,
+    studentId: args.student_id,
+  });
 }
 
 async function insertChatMessage(
@@ -123,21 +124,21 @@ export async function acceptApplication(applicationId: string) {
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
-  if (appRow.status !== "sent" && appRow.status !== "countered") {
+  if (appRow.status !== "sent") {
     revalidatePath("/app/company/applications");
     return;
   }
 
+  if (!isMultiInstanceOffer(offer) && (await hasAnotherLockedApplication(supabase, offer.id, applicationId))) {
+    throw new Error("To zlecenie ma juz zaakceptowanego wykonawce.");
+  }
+
   const now = new Date().toISOString();
-  // If countered: company accepts their own counter-offer rate
-  // If sent: use agreed > proposed > offer default
-  const agreed = appRow.status === "countered"
-    ? (appRow as any).counter_stawka ?? (appRow as any).proposed_stawka ?? offer.stawka ?? null
-    : (appRow as any).agreed_stawka
-      ?? fromMinorUnits((appRow as any).agreed_stawka_minor)
-      ?? (appRow as any).proposed_stawka
-      ?? offer.stawka
-      ?? null;
+  const agreed = (appRow as any).agreed_stawka
+    ?? fromMinorUnits((appRow as any).agreed_stawka_minor)
+    ?? (appRow as any).proposed_stawka
+    ?? offer.stawka
+    ?? null;
 
   // ✅ zaakceptuj
   const { error: updErr } = await supabase
@@ -182,6 +183,15 @@ export async function acceptApplication(applicationId: string) {
         offer_title: offer.tytul ?? null,
         reason: "accepted_other",
       });
+      const rejectedConversationId = await closeRejectedApplicationConversation(supabase as any, {
+        applicationId: o.id,
+        offerId: offer.id,
+        companyId: offer.company_id,
+        studentId: o.student_id,
+        senderId: user.id,
+        content: "Niestety tym razem firma wybrała kogoś innego.",
+      });
+      revalidatePath(`/app/chat/${rejectedConversationId}`);
     }
   }
 
@@ -240,7 +250,7 @@ export async function acceptApplication(applicationId: string) {
   revalidatePath("/app/notifications");
 
 
-  redirect("/app/company/applications");
+  redirect("/app/company/offers");
 }
 
 export async function rejectApplication(applicationId: string) {
@@ -264,7 +274,7 @@ export async function rejectApplication(applicationId: string) {
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
-  if (appRow.status !== "sent" && appRow.status !== "countered") {
+  if (appRow.status !== "sent") {
     revalidatePath("/app/company/applications");
     return;
   }
@@ -332,9 +342,13 @@ export async function counterOffer(applicationId: string, formData: FormData) {
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
-  if (appRow.status !== "sent" && appRow.status !== "countered") {
+  if (appRow.status !== "sent") {
     revalidatePath("/app/company/applications");
     return;
+  }
+
+  if (!isMultiInstanceOffer(offer as OfferRow) && (await hasAnotherLockedApplication(supabase, offer.id, applicationId))) {
+    throw new Error("To zlecenie ma juz zaakceptowanego wykonawce.");
   }
 
   const { error: updErr } = await supabase

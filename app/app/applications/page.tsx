@@ -25,6 +25,7 @@ type ApplicationRow = {
   id: string;
   status: string;
   message_to_company: string | null;
+  cancel_reason?: string | null;
   created_at: string | null;
   offer_id: string;
   proposed_stawka: number | null;
@@ -125,7 +126,7 @@ export default async function StudentApplicationsPage() {
   const { data: rows, error } = await supabase
     .from("applications")
     .select(`
-      id, status, message_to_company, created_at, offer_id,
+      id, status, message_to_company, cancel_reason, created_at, offer_id,
       proposed_stawka, counter_stawka, agreed_stawka, agreed_stawka_minor,
       offers (id, tytul, typ, stawka, status, is_platform_service)
     `)

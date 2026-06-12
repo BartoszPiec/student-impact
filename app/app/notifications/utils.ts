@@ -105,6 +105,10 @@ export function getNotificationTitle(n: { typ: string; payload?: any, content?: 
         case "cooperation_cancelled":
             return `Zlecenie anulowane: ${p.offer_title || "Zlecenie"}`;
 
+        // ── Spory / Zgłoszenia ───────────────────────────────────────────
+        case "problem_reported":
+            return `Zgłoszenie problemu od: ${p.reported_by === "firma" ? "firmy" : "studenta"}`;
+
         default:
             return p.snippet || p.message || "Nowe powiadomienie";
     }

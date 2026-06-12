@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { trySendNotification } from "@/lib/notifications/server";
+import { ensureConversationIdForApplication } from "@/lib/services/service-order-conversations";
 
 type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type JsonPayload = Record<string, unknown>;
@@ -31,29 +32,12 @@ async function ensureConversationForApplication(supabase: AppSupabaseClient, arg
   company_id: string;
   student_id: string;
 }) {
-  const { data: existing } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("application_id", args.application_id)
-    .maybeSingle();
-
-  if (existing?.id) return existing.id as string;
-
-  const { data: created, error } = await supabase
-    .from("conversations")
-    .upsert({
-      application_id: args.application_id,
-      company_id: args.company_id,
-      student_id: args.student_id,
-      offer_id: args.offer_id,
-      type: 'application',
-      status: "active",
-    }, { onConflict: "application_id" })
-    .select("id")
-    .maybeSingle();
-
-  if (error || !created?.id) throw new Error(error?.message ?? "Nie udało się utworzyć rozmowy");
-  return created.id as string;
+  return ensureConversationIdForApplication(supabase, {
+    applicationId: args.application_id,
+    offerId: args.offer_id,
+    companyId: args.company_id,
+    studentId: args.student_id,
+  });
 }
 
 async function insertChatMessage(
@@ -61,7 +45,7 @@ async function insertChatMessage(
   conversationId: string,
   senderId: string,
   body: string,
-  event: string | null = null,
+  event: string | null = "text.sent",
   payload: JsonPayload | null = null
 ) {
   const b = (body ?? "").trim();
@@ -271,7 +255,7 @@ export async function applyToOffer(
 
       // ✅ 1) wiadomość z aplikacji jako pierwsza w czacie
       let initialMsg = (message ?? "").trim();
-      let msgEvent: string | null = null; // Default: standard message
+      let msgEvent: string | null = "text.sent";
 
       if (isSystemPlatform && autoAccepted) {
         const studentName = user.email ?? "Student";
@@ -283,10 +267,6 @@ export async function applyToOffer(
         // If empty, use default text
         if (!initialMsg) initialMsg = "Przesłano zgłoszenie aplikacyjne.";
 
-        // Use inline check to avoid any scope confusion
-        if (isNegotiation) {
-          msgEvent = 'rate.proposed';
-        }
       }
 
       await insertChatMessage(
@@ -294,7 +274,8 @@ export async function applyToOffer(
         conversationId,
         user.id,
         initialMsg,
-        msgEvent
+        msgEvent,
+        msgEvent === "text.sent" ? { source: "application" } : null
       );
       logs.push("Initial Msg Sent");
 

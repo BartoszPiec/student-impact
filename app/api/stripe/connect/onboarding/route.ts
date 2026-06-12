@@ -116,8 +116,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: accountLink.url });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Nie udalo sie przygotowac Stripe.";
     console.error("[stripe-connect-onboarding]", error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Nie udalo sie przygotowac konta wyplat Stripe. Sprobuj ponownie za chwile." },
+      { status: 500 },
+    );
   }
 }

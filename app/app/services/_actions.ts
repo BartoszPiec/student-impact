@@ -17,7 +17,10 @@ import {
     type ServiceOrderQuoteSnapshot,
 } from "@/lib/services/service-order-snapshots";
 import { assertStudentCanPrivatelyProposeToCompany } from "@/lib/services/private-proposals";
-import { findConversationForServiceOrder } from "@/lib/services/service-order-conversations";
+import {
+    ensureConversationForServiceOrder,
+    findConversationForServiceOrder,
+} from "@/lib/services/service-order-conversations";
 import { LOGO_PACKAGE_ID } from "@/lib/services/logo-student-selection";
 
 type ServiceOrderNegotiationRow = {
@@ -403,27 +406,12 @@ export async function createPrivateProposalAction(formData: FormData) {
         throw new Error(insertError?.message || "Nie udalo sie zapisac prywatnej propozycji.");
     }
 
-    const { data: conversation, error: conversationError } = await supabase
-        .from("conversations")
-        .upsert({
-            company_id: targetCompanyId,
-            student_id: user.id,
-            status: "active",
-            type: "inquiry",
-            package_id: packageId,
-            application_id: null,
-            service_order_id: order.id,
-        }, { onConflict: "service_order_id" })
-        .select("id")
-        .maybeSingle();
-
-    if (conversationError) {
-        throw new Error(conversationError.message);
-    }
-
-    if (!conversation) {
-        throw new Error("Nie udalo sie utworzyc rozmowy dla prywatnej propozycji.");
-    }
+    const conversation = await ensureConversationForServiceOrder(supabase, {
+        serviceOrderId: order.id,
+        companyId: targetCompanyId,
+        studentId: user.id,
+        packageId,
+    });
 
     await supabase.from("messages").insert([
         {
@@ -800,24 +788,14 @@ export async function selectCompanyOrderStudentAction(formData: FormData) {
 
     let conversationId = existingConversation?.id ?? null;
     if (!conversationId) {
-        const { data: createdConversation, error: conversationError } = await supabase
-            .from("conversations")
-            .upsert({
-                company_id: user.id,
-                student_id: studentId,
-                status: "active",
-                type: "inquiry",
-                package_id: order.package_id,
-                service_order_id: orderId,
-            }, { onConflict: "service_order_id" })
-            .select("id")
-            .maybeSingle();
+        const createdConversation = await ensureConversationForServiceOrder(supabase, {
+            serviceOrderId: orderId,
+            companyId: user.id,
+            studentId,
+            packageId: order.package_id,
+        });
 
-        if (conversationError) {
-            throw new Error(conversationError.message);
-        }
-
-        conversationId = createdConversation?.id ?? null;
+        conversationId = createdConversation.id;
     }
 
     await supabase.from("notifications").insert({

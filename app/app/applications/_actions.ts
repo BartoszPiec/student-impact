@@ -6,6 +6,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { trySendNotification } from "@/lib/notifications/server";
 import { buildRateLimitKey, enforceRateLimit } from "@/lib/rate-limit";
+import { ensureConversationIdForApplication } from "@/lib/services/service-order-conversations";
+import {
+  closeRejectedApplicationConversation,
+  rejectCompetingApplicationsForOffer,
+} from "@/lib/services/application-chat-closure";
 
 type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type JsonPayload = Record<string, unknown>;
@@ -31,10 +36,6 @@ type ApplicationRowWithOffer = ApplicationRowBase & {
   proposed_stawka?: number | null;
   counter_stawka?: number | null;
   offers: RelationValue<OfferRecord>;
-};
-
-type SimpleConversationRow = {
-  id: string;
 };
 
 type ConversationArgs = {
@@ -95,6 +96,22 @@ function isMultiInstanceOffer(offer: OfferRecord): boolean {
   return offer.is_platform_service === true;
 }
 
+async function hasAnotherLockedApplication(
+  supabase: AppSupabaseClient,
+  offerId: string,
+  applicationId: string,
+) {
+  const { count, error } = await supabase
+    .from("applications")
+    .select("id", { count: "exact", head: true })
+    .eq("offer_id", offerId)
+    .neq("id", applicationId)
+    .in("status", ["accepted", "in_progress", "completed"]);
+
+  if (error) throw new Error(error.message);
+  return (count ?? 0) > 0;
+}
+
 async function notifyUser(
   _supabase: AppSupabaseClient,
   userId: string,
@@ -132,34 +149,12 @@ async function ensureConversationForApplication(
   supabase: AppSupabaseClient,
   args: ConversationArgs,
 ) {
-  const { data: existingData } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("application_id", args.application_id)
-    .maybeSingle();
-
-  const existing = existingData as SimpleConversationRow | null;
-  if (existing?.id) return existing.id;
-
-  const { data: createdData, error } = await supabase
-    .from("conversations")
-    .upsert({
-      application_id: args.application_id,
-      company_id: args.company_id,
-      student_id: args.student_id,
-      offer_id: args.offer_id,
-      type: "application",
-      status: "active",
-    }, { onConflict: "application_id" })
-    .select("id")
-    .maybeSingle();
-
-  const created = createdData as SimpleConversationRow | null;
-  if (error || !created?.id) {
-    throw new Error(error?.message ?? "Nie udalo sie utworzyc rozmowy");
-  }
-
-  return created.id;
+  return ensureConversationIdForApplication(supabase, {
+    applicationId: args.application_id,
+    offerId: args.offer_id,
+    companyId: args.company_id,
+    studentId: args.student_id,
+  });
 }
 
 async function insertChatMessage(
@@ -211,6 +206,26 @@ export async function acceptCounterAsStudent(applicationId: string) {
 
   const offer = getOffer(appRow);
   const companyId = getCompanyId(offer);
+  if (!isMultiInstanceOffer(offer) && (await hasAnotherLockedApplication(supabase, appRow.offer_id, applicationId))) {
+    await supabase
+      .from("applications")
+      .update({ status: "rejected", decided_at: new Date().toISOString() })
+      .eq("id", applicationId)
+      .in("status", ["sent", "countered"]);
+
+    const conversationId = await closeRejectedApplicationConversation(supabase, {
+      applicationId,
+      offerId: appRow.offer_id,
+      companyId,
+      studentId: appRow.student_id,
+      senderId: companyId,
+      content: "Niestety tym razem firma wybrała kogoś innego.",
+    });
+
+    revalidatePath(`/app/chat/${conversationId}`);
+    revalidatePath("/app/applications");
+    return;
+  }
   const agreed = appRow.counter_stawka;
 
   const { error: updateError } = await supabase
@@ -230,13 +245,23 @@ export async function acceptCounterAsStudent(applicationId: string) {
   });
 
   if (!isMultiInstanceOffer(offer)) {
-    const now = new Date().toISOString();
-    await supabase
-      .from("applications")
-      .update({ status: "rejected", decided_at: now })
-      .eq("offer_id", appRow.offer_id)
-      .neq("id", applicationId)
-      .in("status", ["sent", "countered"]);
+    const rejectedApplications = await rejectCompetingApplicationsForOffer(supabase, {
+      offerId: appRow.offer_id,
+      acceptedApplicationId: applicationId,
+      companyId,
+      senderId: companyId,
+      content: "Niestety tym razem firma wybrała kogoś innego.",
+    });
+
+    for (const rejectedApplication of rejectedApplications) {
+      await notifyUser(supabase, rejectedApplication.studentId, "offer_closed", {
+        offer_id: appRow.offer_id,
+        offer_title: offer.tytul,
+        reason: "accepted_other",
+        conversation_id: rejectedApplication.conversationId,
+      });
+      revalidatePath(`/app/chat/${rejectedApplication.conversationId}`);
+    }
 
     await supabase
       .from("offers")
@@ -310,6 +335,26 @@ export async function acceptProposalAsStudent(applicationId: string) {
 
   const offer = getOffer(appRow);
   const companyId = getCompanyId(offer);
+  if (!isMultiInstanceOffer(offer) && (await hasAnotherLockedApplication(supabase, appRow.offer_id, applicationId))) {
+    await supabase
+      .from("applications")
+      .update({ status: "rejected", decided_at: new Date().toISOString() })
+      .eq("id", applicationId)
+      .in("status", ["sent", "countered"]);
+
+    const conversationId = await closeRejectedApplicationConversation(supabase, {
+      applicationId,
+      offerId: appRow.offer_id,
+      companyId,
+      studentId: appRow.student_id,
+      senderId: companyId,
+      content: "Niestety tym razem firma wybrała kogoś innego.",
+    });
+
+    revalidatePath(`/app/chat/${conversationId}`);
+    revalidatePath("/app/applications");
+    return;
+  }
   const agreed = appRow.proposed_stawka;
 
   const { error: updateError } = await supabase
@@ -329,13 +374,23 @@ export async function acceptProposalAsStudent(applicationId: string) {
   });
 
   if (!isMultiInstanceOffer(offer)) {
-    const now = new Date().toISOString();
-    await supabase
-      .from("applications")
-      .update({ status: "rejected", decided_at: now })
-      .eq("offer_id", appRow.offer_id)
-      .neq("id", applicationId)
-      .in("status", ["sent", "countered"]);
+    const rejectedApplications = await rejectCompetingApplicationsForOffer(supabase, {
+      offerId: appRow.offer_id,
+      acceptedApplicationId: applicationId,
+      companyId,
+      senderId: companyId,
+      content: "Niestety tym razem firma wybrała kogoś innego.",
+    });
+
+    for (const rejectedApplication of rejectedApplications) {
+      await notifyUser(supabase, rejectedApplication.studentId, "offer_closed", {
+        offer_id: appRow.offer_id,
+        offer_title: offer.tytul,
+        reason: "accepted_other",
+        conversation_id: rejectedApplication.conversationId,
+      });
+      revalidatePath(`/app/chat/${rejectedApplication.conversationId}`);
+    }
 
     await supabase
       .from("offers")

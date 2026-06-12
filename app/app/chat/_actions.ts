@@ -4,8 +4,11 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { sendNotification } from "@/lib/notifications/server";
+import { sendNotification, trySendNotification } from "@/lib/notifications/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildRateLimitKey, enforceRateLimit } from "@/lib/rate-limit";
+import { ensureConversationForApplication } from "@/lib/services/service-order-conversations";
+import { rejectCompetingApplicationsForOffer } from "@/lib/services/application-chat-closure";
 
 // --- EXISTING FUNCTIONS (KEPT FOR ROUTING/INIT) ---
 
@@ -19,6 +22,43 @@ type ApplicationForChat = {
   message_to_company: string | null;
   offers: OfferRelation | OfferRelation[];
 };
+
+async function ensureApplicationInitialMessage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  params: {
+    conversationId: string;
+    studentId: string;
+    companyId: string;
+    applicationId: string;
+    content: string;
+  },
+) {
+  const content = params.content.trim();
+  if (!content) return;
+
+  const { count } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", params.conversationId)
+    .eq("sender_id", params.studentId)
+    .eq("content", content);
+
+  if ((count ?? 0) > 0) return;
+
+  await supabase.from("messages").insert({
+    conversation_id: params.conversationId,
+    sender_id: params.studentId,
+    content,
+    event: "text.sent",
+    payload: { source: "application" },
+  });
+
+  await sendNotification(params.companyId, "message_new", {
+    conversation_id: params.conversationId,
+    application_id: params.applicationId,
+    snippet: content.slice(0, 80),
+  });
+}
 
 export async function openChatForApplication(applicationId: string) {
   const supabase = await createClient();
@@ -45,28 +85,45 @@ export async function openChatForApplication(applicationId: string) {
   const isParticipant = user.id === companyId || user.id === studentId;
   if (!isParticipant) redirect("/app");
 
+  let firstMessage = String(typedRow.message_to_company ?? "").trim();
+  if (!firstMessage) {
+    firstMessage = "Zainteresowała mnie ta oferta, chciałbym zgłosić swoją kandydaturę.";
+  }
+
   const { data: existing } = await supabase
     .from("conversations")
     .select("id")
     .eq("application_id", applicationId)
     .maybeSingle();
 
-  if (existing?.id) redirect(`/app/chat/${existing.id}`);
+  if (existing?.id) {
+    await ensureApplicationInitialMessage(supabase, {
+      conversationId: existing.id,
+      studentId,
+      companyId,
+      applicationId,
+      content: firstMessage,
+    });
+    redirect(`/app/chat/${existing.id}`);
+  }
 
-  const { data: created, error: createErr } = await supabase
-    .from("conversations")
-    .upsert({
-      application_id: applicationId,
-      company_id: companyId,
-      student_id: studentId,
-      offer_id: offerId,
-      type: "application",
-      status: "active",
-    }, { onConflict: "application_id" })
-    .select("id")
-    .single();
+  const created = await ensureConversationForApplication(supabase, {
+    applicationId,
+    companyId,
+    studentId,
+    offerId,
+  });
 
-  if (createErr || !created) throw new Error(createErr?.message ?? "Nie udało się utworzyć rozmowy");
+  if (!created.created) {
+    await ensureApplicationInitialMessage(supabase, {
+      conversationId: created.id,
+      studentId,
+      companyId,
+      applicationId,
+      content: firstMessage,
+    });
+    redirect(`/app/chat/${created.id}`);
+  }
 
   // Initial message from app
   let first = String(typedRow.message_to_company ?? "").trim();
@@ -80,7 +137,7 @@ export async function openChatForApplication(applicationId: string) {
       sender_id: studentId,
       content: first,
       event: "text.sent",
-      payload: {},
+      payload: { source: "application" },
     });
 
     await sendNotification(companyId, "message_new", {
@@ -238,7 +295,7 @@ async function validateParticipant(conversationId: string) {
 
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, company_id, student_id, application_id, service_order_id, package_id")
+    .select("id, company_id, student_id, application_id, service_order_id, package_id, status")
     .eq("id", conversationId)
     .single();
 
@@ -250,6 +307,31 @@ async function validateParticipant(conversationId: string) {
   return { supabase, user, conv };
 }
 
+async function assertConversationIsOpen(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  conv: {
+    id: string;
+    status?: string | null;
+    application_id?: string | null;
+  },
+) {
+  if (conv.status === "inactive") {
+    throw new Error("Niestety tym razem firma wybrała kogoś innego.");
+  }
+
+  if (!conv.application_id) return;
+
+  const { data } = await supabase
+    .from("applications")
+    .select("status")
+    .eq("id", conv.application_id)
+    .maybeSingle();
+
+  if (data?.status === "rejected" || data?.status === "cancelled") {
+    throw new Error("Niestety tym razem firma wybrała kogoś innego.");
+  }
+}
+
 async function assertCanSendMessage(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
@@ -259,18 +341,23 @@ async function assertCanSendMessage(
     student_id: string;
     application_id?: string | null;
     service_order_id?: string | null;
+    status?: string | null;
   },
 ) {
+  await assertConversationIsOpen(supabase, conv);
+
   if (userId !== conv.student_id) return;
 
   let businessStatus: string | null = null;
+  let applicationInitialMessage: string | null = null;
   if (conv.application_id) {
     const { data } = await supabase
       .from("applications")
-      .select("status")
+      .select("status, message_to_company")
       .eq("id", conv.application_id)
       .maybeSingle();
     businessStatus = data?.status ?? null;
+    applicationInitialMessage = String(data?.message_to_company ?? "").trim() || null;
   } else if (conv.service_order_id) {
     const { data } = await supabase
       .from("service_orders")
@@ -301,13 +388,34 @@ async function assertCanSendMessage(
 
   if ((companyMessagesCount ?? 0) > 0) return;
 
-  const { count: studentMessagesCount } = await supabase
+  const { data: studentMessages } = await supabase
     .from("messages")
-    .select("id", { count: "exact", head: true })
+    .select("id, content, payload")
     .eq("conversation_id", conv.id)
     .eq("sender_id", conv.student_id);
 
-  if ((studentMessagesCount ?? 0) > 0) {
+  const blockingStudentMessagesCount = (studentMessages ?? []).filter((message) => {
+    const payload = message.payload && typeof message.payload === "object" && !Array.isArray(message.payload)
+      ? message.payload as Record<string, unknown>
+      : {};
+    const content = String(message.content ?? "").trim();
+    const normalizedContent = content.toLowerCase();
+
+    if (payload.source === "application") return false;
+    if (applicationInitialMessage && content === applicationInitialMessage) return false;
+    if (
+      normalizedContent.includes("zainteresowa") &&
+      normalizedContent.includes("kandydatur")
+    ) return false;
+    if (
+      normalizedContent.includes("przes") &&
+      normalizedContent.includes("zg") &&
+      normalizedContent.includes("aplikacyj")
+    ) return false;
+    return true;
+  }).length;
+
+  if (blockingStudentMessagesCount > 0) {
     throw new Error("Poczekaj na odpowiedz firmy, zanim wyslesz kolejna wiadomosc.");
   }
 }
@@ -418,6 +526,7 @@ function toMinorUnits(value: number | null | undefined): number | null {
 
 export async function acceptRate(conversationId: string, refMessageId: string, rate: number) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
+  await assertConversationIsOpen(supabase, conv);
 
   // Nie można akceptować własnej propozycji (Self-Acceptance Bypass fix)
   const { data: refMsg } = await supabase.from("messages").select("sender_id").eq("id", refMessageId).maybeSingle();
@@ -457,14 +566,24 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
       const isMultiInstance = offerRow.is_platform_service === true;
 
       if (!isMultiInstance) {
-        const now = new Date().toISOString();
-        // Reject other sent/countered applications for same offer
-        await supabase
-          .from("applications")
-          .update({ status: "rejected", decided_at: now })
-          .eq("offer_id", appData.offer_id)
-          .neq("id", conv.application_id)
-          .in("status", ["sent", "countered"]);
+        const offerDetails = Array.isArray(appData.offers) ? appData.offers[0] : appData.offers;
+        const rejectedApplications = await rejectCompetingApplicationsForOffer(supabase, {
+          offerId: appData.offer_id,
+          acceptedApplicationId: conv.application_id,
+          companyId: conv.company_id,
+          senderId: user.id,
+          content: "Niestety tym razem firma wybrała kogoś innego.",
+        });
+
+        for (const rejectedApplication of rejectedApplications) {
+          await sendNotification(rejectedApplication.studentId, "offer_closed", {
+            offer_id: appData.offer_id,
+            offer_title: offerDetails?.tytul ?? "Oferta",
+            reason: "accepted_other",
+            conversation_id: rejectedApplication.conversationId,
+          });
+          revalidatePath(`/app/chat/${rejectedApplication.conversationId}`);
+        }
 
         // Update offer status to in_progress
         await supabase
@@ -535,7 +654,8 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
 }
 
 export async function rejectRate(conversationId: string, refMessageId: string, rate: number) {
-  const { supabase, user } = await validateParticipant(conversationId);
+  const { supabase, user, conv } = await validateParticipant(conversationId);
+  await assertConversationIsOpen(supabase, conv);
 
   await supabase.from("messages").insert({
     conversation_id: conversationId,
@@ -552,6 +672,7 @@ export async function rejectRate(conversationId: string, refMessageId: string, r
 
 export async function acceptDeadline(conversationId: string, refMessageId: string, deadline: string) {
   const { supabase, user, conv } = await validateParticipant(conversationId);
+  await assertConversationIsOpen(supabase, conv);
 
   // Nie można akceptować własnej propozycji (Self-Acceptance Bypass fix)
   const { data: refMsg } = await supabase.from("messages").select("sender_id").eq("id", refMessageId).maybeSingle();
@@ -587,7 +708,8 @@ export async function acceptDeadline(conversationId: string, refMessageId: strin
 }
 
 export async function rejectDeadline(conversationId: string, refMessageId: string, deadline: string) {
-  const { supabase, user } = await validateParticipant(conversationId);
+  const { supabase, user, conv } = await validateParticipant(conversationId);
+  await assertConversationIsOpen(supabase, conv);
 
   await supabase.from("messages").insert({
     conversation_id: conversationId,
@@ -615,4 +737,125 @@ export async function sendMessage(conversationId: string, formData: FormData) {
   } else if (body) {
     await sendTextMessage(conversationId, body);
   }
+}
+
+/**
+ * Zgłoszenie problemu / otwarcie sporu przez stronę rozmowy.
+ *
+ * Bezpieczeństwo: `validateParticipant` gwarantuje, że tylko firma albo student
+ * z danej rozmowy może wywołać akcję. Kontrakt jest dodatkowo dopasowywany po
+ * `company_id` + `student_id`, więc nawet operując kluczem service-role dotykamy
+ * wyłącznie kontraktu należącego do obu stron tej rozmowy.
+ *
+ * Efekty:
+ *  - neutralna notatka systemowa w rozmowie (ślad audytowy, best-effort),
+ *  - powiązany kontrakt (jeśli istnieje i nie jest w stanie terminalnym) → `disputed`,
+ *  - powiadomienie wszystkich administratorów (kanał eskalacji do wsparcia/ops).
+ */
+export async function reportProblem(conversationId: string, reasonRaw: string) {
+  const { supabase, user, conv } = await validateParticipant(conversationId);
+  await enforceMessageRateLimit(user.id, "report", conversationId);
+
+  const reason = String(reasonRaw ?? "").trim();
+  if (!reason) {
+    throw new Error("Opisz krótko, na czym polega problem.");
+  }
+  if (reason.length > 2000) {
+    throw new Error("Opis problemu jest za długi (max 2000 znaków).");
+  }
+
+  const reportedBy = user.id === conv.company_id ? "firma" : "student";
+  const reportedByLabel = reportedBy === "firma" ? "firmę" : "studenta";
+
+  // 1. Ślad w rozmowie — obie strony widzą, że sprawa trafiła do administracji.
+  //    Best-effort: zgłoszenie ma się powieść nawet jeśli zapis notatki zawiedzie.
+  try {
+    await supabase.from("messages").insert({
+      conversation_id: conversationId,
+      sender_id: user.id,
+      content:
+        "Zgłoszono problem do administracji platformy. Zespół wsparcia przeanalizuje sprawę i skontaktuje się ze stronami.",
+      event: "system.notice",
+      payload: { kind: "problem_reported", reason, reported_by: reportedBy },
+    });
+  } catch (error) {
+    console.error("Nie udało się zapisać notatki o zgłoszeniu problemu:", error);
+  }
+
+  // 2. Eskalacja do administracji — service role (kontrakty/profile poza zasięgiem RLS użytkownika).
+  const admin = createAdminClient();
+
+  // 2a. Oznacz powiązany kontrakt jako sporny (jeśli istnieje i nie jest już zamknięty/sporny).
+  let contractId: string | null = null;
+  let previousStatus: string | null = null;
+  try {
+    if (conv.application_id || conv.service_order_id) {
+      let contractQuery = admin
+        .from("contracts")
+        .select("id, status")
+        .eq("company_id", conv.company_id)
+        .eq("student_id", conv.student_id);
+
+      contractQuery = conv.application_id
+        ? contractQuery.eq("application_id", conv.application_id)
+        : contractQuery.eq("service_order_id", conv.service_order_id);
+
+      const { data: contract } = await contractQuery.maybeSingle();
+
+      if (contract?.id) {
+        contractId = contract.id;
+        previousStatus = contract.status ?? null;
+
+        if (contract.status !== "disputed" && contract.status !== "cancelled") {
+          await admin
+            .from("contracts")
+            .update({ status: "disputed", updated_at: new Date().toISOString() })
+            .eq("id", contract.id);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Nie udało się oznaczyć kontraktu jako spornego:", error);
+  }
+
+  // 2b. Powiadom wszystkich administratorów.
+  const { data: adminProfiles } = await admin
+    .from("profiles")
+    .select("user_id")
+    .eq("role", "admin");
+
+  const adminIds = (adminProfiles ?? [])
+    .map((row) => row.user_id as string | null)
+    .filter((id): id is string => Boolean(id));
+
+  if (adminIds.length === 0) {
+    console.error("reportProblem: brak konta administratora do powiadomienia o sporze.");
+  }
+
+  const redirectPath = contractId
+    ? `/app/admin/contracts/${contractId}`
+    : "/app/admin/disputes";
+  const snippet = `Problem zgłoszony przez ${reportedByLabel}: ${reason.slice(0, 180)}`;
+
+  for (const adminId of adminIds) {
+    await trySendNotification(adminId, "problem_reported", {
+      conversation_id: conversationId,
+      contract_id: contractId,
+      application_id: conv.application_id ?? null,
+      service_order_id: conv.service_order_id ?? null,
+      reported_by: reportedBy,
+      reason,
+      previous_contract_status: previousStatus,
+      redirect_path: redirectPath,
+      snippet,
+    });
+  }
+
+  revalidatePath(`/app/chat/${conversationId}`);
+  revalidatePath("/app/admin/disputes");
+  if (contractId) {
+    revalidatePath(`/app/admin/contracts/${contractId}`);
+  }
+
+  return { ok: true as const };
 }
