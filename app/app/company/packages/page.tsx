@@ -816,7 +816,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
               </h3>
               <p className="text-indigo-200/70 font-medium text-xl leading-relaxed">
                 Opisz swoje potrzeby naszym ekspertom, a my w ciągu 24h znajdziemy dla Ciebie 
-                <span className="text-white font-bold ml-1">idealnego wykonawcę</span> spośród tysięcy studentów.
+                <span className="text-white font-bold ml-1">dopasowanego wykonawcę</span> do zakresu zlecenia.
               </p>
             </div>
             

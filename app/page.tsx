@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 interface ServiceData {
   icon: React.ComponentType<{ className?: string }>;
   description: string;
-  stats: { price: string; time: string; projects: string; rating: string };
+  stats: { price: string; time: string; scope: string; mode: string };
   examples: string[];
   funFact: string;
 }
@@ -52,84 +52,84 @@ const SERVICE_DATA: Record<string, ServiceData> = {
   "Lead research": {
     icon: TrendingUp,
     description: "Budujesz pipeline, ale nie masz kto szukać kontaktów? Deleguj research leadów i wróć do sprzedaży.",
-    stats: { price: "200-800 zł", time: "1-3 dni", projects: "310+", rating: "4.8/5" },
+    stats: { price: "200-800 zł", time: "1-3 dni", scope: "bazy leadów", mode: "pilot" },
     examples: ["Listy firm wg ICP z LinkedIn", "Weryfikacja danych kontaktowych", "Research decydentów", "Budowanie baz w CRM", "Analiza konkurencji"],
     funFact: "Średnio 3 dni wystarczą na zbudowanie listy 200 kwalifikowanych leadów.",
   },
   "Prospecting i outreach": {
     icon: Users,
     description: "Przygotowanie materiałów do cold outreach, personalizacja wiadomości, sekwencje mailowe. Robota, której nikt nie lubi robić — ale musi być zrobiona.",
-    stats: { price: "300-1200 zł", time: "2-5 dni", projects: "180+", rating: "4.7/5" },
+    stats: { price: "300-1200 zł", time: "2-5 dni", scope: "outreach", mode: "pilot" },
     examples: ["Personalizowane wiadomości cold mail", "Skrypty do cold calla", "Sekwencje follow-up", "Przygotowanie ofert handlowych", "Analiza odpowiedzi i optymalizacja"],
     funFact: "Dobrze przygotowany outreach otwiera 3× więcej rozmów niż szablonowe wiadomości.",
   },
   "Prezentacje i materiały": {
     icon: Palette,
     description: "Pitch deck, oferta handlowa, prezentacja dla zarządu. Masz treść, potrzebujesz kogoś kto to złoży profesjonalnie.",
-    stats: { price: "300-1500 zł", time: "2-7 dni", projects: "450+", rating: "4.9/5" },
+    stats: { price: "300-1500 zł", time: "2-7 dni", scope: "prezentacje", mode: "pilot" },
     examples: ["Pitch deck dla inwestorów", "Prezentacje sprzedażowe", "Oferty handlowe PDF", "One-pagery produktowe", "Materiały onboardingowe"],
     funFact: "Profesjonalna prezentacja zwiększa szansę na zamknięcie deala o 35%.",
   },
   "Data entry i CRM": {
     icon: Database,
     description: "CRM zarasta, arkusze są chaotyczne, baza danych nieaktualna. To zadanie, które wraca do Ciebie co tydzień — i nie powinno.",
-    stats: { price: "100-600 zł", time: "1-5 dni", projects: "540+", rating: "4.7/5" },
+    stats: { price: "100-600 zł", time: "1-5 dni", scope: "CRM i dane", mode: "pilot" },
     examples: ["Czyszczenie i uzupełnianie CRM", "Import danych z arkuszy", "Deduplikacja bazy klientów", "Tagowanie i segmentacja", "Raportowanie z danych"],
     funFact: "Firmy tracą średnio 12h tygodniowo na ręczne zarządzanie danymi.",
   },
   "Content i social media": {
     icon: PenTool,
     description: "Potrzebujesz postów, artykułów, opisów. Regularny content — bez zatrudniania na etat.",
-    stats: { price: "200-1000 zł", time: "2-10 dni", projects: "410+", rating: "4.8/5" },
+    stats: { price: "200-1000 zł", time: "2-10 dni", scope: "treści", mode: "pilot" },
     examples: ["Posty na LinkedIn / Instagram", "Artykuły blogowe SEO", "Newsletter firmowy", "Opisy produktów", "Skrypty do rolek i wideo"],
     funFact: "Firmy publikujące regularnie na LinkedIn generują 7× więcej zapytań.",
   },
   "Wsparcie operacyjne": {
     icon: Clipboard,
     description: "Zadania administracyjne, które blokują Twój czas. Wprowadź dane, odpisz na maile, przygotuj dokumenty — bez angażowania kluczowych ludzi.",
-    stats: { price: "80-400 zł", time: "1-3 dni", projects: "540+", rating: "4.7/5" },
+    stats: { price: "80-400 zł", time: "1-3 dni", scope: "operacje", mode: "pilot" },
     examples: ["Obsługa skrzynki mailowej", "Wprowadzanie danych i faktur", "Organizacja dokumentacji", "Transkrypcja i protokoły", "Zarządzanie kalendarzem"],
     funFact: "Właściciele firm odzyskują średnio 8h tygodniowo po delegowaniu zadań admin.",
   },
   "Strony i CMS": {
     icon: Globe,
     description: "Aktualizacje strony, uploady produktów, poprawki treści, nowe podstrony. Nie potrzebujesz agencji — potrzebujesz kogoś kto to ogarnie.",
-    stats: { price: "200-1500 zł", time: "1-7 dni", projects: "340+", rating: "4.8/5" },
+    stats: { price: "200-1500 zł", time: "1-7 dni", scope: "CMS", mode: "pilot" },
     examples: ["Aktualizacje treści na stronie", "Upload produktów do sklepu", "Optymalizacja SEO on-page", "Tworzenie podstron w CMS", "Migracja treści"],
     funFact: "Strony aktualizowane co miesiąc generują 6× więcej ruchu organicznego.",
   },
   "Analiza i raporty": {
     icon: BarChart,
     description: "Masz dane, ale nikt ich nie czyta. Potrzebujesz dashboardu, raportu tygodniowego lub analizy rynku — bez angażowania analityka na etat.",
-    stats: { price: "300-2000 zł", time: "2-7 dni", projects: "230+", rating: "4.8/5" },
+    stats: { price: "300-2000 zł", time: "2-7 dni", scope: "raporty", mode: "pilot" },
     examples: ["Dashboardy w Google Sheets / Excel", "Raporty sprzedażowe", "Analiza rynku i konkurencji", "Segmentacja klientów", "Wizualizacje danych"],
     funFact: "Firmy podejmujące decyzje na danych rosną 2× szybciej.",
   },
   "Wideo i multimedia": {
     icon: Video,
     description: "Masz nagrania, potrzebujesz efektu. Montaż, obróbka, reels, animacje — bez agencji kreatywnej.",
-    stats: { price: "300-2000 zł", time: "3-10 dni", projects: "280+", rating: "4.9/5" },
+    stats: { price: "300-2000 zł", time: "3-10 dni", scope: "multimedia", mode: "pilot" },
     examples: ["Montaż wideo promocyjnych", "Reels i shorty na social", "Animacje prezentacji", "Obróbka zdjęć produktowych", "Napisy i subtitles"],
     funFact: "Posty wideo generują 49% więcej interakcji niż statyczne grafiki.",
   },
   "Programowanie i IT": {
     icon: Code,
     description: "Skrypt, integracja, automatyzacja, mały serwis. Zadania IT które nie uzasadniają zatrudniania dewelopera — ale muszą być zrobione.",
-    stats: { price: "500-5000 zł", time: "3-14 dni", projects: "520+", rating: "4.7/5" },
+    stats: { price: "500-5000 zł", time: "3-14 dni", scope: "automatyzacje", mode: "pilot" },
     examples: ["Automatyzacja powtarzalnych procesów", "Integracje API / Zapier", "Skrypty w Python / Excel", "Małe aplikacje webowe", "Poprawki na stronie"],
     funFact: "Automatyzacja jednego powtarzalnego procesu oszczędza średnio 5h tygodniowo.",
   },
   "Tłumaczenia": {
     icon: Languages,
     description: "Materiały do wysyłki za granicę, umowy, strona w obcym języku. Szybko, bez agencji tłumaczeniowej.",
-    stats: { price: "50-500 zł", time: "1-5 dni", projects: "670+", rating: "4.9/5" },
+    stats: { price: "50-500 zł", time: "1-5 dni", scope: "lokalizacja", mode: "pilot" },
     examples: ["Tłumaczenia ofert i umów", "Lokalizacja strony www", "Materiały marketingowe EN/DE/ES", "Korespondencja handlowa", "Podtytuły do wideo"],
     funFact: "Materiały w języku klienta zwiększają konwersję o 70%.",
   },
   "Automatyzacje AI": {
     icon: Bot,
     description: "Chcesz wdrożyć AI ale nie wiesz od czego zacząć? Chatbot, automatyczny raport, asystent mailowy — konkretne wdrożenia, nie konsulting.",
-    stats: { price: "500-3000 zł", time: "3-14 dni", projects: "180+", rating: "4.9/5" },
+    stats: { price: "500-3000 zł", time: "3-14 dni", scope: "AI w ops", mode: "pilot" },
     examples: ["Chatbot na stronie / w CRM", "Automatyzacja z GPT w procesach", "Asystent mailowy AI", "Generowanie raportów AI", "Skróty i automatyczne podsumowania"],
     funFact: "Firmy wdrażające AI w Ops oszczędzają średnio 15h/tydzień.",
   },
@@ -370,7 +370,7 @@ export default function LandingPage() {
                   <BadgeCheck className="w-3.5 h-3.5" /> Escrow aktywne
                 </div>
                 <div className="absolute -bottom-4 -left-4 bg-white text-[#0f2460] text-xs font-bold px-4 py-2 rounded-full shadow-xl flex items-center gap-2">
-                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" /> 4.9/5 — 800+ opinii
+                  <BadgeCheck className="w-3.5 h-3.5 text-[#7c8ef7]" /> Umowy i płatność w jednym procesie
                 </div>
               </div>
             </RevealOnScroll>
@@ -391,14 +391,13 @@ export default function LandingPage() {
       <section className="bg-white py-16 px-6">
         <div className="mx-auto max-w-7xl">
           <p className="text-center text-sm font-bold text-slate-400 uppercase tracking-widest mb-10">
-            Zaufały nam firmy z całej Polski
+            Proces przygotowany pod pilotaż
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
-              { icon: "⚡", value: "24h", label: "Średni czas startu", sub: "Od zlecenia do wykonawcy" },
-              { icon: "✅", value: "1 429", label: "Zadań zrealizowanych", sub: "Wartość 2,4M PLN" },
-              { icon: "🏢", value: "512", label: "Firm korzysta z platformy", sub: "MŚP i korporacje" },
-              { icon: "⭐", value: "4,9/5", label: "Średnia ocena", sub: "Ponad 800 opinii" },
+              { icon: "⚡", value: "Brief", label: "Jedno miejsce na zadanie", sub: "Firma opisuje zakres, budżet i oczekiwany efekt." },
+              { icon: "🛡️", value: "Escrow", label: "Płatność pod kontrolą", sub: "Rozliczenie przechodzi przez proces akceptacji pracy." },
+              { icon: "📄", value: "Umowy A/B", label: "Formalności w flow", sub: "Współpraca jest prowadzona przez Student Impact." },
             ].map((stat, i) => (
               <RevealOnScroll key={stat.label} delay={i * 80}
                 className="text-center p-6 rounded-2xl border border-slate-100 bg-slate-50/50 hover:border-[#7c8ef7]/30 hover:shadow-lg transition-all">
@@ -462,7 +461,7 @@ export default function LandingPage() {
                 icon: BadgeCheck,
                 color: "bg-rose-50 text-rose-600",
                 title: "Zweryfikowani wykonawcy",
-                desc: "Każdy wykonawca ma oceny, historię projektów i potwierdzony profil akademicki. Wybierasz kogoś sprawdzonego.",
+                desc: "Każdy wykonawca ma profil, opis kompetencji i zakres usług. Wybierasz osobę dopasowaną do zadania.",
               },
               {
                 icon: TrendingUp,
@@ -737,7 +736,7 @@ function ServiceDetailsModal({ name }: { name: string }) {
             <Icon className="w-6 h-6 text-[#0f2460] group-hover:text-[#7c8ef7] transition-colors" />
           </div>
           <div className="font-bold text-sm text-[#0f2460] group-hover:text-[#7c8ef7] transition-colors leading-tight">{name}</div>
-          <div className="mt-2 text-[10px] text-slate-400 font-medium">{data.stats.projects} projektów</div>
+          <div className="mt-2 text-[10px] text-slate-400 font-medium">Zakres: {data.stats.scope}</div>
         </div>
       </DialogTrigger>
       <DialogContent className="max-w-2xl rounded-[2rem] border-none p-0 overflow-hidden">
@@ -749,9 +748,9 @@ function ServiceDetailsModal({ name }: { name: string }) {
               </div>
               <div>
                 <DialogTitle className="text-2xl font-extrabold text-white">{name}</DialogTitle>
-                <div className="flex gap-1 mt-1">
-                  {[1,2,3,4,5].map(s => <Star key={s} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />)}
-                  <span className="text-white/60 text-xs ml-1">{data.stats.rating}</span>
+                <div className="flex items-center gap-1.5 mt-1 text-white/60 text-xs">
+                  <BadgeCheck className="w-3.5 h-3.5" />
+                  <span>Proces z umową i kontrolą statusu</span>
                 </div>
               </div>
             </div>
@@ -765,8 +764,8 @@ function ServiceDetailsModal({ name }: { name: string }) {
             {[
               { label: "Cena", value: data.stats.price },
               { label: "Czas realizacji", value: data.stats.time },
-              { label: "Projektów", value: data.stats.projects },
-              { label: "Ocena", value: data.stats.rating },
+              { label: "Zakres", value: data.stats.scope },
+              { label: "Tryb", value: data.stats.mode },
             ].map(s => (
               <div key={s.label} className="bg-slate-50 rounded-xl p-4 text-center border border-slate-100">
                 <div className="text-sm font-extrabold text-[#0f2460] mb-1">{s.value}</div>

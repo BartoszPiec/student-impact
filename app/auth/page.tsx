@@ -276,18 +276,18 @@ export default function AuthPage() {
         <div className="relative z-10 mt-auto">
           <div className="flex w-fit gap-8 rounded-[1.75rem] border border-white/10 bg-white/10 p-6 backdrop-blur-md">
             <div className="text-center">
-              <div className="text-2xl font-bold">2 500+</div>
-              <div className="text-sm text-white/70">studentów</div>
+              <div className="text-2xl font-bold">Umowy A/B</div>
+              <div className="text-sm text-white/70">formalności w flow</div>
             </div>
             <div className="my-auto h-10 w-px bg-white/20" />
             <div className="text-center">
-              <div className="text-2xl font-bold">850+</div>
-              <div className="text-sm text-white/70">firm</div>
+              <div className="text-2xl font-bold">Escrow</div>
+              <div className="text-sm text-white/70">płatność chroniona</div>
             </div>
             <div className="my-auto h-10 w-px bg-white/20" />
             <div className="text-center">
-              <div className="text-2xl font-bold">4 200+</div>
-              <div className="text-sm text-white/70">projektów</div>
+              <div className="text-2xl font-bold">Statusy</div>
+              <div className="text-sm text-white/70">kontrola realizacji</div>
             </div>
           </div>
 
