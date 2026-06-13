@@ -52,6 +52,8 @@ yarn-error.log*
 
 # local agent worktrees / chat artifacts
 .claude/worktrees/
+.fable-qa/
+QA_LIVE_COLLAB.md
 
 .vercel
 

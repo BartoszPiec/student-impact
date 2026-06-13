@@ -1,3 +1,5 @@
+import "server-only";
+
 import Stripe from 'stripe';
 import { DEFAULT_JOB_COMMISSION_RATE, normalizeCommissionRate } from "@/lib/commission";
 
