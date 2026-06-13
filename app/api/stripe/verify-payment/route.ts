@@ -5,6 +5,7 @@ import { getStripe } from "@/lib/stripe";
 import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
 import { rejectCompetingApplicationsForOffer } from "@/lib/services/application-chat-closure";
+import { rejectCrossSiteRequest } from "@/lib/security/request-origin";
 import Stripe from "stripe";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -83,6 +84,9 @@ function resolveFeePln(
 
 export async function POST(req: NextRequest) {
   try {
+    const crossSiteResponse = rejectCrossSiteRequest(req);
+    if (crossSiteResponse) return crossSiteResponse;
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

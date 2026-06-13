@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const COMPANY_DOCUMENT_TYPES = new Set(["contract_a", "invoice_company"]);
 const STUDENT_DOCUMENT_TYPES = new Set(["contract_b", "invoice_student"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type DocumentAccessRow = {
   id: string;
@@ -32,6 +33,9 @@ export async function GET(request: NextRequest) {
   const documentId = request.nextUrl.searchParams.get("documentId");
   if (!documentId) {
     return NextResponse.json({ error: "Brak documentId." }, { status: 400 });
+  }
+  if (!UUID_RE.test(documentId)) {
+    return NextResponse.json({ error: "Nieprawidlowy documentId." }, { status: 400 });
   }
 
   const supabase = await createClient();

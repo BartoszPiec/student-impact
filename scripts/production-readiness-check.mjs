@@ -222,10 +222,10 @@ async function checkHttp(env, checks) {
   for (const path of ["/api/stripe/create-checkout", "/api/stripe/connect/onboarding"]) {
     try {
       const response = await request(path, { method: "POST" });
-      if (response.status === 401) {
-        pass(checks, `http:${path}:unauthenticated`, "401");
+      if ([401, 403].includes(response.status)) {
+        pass(checks, `http:${path}:unauthenticated`, String(response.status));
       } else {
-        fail(checks, `http:${path}:unauthenticated`, `Oczekiwano 401, jest ${response.status}.`);
+        fail(checks, `http:${path}:unauthenticated`, `Oczekiwano 401/403, jest ${response.status}.`);
       }
     } catch (error) {
       fail(checks, `http:${path}:unauthenticated`, error instanceof Error ? error.message : "Blad polaczenia.");

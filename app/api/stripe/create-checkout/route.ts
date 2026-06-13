@@ -6,6 +6,7 @@ import { getStripe, calculatePlatformFee } from "@/lib/stripe";
 import { checkPayoutAccountReadiness } from "@/lib/stripe/connect-readiness";
 import { resolveCommissionRate } from "@/lib/commission";
 import { buildRateLimitKey, enforceRateLimit, getRequestIp } from "@/lib/rate-limit";
+import { rejectCrossSiteRequest } from "@/lib/security/request-origin";
 
 export const maxDuration = 10;
 
@@ -90,6 +91,9 @@ function milestoneAmountMinor(milestone: MilestoneRow): number | null {
 
 export async function POST(req: NextRequest) {
   try {
+    const crossSiteResponse = rejectCrossSiteRequest(req);
+    if (crossSiteResponse) return crossSiteResponse;
+
     const supabase = await createClient();
 
     const { data: { user } } = await supabase.auth.getUser();

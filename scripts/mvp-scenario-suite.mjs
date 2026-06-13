@@ -203,8 +203,8 @@ async function main() {
   await assertHttp(checks, baseUrl, "/", 200);
   await assertHttp(checks, baseUrl, "/auth", 200);
   await assertHttp(checks, baseUrl, "/app/profile", [302, 303, 307, 308]);
-  await assertHttp(checks, baseUrl, "/api/stripe/create-checkout", 401, { method: "POST" });
-  await assertHttp(checks, baseUrl, "/api/stripe/connect/onboarding", 401, { method: "POST" });
+  await assertHttp(checks, baseUrl, "/api/stripe/create-checkout", [401, 403], { method: "POST" });
+  await assertHttp(checks, baseUrl, "/api/stripe/connect/onboarding", [401, 403], { method: "POST" });
   await assertHttp(checks, baseUrl, "/api/stripe/webhook", 400, { method: "POST" });
   await assertHttp(checks, baseUrl, "/api/documents/download", 400);
   await assertCronProtected(checks, baseUrl, "/api/cron/process-stripe-events");
@@ -225,7 +225,7 @@ async function main() {
       const companyPage = await companyContext.newPage();
       await login(companyPage, baseUrl, companyEmail, companyPassword);
       await assertPageUsable(checks, companyPage, `${baseUrl}/app/company/packages`, "Pilot Sandbox");
-      await assertPageUsable(checks, companyPage, `${baseUrl}/app/company/orders`, "Zlecen");
+      await assertPageUsable(checks, companyPage, `${baseUrl}/app/company/orders`, "Zamowienia");
       await assertPageUsable(checks, companyPage, `${baseUrl}/app/company/applications`, null);
       await assertPageUsable(checks, companyPage, `${baseUrl}/app/company/offers`, null);
       await assertAdminBlocked(checks, companyPage, baseUrl, "company");

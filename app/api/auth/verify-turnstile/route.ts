@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rejectCrossSiteRequest } from "@/lib/security/request-origin";
 
 type TurnstileResponse = {
   success: boolean;
@@ -7,6 +8,9 @@ type TurnstileResponse = {
 
 export async function POST(req: NextRequest) {
   try {
+    const crossSiteResponse = rejectCrossSiteRequest(req);
+    if (crossSiteResponse) return crossSiteResponse;
+
     const secret = process.env.TURNSTILE_SECRET_KEY;
     if (!secret) {
       if (process.env.NODE_ENV !== "production") {
@@ -66,7 +70,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error("[verify-turnstile]", error);
+    return NextResponse.json(
+      { success: false, error: "Nie udalo sie zweryfikowac CAPTCHA." },
+      { status: 500 },
+    );
   }
 }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
 // GET /api/admin/export/pit-csv?month=2026-03
 // Eksportuje CSV dla PIT-11 — wypłaty studentów za dany miesiąc
 export async function GET(req: NextRequest) {
@@ -24,6 +26,9 @@ export async function GET(req: NextRequest) {
   // Parametr miesiąca (np. "2026-03")
   const { searchParams } = new URL(req.url);
   const month = searchParams.get("month"); // format: YYYY-MM
+  if (month && !MONTH_RE.test(month)) {
+    return NextResponse.json({ error: "Nieprawidlowy miesiac eksportu." }, { status: 400 });
+  }
 
   const admin = createAdminClient();
 
@@ -47,13 +52,17 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: withholdings, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[admin-export:pit-csv]", error);
+    return NextResponse.json({ error: "Nie udalo sie przygotowac eksportu." }, { status: 500 });
+  }
   
   if (!withholdings || withholdings.length === 0) {
     return new NextResponse("Brak danych dot. zaliczek PIT w podanym okresie.\n", {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="pit11_${month ?? "all"}.csv"`,
+        "Cache-Control": "no-store",
       },
     });
   }
@@ -116,6 +125,7 @@ export async function GET(req: NextRequest) {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="pit11_${month ?? "all"}.csv"`,
+      "Cache-Control": "no-store",
     },
   });
 }

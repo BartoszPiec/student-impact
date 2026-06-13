@@ -45,9 +45,11 @@ async function findSystemServiceStudent(
     supabase: Awaited<ReturnType<typeof createClient>>,
     packageCategory: string | null | undefined,
 ): Promise<SystemServiceStudentCandidate | null> {
+    // student_profiles nie ma kolumn categories/skills — select tylko istniejących
+    // kolumn, inaczej zapytanie pada i kazde zamowienie pakietu systemowego konczy sie 500.
     const { data: candidates, error } = await supabase
         .from("student_profiles")
-        .select("user_id, public_name, categories, skills, kompetencje")
+        .select("user_id, public_name, kompetencje")
         .not("user_id", "is", null)
         .limit(25);
 
