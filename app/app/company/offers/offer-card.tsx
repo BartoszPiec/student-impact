@@ -111,7 +111,7 @@ function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
       actionRequired: false,
       actionLabel: "Podglad",
       actionHref: detailHref,
-      note: "Zakonczone zamowienie uslugi.",
+      note: "Zakonczone zamowienie usługi.",
     };
   }
 
@@ -139,7 +139,7 @@ function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
       actionRequired: true,
       actionLabel: "Sprawdz warunki",
       actionHref: detailHref,
-      note: "Zamowienie czeka na decyzje lub uzgodnienie warunkow.",
+      note: "Zamowienie czeka na decyzje lub uzgodnienie warunków.",
     };
   }
 
@@ -180,7 +180,7 @@ function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
     actionRequired: false,
     actionLabel: "Panel realizacji",
     actionHref: detailHref,
-    note: "Zamowienie uslugi jest aktywne.",
+    note: "Zamowienie usługi jest aktywne.",
   };
 }
 
@@ -232,7 +232,7 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
       actionRequired: true,
       actionLabel: "Uzgodnij warunki",
       actionHref: acceptedHref,
-      note: "Warunki sa jeszcze w negocjacji.",
+      note: "Warunki są jeszcze w negocjacji.",
     };
   }
 
@@ -241,7 +241,7 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
       workState: "action",
       stage: "candidates",
       stageLabel: "Kandydaci",
-      label: "Nowe zgloszenia",
+      label: "Nowe zgłoszenia",
       tone: "indigo",
       actionRequired: true,
       actionLabel: "Przejrzyj kandydatow",
@@ -291,7 +291,7 @@ export default function OfferCard({
   const chatAction = stats.acceptedAppId ? openChatForApplication.bind(null, stats.acceptedAppId) : null;
   const detailHref = getDetailHref(offer);
   const isServiceOrder = offer.itemType === "service_order";
-  const itemLabel = offer.itemLabel || (isServiceOrder ? "Usluga" : "Ogloszenie");
+  const itemLabel = offer.itemLabel || (isServiceOrder ? "Usługa" : "Ogloszenie");
   const performerFallback =
     isServiceOrder && ["pending_selection", "pending"].includes(offer.status ?? "")
       ? "Do wyboru wykonawcy"
@@ -311,7 +311,7 @@ export default function OfferCard({
       : model.stage === "terms"
         ? {
             icon: <HandCoins className="h-4 w-4" />,
-            title: model.actionRequired ? "Trwa uzgadnianie warunkow" : "Czekamy na finalne potwierdzenie",
+            title: model.actionRequired ? "Trwa uzgadnianie warunków" : "Czekamy na finalne potwierdzenie",
             sub: model.note,
             pill: model.actionRequired ? "Wymagana akcja" : "Czeka na studenta",
             pillIcon: model.actionRequired ? null : <Clock3 className="h-3 w-3" />,
@@ -319,9 +319,9 @@ export default function OfferCard({
         : model.stage === "candidates"
           ? {
               icon: <Users className="h-4 w-4" />,
-              title: model.actionRequired ? "Nowe zgloszenia do przejrzenia" : "Ogloszenie zbiera kandydatow",
+              title: model.actionRequired ? "Nowe zgłoszenia do przejrzenia" : "Ogloszenie zbiera kandydatow",
               sub: model.note,
-              pill: model.actionRequired ? "Wymagana akcja" : "Nowe zgloszenia",
+              pill: model.actionRequired ? "Wymagana akcja" : "Nowe zgłoszenia",
               pillIcon: model.actionRequired ? null : <Sparkles className="h-3 w-3" />,
             }
           : model.stage === "delivery"
@@ -389,7 +389,7 @@ export default function OfferCard({
               </div>
 
               <Link href={detailHref} className="block text-xl font-black leading-tight text-slate-950 transition hover:text-indigo-700">
-                {offer.tytul || (isServiceOrder ? "Zamowienie uslugi" : "Ogloszenie bez tytulu")}
+                {offer.tytul || (isServiceOrder ? "Zamowienie usługi" : "Ogloszenie bez tytulu")}
               </Link>
 
               <div className="mb-3 mt-3 flex flex-wrap gap-3 text-[11.5px] font-semibold text-slate-400">
@@ -399,7 +399,7 @@ export default function OfferCard({
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Briefcase className="h-3.5 w-3.5" />
-                  {isServiceOrder ? "Usluga systemowa" : offer.typ || "Ogloszenie"}
+                  {isServiceOrder ? "Usługa systemowa" : offer.typ || "Ogloszenie"}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Eye className="h-3.5 w-3.5" />

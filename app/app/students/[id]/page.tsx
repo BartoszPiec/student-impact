@@ -46,7 +46,7 @@ export default async function StudentProfilePage({
   if (!user) redirect("/auth");
 
   const { data: sp, error: spErr } = await supabase
-    .from("student_profiles")
+    .from("student_public_profiles")
     .select(
       "user_id, public_name, kierunek, rok, sciezka, bio, doswiadczenie, linkedin_url, portfolio_url, kompetencje"
     )
@@ -155,7 +155,7 @@ export default async function StudentProfilePage({
     reviews.map((r: any) => r.company_id || (r.reviewer_role === 'company' ? r.reviewer_id : null)).filter(Boolean)
   ));
   const { data: companies } = companyIds.length
-    ? await supabase.from("company_profiles").select("user_id, nazwa").in("user_id", companyIds)
+    ? await supabase.from("company_public_profiles").select("user_id, nazwa").in("user_id", companyIds)
     : { data: [] as any[] };
   const companyName = new Map((companies ?? []).map((c: any) => [c.user_id, c.nazwa]));
 

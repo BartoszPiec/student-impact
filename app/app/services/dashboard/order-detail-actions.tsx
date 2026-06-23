@@ -26,8 +26,19 @@ import {
   rejectOrderAction,
 } from "../_actions";
 
+type OrderDetail = {
+  id: string;
+  amount: number | string;
+  counter_amount?: number | null;
+  status: string;
+};
+
+function getErrorMessage(error: unknown, fallback = "Wystąpił błąd.") {
+  return error instanceof Error ? error.message : fallback;
+}
+
 interface OrderDetailActionsProps {
-  order: any;
+  order: OrderDetail;
   chatLink: string;
 }
 
@@ -42,19 +53,19 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
   const [openProposal, setOpenProposal] = useState(false);
 
   const handlePropose = async () => {
-    if (!price || Number.isNaN(parseFloat(price))) {
+    if (!price || Number.isNaN(Number(price))) {
       toast.error("Wprowadz prawidlowa kwote.");
       return;
     }
 
     try {
       setLoading(true);
-      await proposeServicePriceAction(order.id, parseFloat(price), message);
-      toast.success("Oferta i wiadomosc zostaly wyslane.");
+      await proposeServicePriceAction(order.id, Number(price), message);
+      toast.success("Oferta i wiadomosc zostały wyslane.");
       setOpenProposal(false);
       router.refresh();
-    } catch (e: any) {
-      toast.error(e.message || "Wystapil blad.");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -66,8 +77,8 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
       await acceptServiceCounterAction(order.id);
       toast.success("Zaakceptowales kontrofertes. Zamowienie przechodzi do realizacji.");
       router.refresh();
-    } catch (e: any) {
-      toast.error(e.message || "Wystapil blad.");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error));
     } finally {
       setCounterLoading(false);
     }
@@ -79,8 +90,8 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
       await confirmStudentSelectionAction(order.id);
       toast.success("Potwierdziles rozpoczecie realizacji.");
       router.refresh();
-    } catch (e: any) {
-      toast.error(e.message || "Nie udalo sie potwierdzic realizacji.");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Nie udało się potwierdzić realizacji."));
     } finally {
       setConfirmLoading(false);
     }
@@ -96,8 +107,8 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
       await rejectOrderAction(order.id);
       toast.success("Zapytanie odrzucone.");
       router.push("/app/services/dashboard");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error));
     } finally {
       setRejectLoading(false);
     }
@@ -184,8 +195,8 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
               Firma zlozyla kontrofertes
             </div>
             <p className="text-sm text-orange-800">
-              Klient proponuje <span className="font-bold">{order.counter_amount} PLN</span>. Mozesz zaakceptowac te stawke
-              albo wrocic do rozmowy na czacie.
+              Klient proponuje <span className="font-bold">{order.counter_amount} PLN</span>. Mozesz zaakceptować te stawke
+              albo wrócić do rozmowy na czacie.
             </p>
           </div>
           <Button onClick={handleAcceptCounter} disabled={counterLoading} className="w-full bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto">

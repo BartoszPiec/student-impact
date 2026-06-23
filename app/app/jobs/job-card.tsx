@@ -28,11 +28,6 @@ export interface JobOffer {
     obligations?: string;
 }
 
-function money(val: string | number | undefined) {
-    if (!val) return null;
-    return `${val} zł`;
-}
-
 function salary(o: JobOffer) {
     if (o.is_platform_service && o.stawka) return `${o.stawka} zł`; // Exact price for platform services
 
@@ -70,46 +65,61 @@ function timeAgo(date: string) {
 }
 
 export function JobCard({ offer, isApplied }: { offer: JobOffer, isApplied?: boolean }) {
-    const isJob = offer.typ === "job" || offer.typ === "Praca" || offer.typ === "praca";
+    const offerType = offer.typ.toLocaleLowerCase("pl-PL");
+    const isJob = offerType.includes("job") || offerType.includes("praca") || offerType.includes("staż") || offerType.includes("staż");
     const isMicro = !isJob;
 
     return (
         <Card className={cn(
-            "transition-all duration-300 group border-none rounded-[2rem] overflow-hidden",
+            "group overflow-hidden rounded-2xl border-none transition-all duration-300 sm:rounded-[2rem]",
             isApplied
                 ? "bg-emerald-50/30 ring-1 ring-emerald-100 shadow-sm"
-                : "bg-white hover:shadow-xl hover:shadow-indigo-500/5 ring-1 ring-slate-200/60 hover:ring-indigo-100/50"
+                : "bg-white shadow-sm ring-1 ring-slate-200/70 hover:shadow-xl hover:shadow-indigo-500/5 hover:ring-indigo-100/50 sm:shadow-none"
         )}>
-            <CardContent className="p-6 flex flex-col md:flex-row gap-6 items-start">
+            <CardContent className="flex flex-col items-start gap-3 p-4 sm:gap-6 sm:p-6 md:flex-row">
                 {/* LOGO SECTION */}
-                <div className="relative">
+                <div className="flex w-full items-start justify-between gap-3 md:block md:w-auto">
+                  <div className="relative">
                     <div className={cn(
-                        "h-14 w-14 rounded-2xl flex items-center justify-center flex-shrink-0 border transition-transform group-hover:scale-105 duration-300",
+                        "flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border transition-transform duration-300 group-hover:scale-105 sm:h-14 sm:w-14 sm:rounded-2xl",
                         isApplied ? "bg-white border-emerald-100" : "bg-slate-50 border-slate-100 group-hover:border-indigo-100"
                     )}>
-                        <Building2 className={cn("h-7 w-7", isApplied ? "text-emerald-500" : "text-slate-400 group-hover:text-indigo-500")} />
+                        <Building2 className={cn("h-5 w-5 sm:h-7 sm:w-7", isApplied ? "text-emerald-500" : "text-slate-400 group-hover:text-indigo-500")} />
                     </div>
                     {isApplied && (
                         <div className="absolute -top-2 -right-2 bg-emerald-500 text-white rounded-full p-1 shadow-lg border-2 border-white">
                             <CheckCircle2 className="h-3 w-3" />
                         </div>
                     )}
+                  </div>
+                  <div className={cn(
+                    "rounded-xl px-2.5 py-1.5 text-right md:hidden",
+                    isMicro ? "bg-amber-50 text-amber-700" : "bg-indigo-50 text-indigo-700"
+                  )}>
+                    <div className="flex items-center justify-end gap-1 text-[9px] font-black uppercase tracking-wider opacity-70 sm:text-[10px]">
+                      <Banknote className="h-3 w-3" />
+                      {isJob ? "Stawka" : "Budżet"}
+                    </div>
+                    <div className="mt-0.5 max-w-[8rem] truncate text-xs font-black tabular-nums sm:max-w-[9.5rem] sm:text-sm">
+                      {salary(offer)}
+                    </div>
+                  </div>
                 </div>
 
                 {/* CONTENT SECTION */}
-                <div className="flex-1 min-w-0 space-y-3">
+                <div className="min-w-0 flex-1 space-y-2.5 sm:space-y-3">
                     <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                            {isMicro && <Badge variant="secondary" className="text-[10px] h-5 bg-amber-50 text-amber-600 hover:bg-amber-100 border-none px-2 font-bold uppercase tracking-wider tabular-nums"><Zap className="h-3 w-3 mr-1 fill-amber-500" /> Mikrozlecenie</Badge>}
-                            {isJob && <Badge variant="secondary" className="text-[10px] h-5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-none px-2 font-bold uppercase tracking-wider tabular-nums"><Briefcase className="h-3 w-3 mr-1 fill-indigo-500" /> Praca</Badge>}
-                            {offer.category && <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{offer.category}</span>}
+                            {isMicro && <Badge variant="secondary" className="h-5 border-none bg-amber-50 px-2 text-[9px] font-bold uppercase tracking-wider text-amber-600 tabular-nums hover:bg-amber-100 sm:text-[10px]"><Zap className="mr-1 h-3 w-3 fill-amber-500" /> Mikrozlecenie</Badge>}
+                            {isJob && <Badge variant="secondary" className="h-5 border-none bg-indigo-50 px-2 text-[9px] font-bold uppercase tracking-wider text-indigo-600 tabular-nums hover:bg-indigo-100 sm:text-[10px]"><Briefcase className="mr-1 h-3 w-3 fill-indigo-500" /> Praca</Badge>}
+                            {offer.category && <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 sm:text-[10px]">{offer.category}</span>}
                         </div>
 
-                        <h3 className="font-bold text-xl text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1 leading-tight">
+                        <h3 className="line-clamp-2 text-base font-bold leading-snug text-slate-900 transition-colors group-hover:text-indigo-600 sm:text-xl md:line-clamp-1">
                             {offer.tytul}
                         </h3>
 
-                        <div className="text-sm text-slate-500 font-semibold flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-500 sm:text-sm">
                             <span className="text-slate-900">{offer.company_name || "Firma"}</span>
                             <span className="text-slate-300">•</span>
                             <span className="flex items-center gap-1">
@@ -119,16 +129,16 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer, isApplied?: boo
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-x-6 gap-y-2 pt-1">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1.5 pt-0.5 sm:gap-x-6 sm:gap-y-2 sm:pt-1">
                         {(offer.location || offer.is_remote) && (
-                            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-600 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
-                                <MapPin className="h-4 w-4 text-indigo-500" />
+                            <div className="flex items-center gap-1.5 rounded-full border border-slate-100 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 sm:px-3 sm:text-sm">
+                                <MapPin className="h-3.5 w-3.5 text-indigo-500 sm:h-4 sm:w-4" />
                                 {offer.is_remote ? (offer.location ? `Remote • ${offer.location}` : "Remote") : offer.location}
                             </div>
                         )}
                         {offer.contract_type && (
-                            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-600 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
-                                <Clock className="h-4 w-4 text-indigo-500" />
+                            <div className="flex items-center gap-1.5 rounded-full border border-slate-100 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 sm:px-3 sm:text-sm">
+                                <Clock className="h-3.5 w-3.5 text-indigo-500 sm:h-4 sm:w-4" />
                                 {offer.contract_type}
                             </div>
                         )}
@@ -136,9 +146,9 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer, isApplied?: boo
 
                     {/* TAGS */}
                     {offer.technologies && offer.technologies.length > 0 && (
-                        <div className="flex flex-wrap gap-2 pt-1">
+                        <div className="flex flex-wrap gap-1.5 pt-0.5 sm:gap-2 sm:pt-1">
                             {offer.technologies.slice(0, 5).map(tech => (
-                                <span key={tech} className="text-[11px] bg-white text-slate-600 px-2.5 py-1 rounded-lg font-bold border border-slate-100 shadow-sm transition-colors hover:border-indigo-200">
+                                <span key={tech} className="rounded-md border border-slate-100 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 shadow-sm transition-colors hover:border-indigo-200 sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11px]">
                                     {tech}
                                 </span>
                             ))}
@@ -147,8 +157,8 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer, isApplied?: boo
                 </div>
 
                 {/* ACTION SECTION */}
-                <div className="flex flex-col gap-4 md:items-end flex-shrink-0 w-full md:w-auto md:min-w-[180px]">
-                    <div className="text-right">
+                <div className="flex w-full flex-shrink-0 flex-col gap-2.5 sm:gap-4 md:w-auto md:min-w-[180px] md:items-end">
+                    <div className="hidden text-left md:block md:text-right">
                         <div className="text-xl font-extrabold text-slate-900 tabular-nums">
                             {salary(offer)}
                         </div>
@@ -159,14 +169,14 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer, isApplied?: boo
 
                     <div className="flex flex-col gap-2 w-full">
                         {isApplied ? (
-                            <Button asChild className="w-full font-bold shadow-md transition-all bg-white text-emerald-600 hover:bg-emerald-50 border border-emerald-100 rounded-xl h-11">
+                            <Button asChild className="h-10 w-full rounded-xl border border-emerald-100 bg-white font-bold text-emerald-600 shadow-md transition-all hover:bg-emerald-50 sm:h-11">
                                 <Link href={`/app/offers/${offer.id}`}>
                                     Zobacz zgłoszenie
                                 </Link>
                             </Button>
                         ) : (
                             <Button asChild className={cn(
-                                "w-full font-bold shadow-lg transition-all rounded-xl h-11 border-none",
+                                "h-10 w-full rounded-xl border-none text-sm font-bold shadow-lg transition-all sm:h-11 sm:text-base",
                                 isMicro
                                     ? "bg-amber-500 hover:bg-amber-600 text-white shadow-amber-200"
                                     : "gradient-primary text-white shadow-indigo-200"

@@ -31,7 +31,7 @@ export async function getContractDocuments(contractId: string) {
 
   if (error) {
     console.error("Error loading contract documents:", error);
-    throw new Error("Nie udalo sie pobrac dokumentow kontraktu.");
+    throw new Error("Nie udało sie pobrać dokumentów kontraktu.");
   }
 
   if (!documents || documents.length === 0) {
@@ -78,7 +78,7 @@ export async function backfillMissingContractPdfs() {
 
   if (contractsError) {
     console.error("Error loading contracts for PDF backfill:", contractsError);
-    throw new Error("Nie udalo sie pobrac kontraktow do naprawy PDF.");
+    throw new Error("Nie udało sie pobrać kontraktów do naprawy PDF.");
   }
 
   const contractIds = (contracts || []).map((contract) => contract.id).filter(Boolean);
@@ -95,7 +95,7 @@ export async function backfillMissingContractPdfs() {
 
   if (documentsError) {
     console.error("Error loading contract documents for PDF backfill:", documentsError);
-    throw new Error("Nie udalo sie pobrac dokumentow kontraktow.");
+    throw new Error("Nie udało sie pobrać dokumentów kontraktów.");
   }
 
   const documentTypesByContract = (documents || []).reduce((map, document) => {
@@ -156,7 +156,7 @@ export async function repairSingleContractPdf(contractId: string) {
     const message =
       error instanceof Error && error.message
         ? encodeURIComponent(error.message.slice(0, 180))
-        : encodeURIComponent("Nieznany blad naprawy PDF");
+        : encodeURIComponent("Nieznany błąd naprawy PDF");
     redirect(
       `/app/admin/vault?pdfRepair=single&contractId=${contractId}&repaired=0&failed=1&errorMessage=${message}`,
     );

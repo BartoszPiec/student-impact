@@ -1,7 +1,9 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import type { DragEvent, MouseEvent } from "react";
 import { X, ShieldAlert } from "lucide-react";
+import Image from "next/image";
 
 interface SecureImageViewerProps {
   isOpen: boolean;
@@ -22,12 +24,12 @@ export function SecureImageViewer({
     return null;
   }
 
-  const handleContextMenu = (event: React.MouseEvent) => {
+  const handleContextMenu = (event: MouseEvent) => {
     event.preventDefault();
     return false;
   };
 
-  const handleDragStart = (event: React.DragEvent) => {
+  const handleDragStart = (event: DragEvent) => {
     event.preventDefault();
     return false;
   };
@@ -54,7 +56,7 @@ export function SecureImageViewer({
       </div>
 
       <div
-        className="relative max-w-[95vw] max-h-[90vh] overflow-hidden rounded-lg shadow-2xl select-none"
+        className="relative max-w-[95vw] max-h-[90vh] overflow-hidden rounded-lg bg-black shadow-2xl select-none"
         onContextMenu={handleContextMenu}
         onClick={(event) => event.stopPropagation()}
       >
@@ -65,16 +67,20 @@ export function SecureImageViewer({
             className="h-[85vh] w-[90vw] max-w-5xl bg-white"
           />
         ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <div className="relative h-[85vh] w-[90vw] max-w-5xl">
+          <Image
             src={url}
             alt={`Podglad pliku ${fileName}`}
-            className="max-w-full max-h-[85vh] object-contain pointer-events-none selection-none"
+            fill
+            sizes="90vw"
+            unoptimized
+            className="object-contain pointer-events-none selection-none"
             onDragStart={handleDragStart}
           />
+          </div>
         )}
 
-        <div className="absolute inset-0 z-10 pointer-events-none flex flex-wrap content-start items-start opacity-20 overflow-hidden mix-blend-overlay">
+        <div className="absolute inset-0 z-10 pointer-events-none flex flex-wrap content-start items-start opacity-[0.15] overflow-hidden mix-blend-overlay">
           {Array.from({ length: 20 }).map((_, index) => (
             <div
               key={index}
@@ -87,14 +93,8 @@ export function SecureImageViewer({
           ))}
         </div>
 
-        <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center opacity-30 mix-blend-screen">
-          <span className="text-6xl md:text-9xl font-black text-white/50 -rotate-12 uppercase tracking-widest border-4 border-white/20 p-8 rounded-3xl backdrop-blur-[2px]">
-            PODGLAD
-          </span>
-        </div>
-
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white/70 text-xs z-30 pointer-events-none">
-          Pelny plik bedzie dostepny po akceptacji etapu
+          Pełny plik będzie dostępny po akceptacji etapu
         </div>
       </div>
     </div>,

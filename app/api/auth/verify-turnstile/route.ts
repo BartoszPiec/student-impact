@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[verify-turnstile]", error);
     return NextResponse.json(
-      { success: false, error: "Nie udalo sie zweryfikowac CAPTCHA." },
+      { success: false, error: "Nie udało sie zweryfikowac CAPTCHA." },
       { status: 500 },
     );
   }

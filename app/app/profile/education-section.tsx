@@ -9,7 +9,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2, Plus, GraduationCap, Calendar } from "lucide-react";
 import { addEducationEntry, deleteEducationEntry } from "./_actions";
 
-export default function EducationSection({ entries }: { entries: any[] }) {
+export type EducationEntry = {
+    id: string;
+    school_name: string;
+    field_of_study: string;
+    degree: string | null;
+    start_year: number | null;
+    end_year: number | null;
+    is_current: boolean;
+};
+
+export default function EducationSection({ entries }: { entries: EducationEntry[] }) {
     const [isAdding, setIsAdding] = useState(false);
     const [isCurrent, setIsCurrent] = useState(false);
 

@@ -1,5 +1,7 @@
 
-export function getNotificationTitle(n: { typ: string; payload?: any, content?: string | null }) {
+type NotificationPayload = Record<string, unknown>;
+
+export function getNotificationTitle(n: { typ: string; payload?: NotificationPayload | null, content?: string | null }): string {
     if (n.content) return n.content; // Fallback to content if set (legacy)
 
     const p = n.payload || {};
@@ -110,6 +112,10 @@ export function getNotificationTitle(n: { typ: string; payload?: any, content?: 
             return `Zgłoszenie problemu od: ${p.reported_by === "firma" ? "firmy" : "studenta"}`;
 
         default:
-            return p.snippet || p.message || "Nowe powiadomienie";
+            return typeof p.snippet === "string"
+                ? p.snippet
+                : typeof p.message === "string"
+                    ? p.message
+                    : "Nowe powiadomienie";
     }
 }

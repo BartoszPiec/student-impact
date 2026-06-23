@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Script from "next/script";
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
+import type { AuthError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,27 +43,112 @@ function validatePassword(password: string, isRegister: boolean) {
   return null;
 }
 
-function getRequestedRole(): "student" | "company" | null {
-  if (typeof window === "undefined") return null;
+function translateAuthError(error: AuthError, action: "login" | "register" | "reset") {
+  const message = error.message.toLowerCase();
+  const status = error.status;
 
-  const requestedRole = new URLSearchParams(window.location.search).get("role");
+  if (status === 429 || message.includes("too many") || message.includes("rate limit")) {
+    return "Zbyt wiele prób. Odczekaj chwilę i spróbuj ponownie.";
+  }
+
+  if (
+    message.includes("invalid login credentials") ||
+    message.includes("invalid credentials") ||
+    message.includes("invalid grant")
+  ) {
+    return "Nieprawidłowy email lub hasło. Sprawdź dane i spróbuj ponownie.";
+  }
+
+  if (message.includes("email not confirmed") || message.includes("email confirmation")) {
+    return "Adres email nie został jeszcze potwierdzony. Sprawdź skrzynkę pocztową i kliknij link aktywacyjny.";
+  }
+
+  if (message.includes("already registered") || message.includes("user already registered")) {
+    return "Konto z tym adresem email już istnieje. Przejdź do logowania albo użyj resetowania hasła.";
+  }
+
+  if (message.includes("signup disabled")) {
+    return "Rejestracja jest obecnie wyłączona. Skontaktuj się z obsługą platformy.";
+  }
+
+  if (message.includes("password")) {
+    return action === "login"
+      ? "Hasło jest nieprawidłowe. Spróbuj ponownie albo użyj opcji resetowania hasła."
+      : "Hasło nie spełnia wymagań bezpieczeństwa. Użyj co najmniej 8 znaków.";
+  }
+
+  if (message.includes("network") || message.includes("fetch")) {
+    return "Nie można połączyć się z serwerem logowania. Sprawdź internet i spróbuj ponownie.";
+  }
+
+  if (action === "reset") {
+    return "Nie udało się wysłać linku resetowania hasła. Sprawdź email i spróbuj ponownie.";
+  }
+
+  return action === "login"
+    ? `Nie udało się zalogować. Powód: ${error.message}`
+    : `Nie udało się utworzyć konta. Powód: ${error.message}`;
+}
+
+function getUnexpectedErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return `Wystąpił nieoczekiwany błąd. Powód: ${error.message}`;
+  }
+
+  return "Wystąpił nieoczekiwany błąd. Spróbuj ponownie za chwilę.";
+}
+
+function isSuccessMessage(message: string) {
+  return message.startsWith("Konto") || message.startsWith("Link");
+}
+
+type AuthSearchParams = Record<string, string | string[] | undefined>;
+
+function getSearchParamValue(searchParams: AuthSearchParams, key: string) {
+  const value = searchParams[key];
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
+}
+
+function normalizeRequestedRole(requestedRole: string | null): "student" | "company" | null {
   return requestedRole === "student" || requestedRole === "company" ? requestedRole : null;
 }
 
-export default function AuthPage() {
+function normalizeRequestedTab(requestedTab: string | null): "login" | "register" | null {
+  return requestedTab === "login" || requestedTab === "register" ? requestedTab : null;
+}
+
+function useResolvedSearchParams(searchParams: Promise<AuthSearchParams> | AuthSearchParams | undefined) {
+  if (!searchParams) return {};
+  if (typeof (searchParams as Promise<AuthSearchParams>).then === "function") {
+    return use(searchParams as Promise<AuthSearchParams>);
+  }
+  return searchParams as AuthSearchParams;
+}
+
+export default function AuthPage({
+  searchParams,
+}: {
+  searchParams?: Promise<AuthSearchParams> | AuthSearchParams;
+}) {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
   const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-  const [role, setRole] = useState<"student" | "company">(() => getRequestedRole() ?? "student");
-  const [tab, setTab] = useState<"login" | "register">(() => (getRequestedRole() ? "register" : "login"));
+  const resolvedSearchParams = useResolvedSearchParams(searchParams);
+  const initialRequestedRole = normalizeRequestedRole(getSearchParamValue(resolvedSearchParams, "role"));
+  const initialRequestedTab =
+    normalizeRequestedTab(getSearchParamValue(resolvedSearchParams, "tab")) ??
+    (initialRequestedRole ? "register" : "login");
+  const [role, setRole] = useState<"student" | "company">(initialRequestedRole ?? "student");
+  const [tab, setTab] = useState<"login" | "register">(initialRequestedTab);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [info, setInfo] = useState<string | null>(null);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [acceptedMarketing, setAcceptedMarketing] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [textIndex, setTextIndex] = useState(0);
 
   useEffect(() => {
@@ -108,6 +194,7 @@ export default function AuthPage() {
     setLoading(true);
     setInfo(null);
 
+    const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/app/reset-password`,
     });
@@ -115,7 +202,7 @@ export default function AuthPage() {
     setLoading(false);
 
     if (error) {
-      setInfo(error.message);
+      setInfo(translateAuthError(error, "reset"));
       return;
     }
 
@@ -154,6 +241,7 @@ export default function AuthPage() {
     setLoading(true);
     setInfo(null);
 
+    const supabase = createClient();
     const { data: signUpData, error } = await supabase.auth.signUp({
       email,
       password,
@@ -170,7 +258,7 @@ export default function AuthPage() {
     setLoading(false);
 
     if (error) {
-      setInfo(error.message);
+      setInfo(translateAuthError(error, "register"));
       return;
     }
 
@@ -187,7 +275,13 @@ export default function AuthPage() {
         .eq("user_id", signUpData.user.id);
     }
 
-    setInfo("Konto zostało utworzone. Zaloguj się lub potwierdź email, jeśli ta opcja jest włączona.");
+    if (signUpData.session) {
+      router.replace("/app");
+      router.refresh();
+      return;
+    }
+
+    setInfo("Konto zostało utworzone. Potwierdź email, aby przejść do panelu użytkownika.");
   }
 
   async function signIn(e: React.FormEvent) {
@@ -213,19 +307,36 @@ export default function AuthPage() {
       return;
     }
 
-    setLoading(true);
-    setInfo(null);
+    flushSync(() => {
+      setLoading(true);
+      setInfo(null);
+      setPendingMessage("Sprawdzamy dane logowania...");
+    });
+    const slowLoginTimer = window.setTimeout(() => {
+      setPendingMessage("Logowanie trwa dłużej niż zwykle. Nadal otwieramy panel...");
+    }, 4000);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const authClient = createClient({ rememberSession: rememberMe });
+      const { error } = await authClient.auth.signInWithPassword({ email, password });
 
-    setLoading(false);
+      window.clearTimeout(slowLoginTimer);
 
-    if (error) {
-      setInfo(error.message);
-      return;
+      if (error) {
+        setLoading(false);
+        setPendingMessage(null);
+        setInfo(translateAuthError(error, "login"));
+        return;
+      }
+
+      setPendingMessage("Zalogowano. Otwieramy panel...");
+      router.replace("/app");
+    } catch (error) {
+      window.clearTimeout(slowLoginTimer);
+      setLoading(false);
+      setPendingMessage(null);
+      setInfo(getUnexpectedErrorMessage(error));
     }
-
-    router.push("/app");
   }
 
   return (
@@ -242,7 +353,13 @@ export default function AuthPage() {
 
         <div className="relative z-10">
           <div className="inline-flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 backdrop-blur-sm">
-            <Image src="/logo.png" alt="Student2Work" width={44} height={44} className="h-11 w-auto brightness-0 invert" />
+            <Image
+              src="/logo.png"
+              alt="Student2Work"
+              width={44}
+              height={29}
+              className="brightness-0 invert"
+            />
             <div>
               <div className="text-sm font-black uppercase tracking-[0.2em] text-[#ffe066]">Student2Work</div>
               <div className="text-xs text-white/65">ambicja spotyka realną pracę</div>
@@ -310,27 +427,47 @@ export default function AuthPage() {
             </p>
           </div>
 
-          <Tabs value={tab} onValueChange={(value) => setTab(value as "login" | "register")} className="mt-8 space-y-6">
-            <TabsList className="grid h-12 w-full grid-cols-2 rounded-xl bg-gray-100/80 p-1">
-              <TabsTrigger
-                value="login"
-                className="rounded-lg font-semibold transition-all data-[state=active]:bg-white data-[state=active]:text-[#667eea] data-[state=active]:shadow-sm"
+          <div className="mt-8 space-y-6">
+            <div className="grid h-12 w-full grid-cols-2 rounded-xl bg-gray-100/80 p-1" role="tablist">
+              <a
+                href="/auth?tab=login"
+                role="tab"
+                aria-selected={tab === "login"}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setTab("login");
+                }}
+                className={`flex items-center justify-center rounded-lg font-semibold transition-all ${
+                  tab === "login" ? "bg-white text-[#667eea] shadow-sm" : "text-[#1a1a2e]"
+                }`}
               >
                 Logowanie
-              </TabsTrigger>
-              <TabsTrigger
-                value="register"
-                className="rounded-lg font-semibold transition-all data-[state=active]:bg-white data-[state=active]:text-[#667eea] data-[state=active]:shadow-sm"
+              </a>
+              <a
+                href={`/auth?tab=register&role=${role}`}
+                role="tab"
+                aria-selected={tab === "register"}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setTab("register");
+                }}
+                className={`flex items-center justify-center rounded-lg font-semibold transition-all ${
+                  tab === "register" ? "bg-white text-[#667eea] shadow-sm" : "text-[#1a1a2e]"
+                }`}
               >
                 Rejestracja
-              </TabsTrigger>
-            </TabsList>
+              </a>
+            </div>
 
-            <TabsContent value="login" className="space-y-4">
+            {tab === "login" ? (
+            <div role="tabpanel" className="space-y-4">
               <form onSubmit={signIn} className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="font-semibold text-[#1a1a2e]">Email</Label>
+                  <Label htmlFor="login-email" className="font-semibold text-[#1a1a2e]">Email</Label>
                   <Input
+                    id="login-email"
+                    type="email"
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="h-12 rounded-xl border-2 border-gray-200 bg-gray-50 transition-all focus:border-[#667eea] focus:bg-white"
@@ -340,7 +477,7 @@ export default function AuthPage() {
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label className="font-semibold text-[#1a1a2e]">Hasło</Label>
+                    <Label htmlFor="login-password" className="font-semibold text-[#1a1a2e]">Hasło</Label>
                     <button
                       type="button"
                       onClick={handlePasswordReset}
@@ -351,16 +488,57 @@ export default function AuthPage() {
                     </button>
                   </div>
                   <Input
+                    id="login-password"
                     type="password"
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-12 rounded-xl border-2 border-gray-200 bg-gray-50 transition-all focus:border-[#667eea] focus:bg-white"
                   />
                 </div>
 
+                <div className="flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+                  <Checkbox
+                    id="remember-me"
+                    checked={rememberMe}
+                    onCheckedChange={(value) => setRememberMe(value === true)}
+                    className="mt-0.5 border-gray-300 data-[state=checked]:border-[#667eea] data-[state=checked]:bg-[#667eea]"
+                  />
+                  <label htmlFor="remember-me" className="cursor-pointer select-none text-sm leading-relaxed text-gray-600">
+                    Zapamiętaj mnie na tym urządzeniu
+                    <span className="block text-xs text-gray-400">
+                      Gdy odznaczysz tę opcję, sesja wygaśnie po zamknięciu przeglądarki.
+                    </span>
+                  </label>
+                </div>
+
+                {info ? (
+                  <div
+                    className={`rounded-xl border p-4 text-sm leading-relaxed ${
+                      isSuccessMessage(info)
+                        ? "border-green-200 bg-green-50 text-green-700"
+                        : "border-red-200 bg-red-50 text-red-700"
+                    }`}
+                    role="alert"
+                  >
+                    {info}
+                  </div>
+                ) : null}
+
+                {pendingMessage ? (
+                  <div
+                    className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-relaxed text-blue-700"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {pendingMessage}
+                  </div>
+                ) : null}
+
                 <Button
-                  className="h-12 w-full rounded-xl bg-gradient-to-r from-[#667eea] to-[#764ba2] font-semibold text-white shadow-[0_4px_15px_rgba(102,126,234,0.4)] transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_25px_rgba(102,126,234,0.5)]"
+                  className="h-12 w-full rounded-xl bg-gradient-to-r from-[#667eea] to-[#764ba2] font-semibold text-white shadow-[0_4px_15px_rgba(102,126,234,0.4)] transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_25px_rgba(102,126,234,0.5)] disabled:cursor-wait disabled:opacity-80"
                   disabled={loading}
+                  aria-busy={loading}
                 >
                   {loading ? "Logowanie..." : "Zaloguj się"}
                 </Button>
@@ -369,9 +547,11 @@ export default function AuthPage() {
                   <div className="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="light" />
                 ) : null}
               </form>
-            </TabsContent>
+            </div>
+            ) : null}
 
-            <TabsContent value="register" className="space-y-4">
+            {tab === "register" ? (
+            <div role="tabpanel" className="space-y-4">
               <div className="mb-4 grid grid-cols-2 gap-3">
                 <button
                   type="button"
@@ -402,8 +582,11 @@ export default function AuthPage() {
 
               <form onSubmit={signUp} className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="font-semibold text-[#1a1a2e]">Email</Label>
+                  <Label htmlFor="register-email" className="font-semibold text-[#1a1a2e]">Email</Label>
                   <Input
+                    id="register-email"
+                    type="email"
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="h-12 rounded-xl border-2 border-gray-200 bg-gray-50 transition-all focus:border-[#667eea] focus:bg-white"
@@ -412,9 +595,11 @@ export default function AuthPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="font-semibold text-[#1a1a2e]">Hasło</Label>
+                  <Label htmlFor="register-password" className="font-semibold text-[#1a1a2e]">Hasło</Label>
                   <Input
+                    id="register-password"
                     type="password"
+                    autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-12 rounded-xl border-2 border-gray-200 bg-gray-50 transition-all focus:border-[#667eea] focus:bg-white"
@@ -489,13 +674,14 @@ export default function AuthPage() {
                   <div className="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="light" />
                 ) : null}
               </form>
-            </TabsContent>
-          </Tabs>
+            </div>
+            ) : null}
+          </div>
 
-          {info ? (
+          {info && tab !== "login" ? (
             <div
               className={`mt-6 rounded-xl border p-4 text-sm ${
-                info.startsWith("Konto") || info.startsWith("Link")
+                isSuccessMessage(info)
                   ? "border-green-200 bg-green-50 text-green-700"
                   : "border-red-200 bg-red-50 text-red-700"
               }`}

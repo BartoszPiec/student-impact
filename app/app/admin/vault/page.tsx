@@ -11,6 +11,38 @@ type LegalVaultPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
+type ContractDocumentRow = {
+  id: string;
+  contract_id: string | null;
+  document_type: string;
+  file_name: string | null;
+  storage_path: string | null;
+};
+
+type InvoiceStatusRow = {
+  contract_id: string | null;
+  status: string;
+};
+
+type VaultContractRow = {
+  id: string;
+  created_at: string;
+  total_amount: number | string | null;
+  currency: string | null;
+  status: string;
+  documents_generated_at?: string | null;
+  company_contract_accepted_at?: string | null;
+  student_contract_accepted_at?: string | null;
+  student_id: string | null;
+  company_id: string | null;
+  student: { public_name?: string | null } | null;
+  company: { nazwa?: string | null } | null;
+  applications?:
+    | { offers?: { tytul?: string | null } | Array<{ tytul?: string | null }> | null }
+    | Array<{ offers?: { tytul?: string | null } | Array<{ tytul?: string | null }> | null }>
+    | null;
+};
+
 export default async function LegalVaultPage({ searchParams }: LegalVaultPageProps) {
   const supabase = createAdminClient();
   const resolvedSearchParams = (await searchParams) || {};
@@ -48,13 +80,13 @@ export default async function LegalVaultPage({ searchParams }: LegalVaultPagePro
     return (
       <div className="flex min-h-[400px] flex-col items-center justify-center rounded-3xl border border-red-500/20 bg-red-500/5 p-8">
         <ShieldAlert className="mb-4 h-12 w-12 text-red-500" />
-        <h2 className="text-xl font-black text-white">Blad bazy danych</h2>
+        <h2 className="text-xl font-black text-white">Błąd bazy danych</h2>
         <p className="mt-2 text-slate-400">{error.message}</p>
       </div>
     );
   }
 
-  const contractRows = ((contracts || []) as any[]) || [];
+  const contractRows = (contracts || []) as unknown as VaultContractRow[];
   const contractIds = contractRows.map((contract) => contract.id).filter(Boolean);
 
   let documentCountByContract = new Map<string, number>();
@@ -76,34 +108,33 @@ export default async function LegalVaultPage({ searchParams }: LegalVaultPagePro
         .in("contract_id", contractIds),
     ]);
 
-    documentCountByContract = (documents || []).reduce((map, document: any) => {
+    const documentRows = (documents || []) as ContractDocumentRow[];
+    documentCountByContract = documentRows.reduce((map, document) => {
       const contractId = document.contract_id;
       if (!contractId) return map;
       map.set(contractId, (map.get(contractId) || 0) + 1);
       return map;
     }, new Map<string, number>());
 
-    const legalDocumentsWithUrls = await Promise.all(
-      (documents || [])
-        .filter((document: any) =>
-          document.document_type === "contract_a" || document.document_type === "contract_b",
-        )
-        .map(async (document: any) => {
-          const { data } = document.storage_path
-            ? await supabase.storage
-                .from("deliverables")
-                .createSignedUrl(document.storage_path, 60 * 60)
-            : { data: null };
-
-          return {
-            contract_id: document.contract_id,
-            id: document.id,
-            name: document.file_name || document.document_type,
-            type: document.document_type,
-            url: data?.signedUrl || null,
-          };
-        }),
+    const legalDocumentRows = documentRows.filter((document) =>
+      document.document_type === "contract_a" || document.document_type === "contract_b",
     );
+    const legalStoragePaths = legalDocumentRows
+      .map((document) => document.storage_path)
+      .filter((path): path is string => Boolean(path));
+    const { data: signedUrls } = legalStoragePaths.length > 0
+      ? await supabase.storage.from("deliverables").createSignedUrls(legalStoragePaths, 60 * 60)
+      : { data: [] };
+    const signedUrlByPath = new Map(
+      (signedUrls ?? []).map((signedUrl, index) => [legalStoragePaths[index], signedUrl.signedUrl ?? null]),
+    );
+    const legalDocumentsWithUrls = legalDocumentRows.map((document) => ({
+      contract_id: document.contract_id,
+      id: document.id,
+      name: document.file_name || document.document_type,
+      type: document.document_type,
+      url: document.storage_path ? signedUrlByPath.get(document.storage_path) ?? null : null,
+    }));
 
     legalDocumentsByContract = legalDocumentsWithUrls.reduce((map, document) => {
       if (!document.contract_id) return map;
@@ -118,8 +149,8 @@ export default async function LegalVaultPage({ searchParams }: LegalVaultPagePro
       return map;
     }, new Map<string, Array<{ id: string; name: string; type: string; url: string | null }>>());
 
-    invoiceSummaryByContract = (invoices || []).reduce(
-      (map, invoice: any) => {
+    invoiceSummaryByContract = ((invoices || []) as InvoiceStatusRow[]).reduce(
+      (map, invoice) => {
         const contractId = invoice.contract_id;
         if (!contractId) return map;
         const current = map.get(contractId) || { total: 0, paid: 0 };
@@ -178,7 +209,7 @@ export default async function LegalVaultPage({ searchParams }: LegalVaultPagePro
             Legal <span className="text-indigo-500">Vault</span>
           </h1>
           <p className="max-w-xl font-medium leading-relaxed text-slate-400">
-            Centralne repozytorium wszystkich zawartych umow. Pobieraj podpisane
+            Centralne repozytorium wszystkich zawartych umów. Pobieraj podpisane
             dokumenty PDF do celow ksiegowych i prawnych.
           </p>
         </div>
@@ -212,7 +243,7 @@ export default async function LegalVaultPage({ searchParams }: LegalVaultPagePro
           {showSingleRepairFailure
             ? "Naprawa pojedynczego PDF nie powiodla sie"
             : showSingleRepairSuccess
-              ? "Naprawa pojedynczego PDF zakonczona"
+              ? "Naprawa pojedynczego PDF zakończona"
               : "Stan naprawy pojedynczego PDF zaktualizowany"}
           {singleContractId ? (
             <>
@@ -228,7 +259,7 @@ export default async function LegalVaultPage({ searchParams }: LegalVaultPagePro
           ) : null}
           {!showSingleRepairFailure && singleRepairHasDocuments ? (
             <div className="mt-2 text-emerald-200/90">
-              Dokumenty umowy sa juz dostepne w Legal Vault.
+              Dokumenty umowy są już dostępne w Legal Vault.
             </div>
           ) : null}
           <div className="mt-3">

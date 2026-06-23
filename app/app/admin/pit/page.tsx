@@ -30,7 +30,7 @@ export default async function AdminPitPage() {
     return (
       <main className="p-8">
         <div className="rounded-3xl border border-red-500/20 bg-red-500/5 p-6 text-red-300">
-          Blad ladowania danych PIT: {error.message}
+          Błąd ładowania danych PIT: {error.message}
         </div>
       </main>
     );

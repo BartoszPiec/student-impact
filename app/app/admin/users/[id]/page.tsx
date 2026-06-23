@@ -7,6 +7,32 @@ export const dynamic = "force-dynamic";
 
 type Params = Promise<{ id: string }>;
 
+type ContractRow = {
+  id: string;
+  status: string | null;
+  total_amount: number | string | null;
+  currency: string | null;
+  commission_rate: number | null;
+  created_at: string;
+};
+
+type PayoutRow = {
+  id: string;
+  contract_id: string;
+  amount_net: number | string | null;
+  status: string | null;
+  created_at: string;
+};
+
+type PitRow = {
+  id: string;
+  contract_id: string | null;
+  pit_amount: number | string | null;
+  status: string | null;
+  tax_period: string | null;
+  created_at: string;
+};
+
 function formatMoney(value: number | string | null | undefined, currency = "PLN") {
   return Number(value || 0).toLocaleString("pl-PL", {
     style: "currency",
@@ -94,9 +120,9 @@ export default async function AdminUserDetailPage({ params }: { params: Params }
           ? companyProfileResult.data?.nazwa || null
           : null,
   });
-  const contracts = contractsResult.data || [];
-  const pitRows = pitResult.data || [];
-  const studentContractIds = profile.role === "student" ? contracts.map((contract: any) => contract.id) : [];
+  const contracts = (contractsResult.data || []) as ContractRow[];
+  const pitRows = (pitResult.data || []) as PitRow[];
+  const studentContractIds = profile.role === "student" ? contracts.map((contract) => contract.id) : [];
   const payouts =
     profile.role === "student" && studentContractIds.length > 0
       ? (
@@ -108,8 +134,9 @@ export default async function AdminUserDetailPage({ params }: { params: Params }
             .limit(10)
         ).data || []
       : [];
-  const totalPayoutNet = payouts.reduce((sum, row: any) => sum + Number(row.amount_net || 0), 0);
-  const totalPit = pitRows.reduce((sum, row: any) => sum + Number(row.pit_amount || 0), 0);
+  const payoutRows = payouts as PayoutRow[];
+  const totalPayoutNet = payoutRows.reduce((sum, row) => sum + Number(row.amount_net || 0), 0);
+  const totalPit = pitRows.reduce((sum, row) => sum + Number(row.pit_amount || 0), 0);
 
   return (
     <div className="space-y-8 pb-12">
@@ -121,7 +148,7 @@ export default async function AdminUserDetailPage({ params }: { params: Params }
               className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-300 transition hover:bg-white/10 hover:text-white"
             >
               <ArrowLeft className="h-4 w-4" />
-              Wroc do uzytkownikow
+              Wroc do użytkowników
             </Link>
 
             <div className="mb-4 flex items-center gap-3">
@@ -195,11 +222,11 @@ export default async function AdminUserDetailPage({ params }: { params: Params }
                 {contracts.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center text-sm font-medium text-slate-500">
-                      Brak kontraktow dla tego uzytkownika.
+                      Brak kontraktów dla tego użytkownika.
                     </td>
                   </tr>
                 ) : (
-                  contracts.map((contract: any) => (
+                  contracts.map((contract) => (
                     <tr key={contract.id} className="transition-colors hover:bg-white/5">
                       <td className="px-6 py-4 font-mono text-[11px]">
                         <Link
@@ -293,12 +320,12 @@ export default async function AdminUserDetailPage({ params }: { params: Params }
 
               <div className="space-y-4">
                 <div>
-                  <div className="text-xs font-black uppercase tracking-widest text-slate-500">Ostatnie wyplaty</div>
+                  <div className="text-xs font-black uppercase tracking-widest text-slate-500">Ostatnie wypłaty</div>
                   <div className="mt-2 space-y-2">
                     {payouts.length === 0 ? (
-                      <div className="text-sm text-slate-500">Brak wyplat.</div>
+                      <div className="text-sm text-slate-500">Brak wypłat.</div>
                     ) : (
-                      payouts.map((payout: any) => (
+                      payoutRows.map((payout) => (
                         <div
                           key={payout.id}
                           className="rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3"
@@ -326,7 +353,7 @@ export default async function AdminUserDetailPage({ params }: { params: Params }
                     {pitRows.length === 0 ? (
                       <div className="text-sm text-slate-500">Brak pozycji PIT.</div>
                     ) : (
-                      pitRows.map((row: any) => (
+                      pitRows.map((row) => (
                         <div
                           key={row.id}
                           className="rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3"

@@ -26,7 +26,7 @@ export default function StudentReviewForm({
         onSubmit={async (review) => {
           await submitStudentReview({ applicationId, companyId, review });
         }}
-        submitLabel="Zapisz ocene"
+        submitLabel="Zapisz ocenę"
       />
 
       <Button asChild variant="outline">

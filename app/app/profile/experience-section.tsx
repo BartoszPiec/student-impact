@@ -7,6 +7,33 @@ import { Briefcase, Calendar, ArrowUpRight, CheckCircle2 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
+type OfferSummary = { tytul: string | null; opis: string | null };
+type ApplicationRow = {
+  id: string;
+  offer_id: string;
+  offers: OfferSummary | OfferSummary[] | null;
+};
+type ServiceOrderRow = { id: string; title: string | null; requirements: string | null };
+type ContractRow = {
+  id: string;
+  created_at: string;
+  application_id?: string | null;
+  service_order_id?: string | null;
+};
+type ProjectRow = {
+  id: string;
+  title: string;
+  summary: string | null;
+  link: string | null;
+  created_at: string;
+  offer_id: string | null;
+  isVerified?: boolean;
+};
+
+function firstRelation<T>(relation: T | T[] | null): T | null {
+  return Array.isArray(relation) ? relation[0] ?? null : relation;
+}
+
 function formatDate(ts?: string | null) {
   if (!ts) return "";
   return new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium" }).format(new Date(ts));
@@ -45,45 +72,48 @@ export default async function ExperienceSection() {
     .select("id, title, requirements")
     .eq("student_id", user.id);
 
-  const myAppIds = (myApps || []).map(a => a.id);
-  const myOrderIds = (myOrders || []).map(o => o.id);
+  const applicationRows = (myApps || []) as unknown as ApplicationRow[];
+  const orderRows = (myOrders || []) as ServiceOrderRow[];
+  const myAppIds = applicationRows.map(a => a.id);
+  const myOrderIds = orderRows.map(o => o.id);
 
   // 3. Fetch Completed Contracts (Split Queries for Safety)
-  let contractsFromApps: any[] = [];
+  let contractsFromApps: ContractRow[] = [];
   if (myAppIds.length > 0) {
     const { data } = await supabase
       .from("contracts")
       .select("id, created_at, status, application_id")
       .in("application_id", myAppIds)
       .eq("status", "completed");
-    contractsFromApps = data || [];
+    contractsFromApps = (data || []) as ContractRow[];
   }
 
-  let contractsFromOrders: any[] = [];
+  let contractsFromOrders: ContractRow[] = [];
   if (myOrderIds.length > 0) {
     const { data } = await supabase
       .from("contracts")
       .select("id, created_at, status, service_order_id")
       .in("service_order_id", myOrderIds)
       .eq("status", "completed");
-    contractsFromOrders = data || [];
+    contractsFromOrders = (data || []) as ContractRow[];
   }
 
   // 4. Transform & Merge
-  const verifiedProjects = [...contractsFromApps, ...contractsFromOrders].map((c: any) => {
+  const verifiedProjects: ProjectRow[] = [...contractsFromApps, ...contractsFromOrders].map((c) => {
     let title = "Zrealizowany Projekt";
     let summary = "";
     let offerId = null;
 
     if (c.application_id) {
-      const app = myApps?.find(a => a.id === c.application_id);
+      const app = applicationRows.find(a => a.id === c.application_id);
       if (app) {
-        title = (app.offers as any)?.tytul || "Projekt z Aplikacji";
-        summary = (app.offers as any)?.opis || "";
+        const offer = firstRelation(app.offers);
+        title = offer?.tytul || "Projekt z Aplikacji";
+        summary = offer?.opis || "";
         offerId = app.offer_id;
       }
     } else if (c.service_order_id) {
-      const order = myOrders?.find(o => o.id === c.service_order_id);
+      const order = orderRows.find(o => o.id === c.service_order_id);
       if (order) {
         title = order.title || "Zlecenie Bezpośrednie";
         summary = order.requirements || "";
@@ -102,7 +132,8 @@ export default async function ExperienceSection() {
   });
 
   // Merge and Sort
-  const allProjects = [...verifiedProjects, ...(manualRows || [])].sort((a: any, b: any) =>
+  const manualProjects = (manualRows || []) as ProjectRow[];
+  const allProjects = [...verifiedProjects, ...manualProjects].sort((a, b) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
@@ -132,7 +163,7 @@ export default async function ExperienceSection() {
         )}
 
         <div className="grid gap-6 md:grid-cols-2">
-          {allProjects.map((e: any) => (
+          {allProjects.map((e) => (
             <div key={e.id} className="group flex flex-col justify-between bg-white border border-slate-100 rounded-3xl p-6 hover:shadow-xl hover:shadow-slate-200/50 hover:border-indigo-100 transition-all duration-300 relative overflow-hidden">
               {e.isVerified && (
                 <div className="absolute top-0 right-0 p-4 opacity-50"><CheckCircle2 className="w-12 h-12 text-emerald-100 group-hover:text-emerald-200 transition-colors" /></div>

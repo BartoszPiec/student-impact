@@ -29,7 +29,26 @@ import {
   SERVICE_ORDER_BUCKETS,
 } from "./service-order-status";
 
-function getOrderPreview(order: any) {
+type DashboardOrder = {
+  id: string;
+  company_id: string;
+  status: string;
+  amount: number;
+  counter_amount?: number | null;
+  created_at: string;
+  requirements: string | null;
+  request_snapshot: unknown;
+  package: { title?: string | null } | Array<{ title?: string | null }> | null;
+};
+
+type CompanySummary = { nazwa?: string | null };
+
+function getPackageTitle(order: DashboardOrder) {
+  const packageData = Array.isArray(order.package) ? order.package[0] : order.package;
+  return packageData?.title || "Usługa archiwalna";
+}
+
+function getOrderPreview(order: DashboardOrder) {
   const snapshot = isRequestSnapshot(order.request_snapshot) ? order.request_snapshot : null;
 
   if (snapshot?.source === "student_private_proposal") {
@@ -42,8 +61,8 @@ function getOrderPreview(order: any) {
 }
 
 interface DashboardClientProps {
-  initialOrders: any[];
-  companyData: Record<string, any>;
+  initialOrders: DashboardOrder[];
+  companyData: Record<string, CompanySummary>;
 }
 
 export default function DashboardClient({ initialOrders, companyData }: DashboardClientProps) {
@@ -57,7 +76,7 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
     if (searchTerm) {
       const lowerSearch = searchTerm.toLowerCase();
       result = result.filter((order) => {
-        const title = order.package?.title?.toLowerCase() || "";
+        const title = getPackageTitle(order).toLowerCase();
         const companyName = companyData[order.company_id]?.nazwa?.toLowerCase() || "";
         return title.includes(lowerSearch) || companyName.includes(lowerSearch);
       });
@@ -194,7 +213,7 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
                 </div>
 
                 <div className="grid gap-6">
-                  {section.orders.map((order: any) => {
+                  {section.orders.map((order) => {
                     const statusMeta = getServiceOrderStatusMeta(order.status);
                     const companyName = companyData[order.company_id]?.nazwa || "Firma partnerska";
                     const amountLabel = order.status === "countered" && order.counter_amount ? order.counter_amount : order.amount;
@@ -245,7 +264,7 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
                                   <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">WYBRANA USŁUGA</p>
                                   <Link href={`/app/services/dashboard/${order.id}`} className="block">
                                     <h3 className="line-clamp-1 text-2xl font-black text-slate-900 transition-colors group-hover:text-indigo-600">
-                                      {order.package?.title || "Usługa archiwalna"}
+                                      {getPackageTitle(order)}
                                     </h3>
                                   </Link>
                                 </div>

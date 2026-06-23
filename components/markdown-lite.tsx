@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { CheckCircle2, ChevronRight, FileText, X, Lightbulb, AlertCircle } from "lucide-react";
+import { CheckCircle2, ChevronRight, FileText, X } from "lucide-react";
 
 interface MarkdownLiteProps {
     content: string;

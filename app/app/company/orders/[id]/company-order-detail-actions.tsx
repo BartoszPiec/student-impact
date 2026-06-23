@@ -55,10 +55,10 @@ export default function CompanyOrderDetailActions({
     try {
       setAcceptLoading(true);
       await acceptServiceProposalAction(order.id);
-      toast.success("Oferta studenta zostala zaakceptowana.");
+      toast.success("Oferta studenta została zaakceptowana.");
       router.refresh();
     } catch (error: any) {
-      toast.error(error.message || "Nie udalo sie zaakceptowac oferty.");
+      toast.error(error.message || "Nie udało sie zaakceptować oferty.");
     } finally {
       setAcceptLoading(false);
     }
@@ -74,28 +74,28 @@ export default function CompanyOrderDetailActions({
     try {
       setCounterLoading(true);
       await counterServiceProposalAction(order.id, amount);
-      toast.success("Kontroferta zostala wyslana do studenta.");
+      toast.success("Kontroferta została wysłana do studenta.");
       setCounterOpen(false);
       router.refresh();
     } catch (error: any) {
-      toast.error(error.message || "Nie udalo sie wyslac kontroferty.");
+      toast.error(error.message || "Nie udało sie wysłać kontroferty.");
     } finally {
       setCounterLoading(false);
     }
   };
 
   const handleReject = async () => {
-    if (!confirm("Czy na pewno chcesz zamknac te negocjacje?")) {
+    if (!confirm("Czy na pewno chcesz zamknąć te negocjacje?")) {
       return;
     }
 
     try {
       setRejectLoading(true);
       await rejectServiceProposalAction(order.id);
-      toast.success("Negocjacja zostala zakonczona.");
+      toast.success("Negocjacja została zakończona.");
       router.push("/app/company/orders");
     } catch (error: any) {
-      toast.error(error.message || "Nie udalo sie zamknac negocjacji.");
+      toast.error(error.message || "Nie udało sie zamknąć negocjacji.");
     } finally {
       setRejectLoading(false);
     }
@@ -144,7 +144,7 @@ export default function CompanyOrderDetailActions({
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Kontroferta dla studenta</DialogTitle>
-                <DialogDescription>Podaj nowa kwote, ktora chcesz zaproponowac wykonawcy.</DialogDescription>
+                <DialogDescription>Podaj nowa kwote, która chcesz zaproponowac wykonawcy.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div>

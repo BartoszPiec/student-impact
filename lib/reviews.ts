@@ -12,7 +12,7 @@ export const REVIEW_CATEGORIES = [
   {
     key: "professionalism",
     label: "Profesjonalizm",
-    description: "Jakosc wspolpracy, podejscie i kultura pracy.",
+    description: "Jakosc współpracy, podejscie i kultura pracy.",
   },
   {
     key: "project_documentation",

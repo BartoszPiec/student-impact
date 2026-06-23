@@ -29,7 +29,7 @@ export default async function CompanyDocumentsPage() {
       <PremiumPageHeader
         badge="Panel Pracodawcy"
         title="Dokumenty firmy"
-        description="W jednym miejscu zobaczysz umowy A i faktury firmowe wygenerowane dla Twoich kontraktow."
+        description="W jednym miejscu zobaczysz umowy A i faktury firmowe wygenerowane dla Twoich kontraktów."
         icon={<FileText className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
       />
 

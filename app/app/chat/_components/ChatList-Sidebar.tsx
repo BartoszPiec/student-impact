@@ -1,163 +1,138 @@
-
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/request-context";
 import ChatListSidebarClient from "./ChatListSidebarClient";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 export type ChatPreview = {
+  id: string;
+  created_at: string;
+  active_at: string;
+  unread_count?: number;
+  last_message?: string;
+  type?: "inquiry" | "application" | "order" | "direct";
+  other_user: {
     id: string;
-    created_at: string;
-    active_at: string;
-    unread_count?: number;
-    last_message?: string;
-    type?: "inquiry" | "application" | "order" | "direct";
-    other_user: {
-        id: string;
-        email: string;
-        public_name?: string;
-        avatar_url?: string;
-        role?: string;
-        nazwa?: string;
-    };
-    offer?: {
-        tytul: string;
-    };
-    package?: {
-        title: string;
-    };
-    application?: {
-        offer?: {
-            tytul: string;
-        }
-    }
+    email: string;
+    public_name?: string;
+    avatar_url?: string;
+    role?: string;
+    nazwa?: string;
+  };
+  offer?: { tytul: string };
+  package?: { title: string };
+  application?: { offer?: { tytul: string } };
 };
 
 type SidebarMessage = {
-    content?: string | null;
-    created_at: string;
-    read_at?: string | null;
-    sender_id: string;
-    event?: string | null;
-    payload?: Record<string, unknown> | null;
-    attachment_type?: string | null;
+  content?: string | null;
+  created_at: string;
+  read_at?: string | null;
+  sender_id: string;
+  event?: string | null;
+  payload?: Record<string, unknown> | null;
+  attachment_type?: string | null;
+};
+
+type ChatPreviewRow = {
+  id: string;
+  created_at: string;
+  updated_at: string | null;
+  conversation_type: string | null;
+  student_id: string;
+  company_id: string;
+  offer_title: string | null;
+  package_title: string | null;
+  application_offer_title: string | null;
+  last_message: SidebarMessage | null;
+  unread_count: number | string | null;
+  student_name: string | null;
+  company_name: string | null;
 };
 
 function payloadString(payload: Record<string, unknown> | null | undefined, key: string) {
-    const value = payload?.[key];
-    return typeof value === "string" ? value : "";
+  const value = payload?.[key];
+  return typeof value === "string" ? value : "";
 }
 
 function payloadNumber(payload: Record<string, unknown> | null | undefined, key: string) {
-    const value = payload?.[key];
-    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  const value = payload?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function buildLastMessagePreview(message?: SidebarMessage | null) {
-    if (!message) return "";
+  if (!message) return "";
 
-    const content = String(message.content || "").trim();
-    if (content) return content;
+  const content = String(message.content || "").trim();
+  if (content) return content;
 
-    switch (message.event) {
-        case "file.sent":
-            return `[Plik] ${payloadString(message.payload, "name") || "Zalacznik"}`;
-        case "rate.proposed": {
-            const amount = payloadNumber(message.payload, "proposed_stawka") ?? payloadNumber(message.payload, "amount");
-            return amount ? `Propozycja stawki: ${amount} PLN` : "Nowa propozycja stawki";
-        }
-        case "rate.accepted":
-            return "Stawka zaakceptowana";
-        case "rate.rejected":
-            return "Stawka odrzucona";
-        case "deadline.proposed":
-            return `Propozycja terminu: ${payloadString(message.payload, "proposed_deadline") || "nowy termin"}`;
-        case "deadline.accepted":
-            return "Termin zaakceptowany";
-        case "deadline.rejected":
-            return "Termin odrzucony";
-        case "inquiry.details":
-        case "inquiry_details":
-            return "Szczegoly zapytania";
-        case "system.notice":
-            return "Aktualizacja rozmowy";
-        default:
-            return message.event ? "Nowe zdarzenie w rozmowie" : "";
+  switch (message.event) {
+    case "file.sent":
+      return `[Plik] ${payloadString(message.payload, "name") || "Załącznik"}`;
+    case "rate.proposed": {
+      const amount = payloadNumber(message.payload, "proposed_stawka") ?? payloadNumber(message.payload, "amount");
+      return amount ? `Propozycja stawki: ${amount} PLN` : "Nowa propozycja stawki";
     }
+    case "rate.accepted":
+      return "Stawka zaakceptowana";
+    case "rate.rejected":
+      return "Stawka odrzucona";
+    case "deadline.proposed":
+      return `Propozycja terminu: ${payloadString(message.payload, "proposed_deadline") || "nowy termin"}`;
+    case "deadline.accepted":
+      return "Termin zaakceptowany";
+    case "deadline.rejected":
+      return "Termin odrzucony";
+    case "inquiry.details":
+    case "inquiry_details":
+      return "Szczegóły zapytania";
+    case "system.notice":
+      return "Aktualizacja rozmowy";
+    default:
+      return message.event ? "Nowe zdarzenie w rozmowie" : "";
+  }
+}
+
+function resolveConversationType(row: ChatPreviewRow): ChatPreview["type"] {
+  if (row.conversation_type === "inquiry") return "inquiry";
+  if (row.package_title) return "order";
+  if (row.application_offer_title) return "application";
+  if (row.conversation_type === "direct") return "direct";
+  return "inquiry";
 }
 
 export default async function ChatListSidebar() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+  const supabase = await createClient();
+  const user = await getCurrentUser();
 
-    if (!user) return <ChatListSidebarClient initialConversations={[]} userId="" />;
+  if (!user) return <ChatListSidebarClient initialConversations={[]} userId="" />;
 
-    // REVERTED: Sorted by created_at because updated_at column might be missing.
-    // Also removed updated_at from select to prevent crash.
-    const { data, error } = await supabase
-        .from("conversations")
-        .select(`
-        id, 
-        created_at,
-        updated_at,
-        type,
-        student_id,
-        company_id,
-        offer:offers(tytul),
-        package:service_packages(title),
-        application:applications(offer:offers(tytul)),
-        messages:messages(content, created_at, read_at, sender_id, event, payload, attachment_type)
-      `)
-        .or(`student_id.eq.${user.id},company_id.eq.${user.id}`)
-        .order("updated_at", { ascending: false });
+  const { data, error } = await supabase.rpc("get_my_chat_previews", { p_limit: 50 });
 
-    if (error) {
-        console.error("Sidebar fetch error:", error);
-        return <ChatListSidebarClient initialConversations={[]} userId={user.id} />;
-    }
+  if (error) {
+    console.error("Nie udało się pobrać listy rozmów:", error);
+    return <ChatListSidebarClient initialConversations={[]} userId={user.id} />;
+  }
 
-    const processed: ChatPreview[] = await Promise.all(data.map(async (conv: any) => {
-        const isStudent = user.id === conv.student_id;
-        const otherId = isStudent ? conv.company_id : conv.student_id;
+  const processed = ((data ?? []) as ChatPreviewRow[]).map((row): ChatPreview => {
+    const isStudent = user.id === row.student_id;
+    const unreadCount = Number(row.unread_count ?? 0);
 
-        let otherUser: any = { id: otherId, email: "User" };
+    return {
+      id: row.id,
+      created_at: row.created_at,
+      active_at: row.updated_at ?? row.created_at,
+      type: resolveConversationType(row),
+      unread_count: Number.isFinite(unreadCount) ? unreadCount : 0,
+      last_message: buildLastMessagePreview(row.last_message),
+      other_user: isStudent
+        ? { id: row.company_id, email: "Firma", nazwa: row.company_name ?? undefined, role: "company" }
+        : { id: row.student_id, email: "Student", public_name: row.student_name ?? undefined, role: "student" },
+      offer: row.offer_title ? { tytul: row.offer_title } : undefined,
+      package: row.package_title ? { title: row.package_title } : undefined,
+      application: row.application_offer_title
+        ? { offer: { tytul: row.application_offer_title } }
+        : undefined,
+    };
+  });
 
-        if (isStudent) {
-            const { data: cp } = await supabase.from("company_profiles").select("nazwa, website").eq("user_id", otherId).maybeSingle();
-            if (cp) otherUser = { ...otherUser, nazwa: cp.nazwa, role: "company" };
-        } else {
-            const { data: sp } = await supabase.from("student_profiles").select("public_name").eq("user_id", otherId).maybeSingle();
-            if (sp) otherUser = { ...otherUser, public_name: sp.public_name, role: "student" };
-        }
-
-        // Sort messages desc
-        const sortedMsgs = ((conv.messages || []) as SidebarMessage[]).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        const lastMsg = sortedMsgs[0];
-        const amISender = lastMsg?.sender_id === user.id;
-
-        // Calculate unread. 
-        // If I sent the last message, assume I read everything -> Unread = 0.
-        const unreadRaw = conv.messages?.filter((m: any) => m.sender_id !== user.id && !m.read_at).length || 0;
-        const unread = amISender ? 0 : unreadRaw;
-
-        // Type Logic: Respect explicit 'inquiry' type even if package is present
-        let derivedType = conv.type;
-        if (conv.package && derivedType !== 'inquiry') derivedType = 'order';
-        else if (conv.application) derivedType = 'application';
-        else if (!derivedType) derivedType = 'inquiry';
-
-        return {
-            id: conv.id,
-            created_at: conv.created_at,
-            active_at: conv.updated_at || conv.created_at,
-            type: derivedType as any,
-            unread_count: unread,
-            last_message: buildLastMessagePreview(lastMsg),
-            other_user: otherUser,
-            offer: conv.offer,
-            package: conv.package,
-            application: conv.application
-        };
-    }));
-
-    return <ChatListSidebarClient initialConversations={processed} userId={user.id} />;
+  return <ChatListSidebarClient initialConversations={processed} userId={user.id} />;
 }

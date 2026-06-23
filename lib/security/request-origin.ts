@@ -20,8 +20,17 @@ function getConfiguredOrigins(req: NextRequest): Set<string> {
     origins.add(`https://${process.env.VERCEL_URL}`);
   }
 
-  const requestOrigin = normalizeOrigin(req.nextUrl.origin);
-  if (requestOrigin) origins.add(requestOrigin);
+  if (process.env.NODE_ENV !== "production") {
+    const requestOrigin = normalizeOrigin(req.nextUrl.origin);
+    if (requestOrigin) origins.add(requestOrigin);
+  }
+
+  const extraOrigins = process.env.APP_ALLOWED_ORIGINS
+    ?.split(",")
+    .map((origin) => normalizeOrigin(origin.trim()))
+    .filter((origin): origin is string => Boolean(origin));
+
+  extraOrigins?.forEach((origin) => origins.add(origin));
 
   if (process.env.NODE_ENV !== "production") {
     origins.add("http://localhost:3000");
@@ -39,7 +48,7 @@ export function rejectCrossSiteRequest(req: NextRequest): NextResponse | null {
     if (allowedOrigins.has(origin)) return null;
 
     return NextResponse.json(
-      { error: "Nieprawidlowe pochodzenie zadania." },
+      { error: "Nieprawidłowe pochodzenie zadania." },
       { status: 403 },
     );
   }
@@ -47,7 +56,7 @@ export function rejectCrossSiteRequest(req: NextRequest): NextResponse | null {
   const fetchSite = req.headers.get("sec-fetch-site");
   if (fetchSite && !["same-origin", "same-site", "none"].includes(fetchSite)) {
     return NextResponse.json(
-      { error: "Nieprawidlowe pochodzenie zadania." },
+      { error: "Nieprawidłowe pochodzenie zadania." },
       { status: 403 },
     );
   }

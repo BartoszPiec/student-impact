@@ -15,6 +15,14 @@ import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
 import { transferLatestPayoutForMilestone } from "@/lib/stripe/payouts";
 import {
+  assertCanAccessStorageRef,
+  assertUploadedObjectExists,
+  buildStorageRef,
+  createPrivateSignedUrl,
+  parseStorageRef,
+  type PrivateStorageBucket,
+} from "@/lib/security/storage";
+import {
   calculateOverallReviewRating,
   normalizeReviewCategoryRatings,
   serializeDetailedReviewComment,
@@ -209,34 +217,22 @@ export async function getSignedStorageUrl(
   download?: string | boolean,
 ) {
   const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) redirect("/auth");
 
-  let safeBucket = String(bucket || "deliverables");
-  let safePath = String(pathOrUrl || "").trim();
+  const parsed = parseStorageRef(pathOrUrl);
+  const storageRef = parsed
+    ?? {
+      bucket: String(bucket || "deliverables") as PrivateStorageBucket,
+      path: String(pathOrUrl || "").trim().replace(/^\/+/, ""),
+      ref: buildStorageRef(String(bucket || "deliverables") as PrivateStorageBucket, String(pathOrUrl || "").trim().replace(/^\/+/, "")),
+    };
 
-  // Accept legacy public URLs and extract bucket/path
-  if (safePath.startsWith("http")) {
-    const parsed = extractObjectPathFromPublicUrl(safePath);
-    if (parsed?.bucket && parsed?.path) {
-      safeBucket = parsed.bucket;
-      safePath = parsed.path;
-    } else {
-      // If we can't parse, fall back to returning the URL (may fail if bucket is private)
-      return safePath;
-    }
-  }
-
-  safePath = safePath.replace(/^\/+/, "");
-  if (!safePath) throw new Error("Missing file path");
-
-  // When `download` is provided, force a Content-Disposition: attachment response
-  // so the browser saves the file instead of opening it inline.
-  const options = download ? { download } : undefined;
-
-  const { data, error } = await supabase.storage.from(safeBucket).createSignedUrl(safePath, expiresInSeconds, options);
-  if (error) throw new Error(error.message);
-  if (!data?.signedUrl) throw new Error("No signed URL returned");
-
-  return data.signedUrl;
+  const allowedRef = await assertCanAccessStorageRef(userData.user.id, storageRef.ref);
+  return createPrivateSignedUrl(allowedRef, {
+    expiresInSeconds,
+    download: download ?? true,
+  });
 }
 
 /**
@@ -352,7 +348,7 @@ function normalizeDeliverableAttachments(value: unknown): DeliverableAttachment[
 
     const bucket = typeof row.bucket === "string" ? row.bucket.trim() : "";
     const path = typeof row.path === "string" ? row.path.trim().replace(/^\/+/, "") : "";
-    if (!bucket || !path) return [];
+    if (bucket !== "deliverables" || !path) return [];
 
     const size = typeof row.size === "number" && Number.isFinite(row.size) && row.size >= 0
       ? row.size
@@ -360,6 +356,33 @@ function normalizeDeliverableAttachments(value: unknown): DeliverableAttachment[
 
     return [{ kind: "file", name, bucket, path, size }];
   });
+}
+
+async function verifyDeliverableAttachments(
+  userId: string,
+  sourceId: string,
+  attachments: DeliverableAttachment[],
+  options: { resourceUpload?: boolean } = {},
+) {
+  const maxFiles = 20;
+  if (attachments.length > maxFiles) {
+    throw new Error("Mozesz dodac maksymalnie 20 zalacznikow.");
+  }
+
+  for (const attachment of attachments) {
+    if (attachment.kind === "external_link") continue;
+
+    const allowedPrefix = options.resourceUpload
+      ? `resources/${sourceId}/${userId}/`
+      : `${sourceId}/${userId}/`;
+
+    if (attachment.bucket !== "deliverables" || !attachment.path.startsWith(allowedPrefix)) {
+      throw new Error("Nieprawidłowa sciezka zalacznika.");
+    }
+
+    const ref = await assertCanAccessStorageRef(userId, buildStorageRef("deliverables", attachment.path));
+    await assertUploadedObjectExists(ref);
+  }
 }
 
 export async function submitDeliverable(applicationId: string, formData: FormData) {
@@ -376,6 +399,7 @@ export async function submitDeliverable(applicationId: string, formData: FormDat
     throw new Error("Invalid files data");
   }
   const attachments = normalizeDeliverableAttachments(files);
+  await verifyDeliverableAttachments(userData.user.id, applicationId, attachments);
 
   if (attachments.length === 0 && !description) {
     throw new Error("Musisz dodać pliki lub opis.");
@@ -465,7 +489,7 @@ export async function reviewDeliverable(deliverableId: string, status: "accepted
     });
     if (error) throw new Error(error.message);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Blad podczas oceniania pracy.";
+    const message = err instanceof Error ? err.message : "Błąd podczas oceniania pracy.";
     throw new Error(message);
   }
 
@@ -581,7 +605,7 @@ export async function submitReview(applicationId: string, input: DetailedReviewI
       : await contractQuery.eq("service_order_id", applicationId).maybeSingle();
 
   if (contractError) {
-    throw new Error("Nie udalo sie sprawdzic statusu kontraktu.");
+    throw new Error("Nie udało sie sprawdzic statusu kontraktu.");
   }
 
   const reviewContract = contractData as ReviewContractRow | null;
@@ -593,7 +617,7 @@ export async function submitReview(applicationId: string, input: DetailedReviewI
     );
 
   if (!reviewContract || (reviewContract.status !== "completed" && !allMilestonesReleased)) {
-    throw new Error("Ocene mozna wystawic dopiero po zakonczeniu i rozliczeniu zlecenia.");
+    throw new Error("Ocenę można wystawic dopiero po zakończeniu i rozliczeniu zlecenia.");
   }
 
   const existingReviewQuery = supabase
@@ -684,10 +708,38 @@ export async function addResource(applicationId: string, formData: FormData) {
     if (parsed) storedPath = parsed.path;
   }
 
+  const resourceRef = await assertCanAccessStorageRef(user.user.id, buildStorageRef("deliverables", storedPath));
+  if (!resourceRef.path.startsWith(`resources/${applicationId}/${user.user.id}/`)) {
+    throw new Error("Nieprawidłowa sciezka zasobu.");
+  }
+  await assertUploadedObjectExists(resourceRef);
+
+  const { data: applicationSource } = await supabase
+    .from("applications")
+    .select("id")
+    .eq("id", applicationId)
+    .maybeSingle();
+
+  let sourceColumns: { application_id?: string; service_order_id?: string };
+  if (applicationSource?.id) {
+    sourceColumns = { application_id: applicationId };
+  } else {
+    const { data: serviceOrderSource } = await supabase
+      .from("service_orders")
+      .select("id")
+      .eq("id", applicationId)
+      .maybeSingle();
+
+    if (!serviceOrderSource?.id) {
+      throw new Error("Nie znaleziono zlecenia dla materiału.");
+    }
+
+    sourceColumns = { service_order_id: applicationId };
+  }
 
   // RLS will check permissions
   const { error } = await supabase.from("project_resources").insert({
-    application_id: applicationId,
+    ...sourceColumns,
     uploader_id: user.user.id,
     file_name: filename,
     file_path: storedPath
@@ -775,7 +827,7 @@ export async function fundContractAction(contractId: string, applicationId: stri
     .maybeSingle();
 
   if (paymentProofError || !completedPayment) {
-    throw new Error("Kontrakt moze zostac aktywowany dopiero po potwierdzonej platnosci Stripe.");
+    throw new Error("Kontrakt może zostac aktywowany dopiero po potwierdzonej płatności Stripe.");
   }
 
   // Fund ALL milestones
@@ -838,6 +890,7 @@ export async function submitMilestoneWorkAction(
     throw new Error("Invalid files data");
   }
   const attachments = normalizeDeliverableAttachments(files);
+  await verifyDeliverableAttachments(user.user.id, applicationId, attachments);
 
   // ✅ [Refactor v1] Consolidated RPC
   if (attachments.length === 0 && !description) {
@@ -871,6 +924,7 @@ export async function submitMilestoneWorkAction(
       const offerTitle = offer?.tytul ?? null;
       await notifyUser(supabase, companyId, "milestone_submitted", {
         application_id: applicationId,
+        redirect_path: `/app/deliverables/${applicationId}`,
         offer_title: offerTitle,
         milestone_title: milestoneData?.title,
         snippet: `Student przesłał pracę do etapu "${milestoneData?.title}". Sprawdź i zaakceptuj!`,
@@ -996,10 +1050,11 @@ export async function reviewMilestoneAction(
       const offerTitle = offer?.tytul ?? null;
       const notifType = decision === "accepted" ? "milestone_accepted" : "milestone_rejected";
       const snippet = decision === "accepted"
-        ? `Etap "${milestoneData?.title}" został zaakceptowany. Środki zostaną przekazane!`
+        ? `Firma zaakceptowała etap "${milestoneData?.title}". Możesz przejść do kolejnego etapu lub podsumowania zlecenia.`
         : `Etap "${milestoneData?.title}" został odrzucony. Sprawdź uwagi firmy i prześlij poprawki.`;
       await notifyUser(supabase, studentId, notifType, {
         application_id: applicationId,
+        redirect_path: `/app/deliverables/${applicationId}`,
         offer_title: offerTitle,
         milestone_title: milestoneData?.title,
         snippet,
@@ -1327,7 +1382,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
       .maybeSingle();
 
     if (actorProfile?.role !== "admin") {
-      throw new Error("Brak uprawnien do wygenerowania dokumentow tego kontraktu.");
+      throw new Error("Brak uprawnien do wygenerowania dokumentów tego kontraktu.");
     }
   }
 
@@ -1339,7 +1394,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
 
   if (milestonesError) {
     console.error("Milestones load error:", milestonesError);
-    throw new Error("Nie udalo sie pobrac etapow kontraktu.");
+    throw new Error("Nie udało sie pobrać etapów kontraktu.");
   }
 
   const typedContract = {
@@ -1356,7 +1411,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
 
   if (existingDocumentsError) {
     console.error("Contract document guard error:", existingDocumentsError);
-    throw new Error("Nie udalo sie sprawdzic istniejacych dokumentow kontraktu.");
+    throw new Error("Nie udało sie sprawdzic istniejacych dokumentów kontraktu.");
   }
 
   const existingTypes = new Set(
@@ -1491,7 +1546,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
 
     if (uploadErrorA) {
       console.error("Upload Contract A Error:", uploadErrorA);
-      throw new Error("Nie udalo sie wgrac Umowy A: " + (uploadErrorA?.message || "unknown error"));
+      throw new Error("Nie udało sie wgrać Umowy A: " + (uploadErrorA?.message || "unknown error"));
     }
 
     documentsToInsert.push({
@@ -1512,7 +1567,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
 
     if (uploadErrorB) {
       console.error("Upload Contract B Error:", uploadErrorB);
-      throw new Error("Nie udalo sie wgrac Umowy B: " + (uploadErrorB?.message || "unknown error"));
+      throw new Error("Nie udało sie wgrać Umowy B: " + (uploadErrorB?.message || "unknown error"));
     }
 
     documentsToInsert.push({
@@ -1532,7 +1587,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
 
     if (docInsertError) {
       console.error("Insert contract_documents Error:", docInsertError);
-      throw new Error("Nie udalo sie zapisac dokumentow kontraktu: " + (docInsertError?.message || "unknown error"));
+      throw new Error("Nie udało sie zapisać dokumentów kontraktu: " + (docInsertError?.message || "unknown error"));
     }
   }
 
@@ -1543,7 +1598,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
 
   if (contractUpdateError) {
     console.error("documents_generated_at update error:", contractUpdateError);
-    throw new Error("Dokumenty powstaly, ale nie udalo sie zapisac znacznika generacji.");
+    throw new Error("Dokumenty powstaly, ale nie udało sie zapisać znacznika generacji.");
   }
 
   if (deliverableId) {
@@ -1605,10 +1660,10 @@ export async function acceptContractDocument(
 
   const typedDocument = contractDocument as ContractDocumentAcceptanceRow;
   if (isCompany && typedDocument.document_type !== "contract_a") {
-    throw new Error("Firma moze zaakceptowac tylko umowe A.");
+    throw new Error("Firma może zaakceptować tylko umowę A.");
   }
   if (isStudent && typedDocument.document_type !== "contract_b") {
-    throw new Error("Student moze zaakceptowac tylko umowe B.");
+    throw new Error("Student może zaakceptować tylko umowę B.");
   }
 
   // 2. Update contract_documents (use admin to bypass RLS)
@@ -1620,7 +1675,7 @@ export async function acceptContractDocument(
       .eq("contract_id", contractId);
 
     if (documentUpdateError) {
-      throw new Error("Nie udalo sie zapisac akceptacji dokumentu.");
+      throw new Error("Nie udało sie zapisać akceptacji dokumentu.");
     }
 
     // Also update the contract-level timestamp
@@ -1630,7 +1685,7 @@ export async function acceptContractDocument(
       .eq("id", contractId);
 
     if (contractUpdateError) {
-      throw new Error("Nie udalo sie zapisac akceptacji kontraktu.");
+      throw new Error("Nie udało sie zapisać akceptacji kontraktu.");
     }
   } else {
     const { error: documentUpdateError } = await admin
@@ -1640,7 +1695,7 @@ export async function acceptContractDocument(
       .eq("contract_id", contractId);
 
     if (documentUpdateError) {
-      throw new Error("Nie udalo sie zapisac akceptacji dokumentu.");
+      throw new Error("Nie udało sie zapisać akceptacji dokumentu.");
     }
 
     const { error: contractUpdateError } = await admin
@@ -1649,7 +1704,7 @@ export async function acceptContractDocument(
       .eq("id", contractId);
 
     if (contractUpdateError) {
-      throw new Error("Nie udalo sie zapisac akceptacji kontraktu.");
+      throw new Error("Nie udało sie zapisać akceptacji kontraktu.");
     }
   }
 
@@ -1684,11 +1739,11 @@ export async function reopenMilestoneNegotiationAction(contractId: string, appli
   );
 
   if (hasFundedMilestone || !["draft", "awaiting_funding"].includes(String(contract.status))) {
-    throw new Error("Nie mozna cofnac etapow po zasileniu depozytu lub rozpoczeciu realizacji.");
+    throw new Error("Nie można cofnac etapów po zasileniu depozytu lub rozpoczeciu realizacji.");
   }
 
   if (contract.company_contract_accepted_at || contract.student_contract_accepted_at) {
-    throw new Error("Umowa zostala juz zaakceptowana. Wymagana jest korekta przez administratora.");
+    throw new Error("Umowa została już zaakceptowana. Wymagana jest korekta przez administratora.");
   }
 
   const admin = createAdminClient();
@@ -1704,7 +1759,7 @@ export async function reopenMilestoneNegotiationAction(contractId: string, appli
     .eq("id", contractId);
 
   if (contractUpdateError) {
-    throw new Error("Nie udalo sie cofnac kontraktu do ustalania etapow.");
+    throw new Error("Nie udało sie cofnac kontraktu do ustalania etapów.");
   }
 
   await admin

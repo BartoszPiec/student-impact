@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveServerAppUrl } from "@/lib/app-url";
 import { getStripe, calculatePlatformFee } from "@/lib/stripe";
-import { checkPayoutAccountReadiness } from "@/lib/stripe/connect-readiness";
 import { resolveCommissionRate } from "@/lib/commission";
 import { buildRateLimitKey, enforceRateLimit, getRequestIp } from "@/lib/rate-limit";
 import { rejectCrossSiteRequest } from "@/lib/security/request-origin";
@@ -43,10 +41,6 @@ type ContractDocumentRow = {
   document_type: "contract_a" | "contract_b" | string;
   company_accepted_at: string | null;
   student_accepted_at: string | null;
-};
-
-type StudentPayoutReadinessRow = {
-  stripe_account_id: string | null;
 };
 
 type ApplicationInfo = {
@@ -98,7 +92,7 @@ export async function POST(req: NextRequest) {
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Musisz być zalogowany." }, { status: 401 });
     }
 
     const ip = getRequestIp(req);
@@ -108,7 +102,7 @@ export async function POST(req: NextRequest) {
     );
     if (!limitResult.success) {
       return NextResponse.json(
-        { error: "Zbyt wiele prob utworzenia platnosci. Sprobuj ponownie za chwile." },
+        { error: "Zbyt wiele prób utworzenia płatności. Spróbuj ponownie za chwilę." },
         {
           status: 429,
           headers: {
@@ -126,7 +120,7 @@ export async function POST(req: NextRequest) {
     const selectedSourceCount = Number(Boolean(applicationId)) + Number(Boolean(serviceOrderId));
     if (!contractId || selectedSourceCount !== 1) {
       return NextResponse.json(
-        { error: "Platnosc musi dotyczyc dokladnie jednego typu zlecenia" },
+        { error: "Płatność musi dotyczyć dokładnie jednego typu zlecenia." },
         { status: 400 },
       );
     }
@@ -136,7 +130,7 @@ export async function POST(req: NextRequest) {
       || (applicationId && !UUID_RE.test(applicationId))
       || (serviceOrderId && !UUID_RE.test(serviceOrderId))
     ) {
-      return NextResponse.json({ error: "Nieprawidlowe ID" }, { status: 400 });
+      return NextResponse.json({ error: "Nieprawidłowe ID." }, { status: 400 });
     }
 
     const { data: contractData, error: contractError } = await supabase
@@ -151,7 +145,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (contract.company_id !== user.id) {
-      return NextResponse.json({ error: "Nie masz uprawnien do tej platnosci." }, { status: 403 });
+      return NextResponse.json({ error: "Nie masz uprawnień do tej płatności." }, { status: 403 });
     }
 
     const contractSourceType = contract.source_type ?? (contract.service_order_id ? "service_order" : "application");
@@ -162,7 +156,7 @@ export async function POST(req: NextRequest) {
       || contract.service_order_id !== null
     )) {
       return NextResponse.json(
-        { error: "Nieprawidlowe powiazanie aplikacji z kontraktem" },
+        { error: "Nieprawidłowe powiązanie aplikacji z kontraktem." },
         { status: 400 },
       );
     }
@@ -173,7 +167,7 @@ export async function POST(req: NextRequest) {
       || contract.application_id !== null
     )) {
       return NextResponse.json(
-        { error: "Nieprawidlowe powiazanie Service Order z kontraktem" },
+        { error: "Nieprawidłowe powiązanie Service Order z kontraktem." },
         { status: 400 },
       );
     }
@@ -187,7 +181,7 @@ export async function POST(req: NextRequest) {
 
       if (!serviceOrder || serviceOrder.contract_id !== contractId || serviceOrder.company_id !== user.id) {
         return NextResponse.json(
-          { error: "Nieprawidlowe powiazanie Service Order z kontraktem" },
+          { error: "Nieprawidłowe powiązanie Service Order z kontraktem." },
           { status: 400 },
         );
       }
@@ -222,7 +216,7 @@ export async function POST(req: NextRequest) {
         .single();
       const serviceOrder = serviceOrderData as ServiceOrderInfo | null;
 
-      offerTitle = serviceOrder?.title || "Usluga serwisowa";
+      offerTitle = serviceOrder?.title || "Usługa serwisowa";
       isPlatformService = true;
 
       if (serviceOrder?.package_id) {
@@ -239,14 +233,14 @@ export async function POST(req: NextRequest) {
     const milestones = (contract.milestones || []) as MilestoneRow[];
     if (milestones.length === 0) {
       return NextResponse.json(
-        { error: "Nie mozna zasilic depozytu przed ustaleniem etapow." },
+        { error: "Nie można zasilić depozytu przed ustaleniem etapów." },
         { status: 400 },
       );
     }
 
     if (!contract.company_contract_accepted_at || !contract.student_contract_accepted_at) {
       return NextResponse.json(
-        { error: "Obie strony musza zaakceptowac umowe przed platnoscia" },
+        { error: "Obie strony muszą zaakceptować umowę przed płatnością." },
         { status: 400 },
       );
     }
@@ -259,7 +253,7 @@ export async function POST(req: NextRequest) {
 
     if (contractDocumentsError) {
       return NextResponse.json(
-        { error: "Nie udalo sie sprawdzic akceptacji umow." },
+        { error: "Nie udało się sprawdzić akceptacji umów." },
         { status: 500 },
       );
     }
@@ -270,55 +264,16 @@ export async function POST(req: NextRequest) {
 
     if (!contractA?.company_accepted_at || !contractB?.student_accepted_at) {
       return NextResponse.json(
-        { error: "Najpierw wygenerujcie i zaakceptujcie wlasciwe umowy." },
+        { error: "Najpierw wygenerujcie i zaakceptujcie właściwe umowy." },
         { status: 400 },
       );
     }
 
-    if (process.env.STRIPE_PAYOUTS_ENABLED === "true") {
-      if (!contract.student_id) {
-        return NextResponse.json(
-          { error: "Nie mozna uruchomic platnosci bez przypisanego studenta." },
-          { status: 409 },
-        );
-      }
-
-      const admin = createAdminClient();
-      const { data: studentPayoutProfile, error: studentPayoutError } = await admin
-        .from("student_profiles")
-        .select("stripe_account_id")
-        .eq("user_id", contract.student_id)
-        .maybeSingle();
-
-      if (studentPayoutError) {
-        return NextResponse.json(
-          { error: "Nie udalo sie sprawdzic gotowosci konta wyplat studenta." },
-          { status: 500 },
-        );
-      }
-
-      const payoutProfile = studentPayoutProfile as StudentPayoutReadinessRow | null;
-      if (!payoutProfile?.stripe_account_id) {
-        return NextResponse.json(
-          { error: "Student musi dokonczyc konto wyplat Stripe przed rozpoczeciem platnosci." },
-          { status: 409 },
-        );
-      }
-
-      const payoutReadiness = await checkPayoutAccountReadiness(payoutProfile.stripe_account_id);
-      await admin
-        .from("student_profiles")
-        .update({
-          stripe_onboarding_completed_at: payoutReadiness.ready ? new Date().toISOString() : null,
-        })
-        .eq("user_id", contract.student_id);
-
-      if (!payoutReadiness.ready) {
-        return NextResponse.json(
-          { error: "Student musi dokonczyc konto wyplat Stripe przed rozpoczeciem platnosci." },
-          { status: 409 },
-        );
-      }
+    if (!contract.student_id) {
+      return NextResponse.json(
+        { error: "Nie można uruchomić płatności bez przypisanego studenta." },
+        { status: 409 },
+      );
     }
 
     const fundingMode = contract.funding_mode === "sequential" ? "sequential" : "full";
@@ -326,7 +281,7 @@ export async function POST(req: NextRequest) {
       ? ["awaiting_funding", "draft", "active"]
       : ["awaiting_funding", "draft"];
     if (!allowedStatuses.includes(contract.status as string)) {
-      return NextResponse.json({ error: "Ta platnosc nie jest juz dostepna dla tego zlecenia." }, { status: 400 });
+      return NextResponse.json({ error: "Ta płatność nie jest już dostępna dla tego zlecenia." }, { status: 400 });
     }
 
     const { data: existingPaymentData, error: existingPaymentError } = await supabase
@@ -356,7 +311,7 @@ export async function POST(req: NextRequest) {
 
     const parsedAmount = Number(contract.total_amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      return NextResponse.json({ error: "Nieprawidlowa kwota kontraktu w bazie" }, { status: 400 });
+      return NextResponse.json({ error: "Nieprawidłowa kwota kontraktu w bazie." }, { status: 400 });
     }
 
     const awaitingMilestones = milestones.filter((milestone) =>
@@ -368,7 +323,7 @@ export async function POST(req: NextRequest) {
 
     if (payableMilestones.length === 0) {
       return NextResponse.json(
-        { error: "Nie ma etapu, ktory mozna teraz zasilic depozytem." },
+        { error: "Nie ma etapu, który można teraz zasilić depozytem." },
         { status: 400 },
       );
     }
@@ -380,12 +335,12 @@ export async function POST(req: NextRequest) {
       : Math.round(parsedAmount * 100);
 
     if (!payableAmountInGrosze || payableAmountInGrosze <= 0) {
-      return NextResponse.json({ error: "Nieprawidlowa kwota etapu w bazie" }, { status: 400 });
+      return NextResponse.json({ error: "Nieprawidłowa kwota etapu w bazie." }, { status: 400 });
     }
 
     const payableAmount = payableAmountInGrosze / 100;
     if (payableAmount > 500_000) {
-      return NextResponse.json({ error: "Kwota kontraktu przekracza dozwolony limit" }, { status: 400 });
+      return NextResponse.json({ error: "Kwota kontraktu przekracza dozwolony limit." }, { status: 400 });
     }
 
     const commissionRate = resolveCommissionRate({
@@ -415,7 +370,7 @@ export async function POST(req: NextRequest) {
             currency: "pln",
             product_data: {
               name: `Depozyt: ${offerTitle}`,
-              description: milestoneTitles ? `Etapy: ${milestoneTitles}` : "Bezpieczna platnosc za zlecenie",
+              description: milestoneTitles ? `Etapy: ${milestoneTitles}` : "Bezpieczna płatność za zlecenie",
             },
             unit_amount: payableAmountInGrosze,
           },
@@ -458,7 +413,7 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     console.error("Stripe checkout error:", error);
     return NextResponse.json(
-      { error: "Nie udalo sie przygotowac platnosci. Sprobuj ponownie za chwile." },
+      { error: "Nie udało się przygotować płatności. Spróbuj ponownie za chwilę." },
       { status: 500 },
     );
   }

@@ -32,20 +32,20 @@ export async function checkPayoutAccountReadiness(accountId: string): Promise<St
       return {
         ready: false,
         account,
-        message: "Konto Stripe studenta czeka jeszcze na weryfikacje. Ponow wyplate po zakonczeniu weryfikacji Stripe.",
+        message: "Konto Stripe studenta czeka jeszcze na weryfikację. Ponów wypłatę po zakończeniu weryfikacji Stripe.",
       };
     }
 
     return {
       ready: false,
       account,
-      message: "Konto Stripe studenta nie jest jeszcze gotowe do transferow. Popros studenta o dokonczenie onboardingu Stripe i ponow wyplate.",
+      message: "Konto Stripe studenta nie jest jeszcze gotowe do transferów. Poproś studenta o dokończenie onboardingu Stripe i ponów wypłatę.",
     };
   } catch {
     return {
       ready: false,
       account: null,
-      message: "Nie udalo sie potwierdzic gotowosci konta Stripe studenta. Sprobuj ponownie za chwile.",
+      message: "Nie udało się potwierdzić gotowości konta Stripe studenta. Spróbuj ponownie za chwilę.",
     };
   }
 }

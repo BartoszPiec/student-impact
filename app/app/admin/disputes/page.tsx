@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DisputesTable } from "@/components/admin/disputes-table";
 import { AlertTriangle } from "lucide-react";
+import { ADMIN_PAGE_SIZE, getPageNumber, ServerPagination } from "@/components/admin/server-pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,13 @@ function idleDaysSince(updatedAt: string, nowMs: number): number {
   return Math.max(0, Math.floor((nowMs - new Date(updatedAt).getTime()) / 86400000));
 }
 
-export default async function AdminDisputesPage() {
+export default async function AdminDisputesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ page?: string | string[] }>;
+}) {
+  const currentPage = getPageNumber((await searchParams)?.page);
+  const rangeStart = (currentPage - 1) * ADMIN_PAGE_SIZE;
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("contracts")
@@ -32,13 +39,14 @@ export default async function AdminDisputesPage() {
       company:company_profiles(nazwa)
     `)
     .in("status", ["disputed", "cancelled"])
-    .order("updated_at", { ascending: true });
+    .order("updated_at", { ascending: true })
+    .range(rangeStart, rangeStart + ADMIN_PAGE_SIZE);
 
   if (error) {
     console.error("[admin/disputes] failed to load disputes:", error.message);
     return (
       <div className="p-8 text-red-400">
-        Nie udalo sie pobrac listy sporow. Odswiez strone lub sprobuj ponownie za chwile.
+        Nie udało sie pobrać listy sporów. Odśwież stronę lub spróbuj ponownie za chwile.
       </div>
     );
   }
@@ -66,7 +74,9 @@ export default async function AdminDisputesPage() {
   const unwrapRelation = <T,>(value: T | T[] | null): T | null =>
     Array.isArray(value) ? value[0] ?? null : value;
 
-  const disputes = ((data || []) as DisputeContractRow[]).map((row) => {
+  const rows = (data || []) as DisputeContractRow[];
+  const hasNextPage = rows.length > ADMIN_PAGE_SIZE;
+  const disputes = rows.slice(0, ADMIN_PAGE_SIZE).map((row) => {
     const acceptedCandidates = [
       row.company_contract_accepted_at,
       row.student_contract_accepted_at,
@@ -110,7 +120,7 @@ export default async function AdminDisputesPage() {
             Spory i anulacje
           </h1>
           <p className="text-slate-400 max-w-xl font-medium leading-relaxed">
-            Read-only panel triage dla kontraktow oznaczonych jako disputed lub
+            Read-only panel triage dla kontraktów oznaczonych jako disputed lub
             cancelled.
           </p>
         </div>
@@ -142,8 +152,9 @@ export default async function AdminDisputesPage() {
 
       <DisputesTable
         disputes={disputes}
-        emptyMessage="Brak sporow ani anulowanych kontraktow."
+        emptyMessage="Brak sporów ani anulowanych kontraktów."
       />
+      <ServerPagination pathname="/app/admin/disputes" currentPage={currentPage} hasNextPage={hasNextPage} />
     </div>
   );
 }

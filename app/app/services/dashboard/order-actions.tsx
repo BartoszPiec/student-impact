@@ -11,10 +11,30 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 
+type OrderSummary = {
+    id: string;
+    amount: number | string;
+    status: string;
+    requirements: string | null;
+};
+
+type CompanySummary = {
+    nazwa?: string | null;
+    branza?: string | null;
+    opis?: string | null;
+    city?: string | null;
+    address?: string | null;
+    website?: string | null;
+};
+
+function getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : "Wystąpił nieznany błąd.";
+}
+
 interface OrderActionsProps {
-    order: any;
+    order: OrderSummary;
     chatLink: string;
-    companyProfile?: any;
+    companyProfile?: CompanySummary | null;
 }
 
 export default function OrderActions({ order, chatLink, companyProfile }: OrderActionsProps) {
@@ -27,11 +47,11 @@ export default function OrderActions({ order, chatLink, companyProfile }: OrderA
     const handlePropose = async () => {
         try {
             setLoading(true);
-            await proposeServicePriceAction(order.id, parseFloat(price));
+            await proposeServicePriceAction(order.id, Number(price));
             toast.success("Oferta wysłana!");
             setOpenProposal(false);
-        } catch (e: any) {
-            toast.error(e.message);
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error));
         } finally {
             setLoading(false);
         }
@@ -44,8 +64,8 @@ export default function OrderActions({ order, chatLink, companyProfile }: OrderA
             await rejectOrderAction(order.id);
             toast.success("Zapytanie odrzucone.");
             setOpenDetails(false); // Close details if open
-        } catch (e: any) {
-            toast.error(e.message);
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error));
         } finally {
             setRejectLoading(false);
         }

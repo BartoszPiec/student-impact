@@ -100,7 +100,7 @@ function getDocumentState(contract: VaultRow) {
 
   return {
     label: "Brak PDF",
-    meta: "0 dokumentow",
+    meta: "0 dokumentów",
     className:
       "rounded-lg border border-white/10 bg-slate-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400",
   };
@@ -160,7 +160,7 @@ export function VaultTable({ contracts }: { contracts: VaultRow[] }) {
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-slate-500" />
             <span className="text-sm font-bold text-slate-400">
-              Wykaz wszystkich zawartych umow ({filteredContracts.length} / {contracts.length})
+              Wykaz wszystkich zawartych umów ({filteredContracts.length} / {contracts.length})
             </span>
           </div>
 
@@ -235,7 +235,7 @@ export function VaultTable({ contracts }: { contracts: VaultRow[] }) {
                       <FileText className="h-8 w-8 text-slate-700" />
                     </div>
                     <p className="font-bold text-slate-500">
-                      Brak umow pasujacych do wybranych filtrow.
+                      Brak umów pasujacych do wybranych filtrow.
                     </p>
                   </div>
                 </td>

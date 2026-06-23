@@ -16,6 +16,46 @@ const SUPABASE_PROJECT_REF = (() => {
 const SUPABASE_ISSUER = `${SUPABASE_URL}/auth/v1`;
 const JWKS = createRemoteJWKSet(new URL(`${SUPABASE_ISSUER}/.well-known/jwks.json`));
 
+function getSupabaseOrigin() {
+  try {
+    return new URL(SUPABASE_URL).origin;
+  } catch {
+    return "https://klxsxtumrkxfdrkessrg.supabase.co";
+  }
+}
+
+function getSupabaseHost() {
+  try {
+    return new URL(getSupabaseOrigin()).host;
+  } catch {
+    return "klxsxtumrkxfdrkessrg.supabase.co";
+  }
+}
+
+function buildContentSecurityPolicy() {
+  const isDev = process.env.NODE_ENV === "development";
+  const supabaseOrigin = getSupabaseOrigin();
+  const supabaseHost = getSupabaseHost();
+  const scriptSrc = isDev
+    ? "'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://browser.sentry-cdn.com https://challenges.cloudflare.com"
+    : "'self' 'unsafe-inline' https://js.stripe.com https://browser.sentry-cdn.com https://challenges.cloudflare.com";
+
+  return [
+    "default-src 'self'",
+    `script-src ${scriptSrc}`,
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob: ${supabaseOrigin} https://*.stripe.com`,
+    `connect-src 'self' ${supabaseOrigin} wss://${supabaseHost} https://api.stripe.com https://*.ingest.sentry.io https://challenges.cloudflare.com`,
+    "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    ...(!isDev ? ["upgrade-insecure-requests"] : []),
+  ].join("; ");
+}
+
 type AuthState = {
   isAuthed: boolean;
   userId: string | null;
@@ -26,6 +66,10 @@ function redirectWithResponseCookies(url: string, request: NextRequest, sourceRe
   sourceResponse.cookies.getAll().forEach((cookie) => {
     redirectResponse.cookies.set(cookie);
   });
+  const csp = sourceResponse.headers.get("Content-Security-Policy");
+  if (csp) {
+    redirectResponse.headers.set("Content-Security-Policy", csp);
+  }
   return redirectResponse;
 }
 
@@ -216,7 +260,13 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  const response = NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+  response.headers.set("Content-Security-Policy", buildContentSecurityPolicy());
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
@@ -314,5 +364,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/auth"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)"],
 };

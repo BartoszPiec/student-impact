@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MapPin, Globe, Building2, Briefcase, Star } from "lucide-react";
@@ -23,12 +22,9 @@ export default async function CompanyProfilePage({
     const user = userData.user;
     if (!user) redirect("/auth");
 
-    // Fetch company profile
-    // Note: we might need to join or select carefully if RLS allows public reading of company profiles
-    // Assuming 'company_profiles' is readable by authenticated users
     const { data: company, error } = await (await supabase)
-        .from("company_profiles")
-        .select("user_id, nazwa, opis, logo_url, strona_www, nip, miasto")
+        .from("company_public_profiles")
+        .select("user_id, nazwa, opis, logo_url, strona_www, miasto")
         .eq("user_id", companyId)
         .maybeSingle();
 
@@ -112,14 +108,6 @@ export default async function CompanyProfilePage({
                                         <span className="flex items-center gap-1">
                                             <MapPin className="h-4 w-4" /> {company.miasto}
                                         </span>
-                                    )}
-                                    {company.nip && (
-                                        <>
-                                            <span className="text-slate-300 hidden sm:inline">•</span>
-                                            <span className="flex items-center gap-1 text-slate-500" title="Numer Identyfikacji Podatkowej">
-                                                <Building2 className="h-4 w-4" /> NIP: {company.nip}
-                                            </span>
-                                        </>
                                     )}
                                     {company.strona_www && (
                                         <>

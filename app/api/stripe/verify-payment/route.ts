@@ -46,7 +46,7 @@ function resolvePaymentSource(session: Stripe.Checkout.Session): PaymentSource {
   const selectedSourceCount = Number(Boolean(applicationId)) + Number(Boolean(serviceOrderId));
 
   if (selectedSourceCount !== 1) {
-    throw new Error("Sesja platnosci musi dotyczyc dokladnie jednego typu zlecenia");
+    throw new Error("Sesja płatności musi dotyczyć dokładnie jednego typu zlecenia.");
   }
 
   return {
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       || (applicationId && !UUID_RE.test(applicationId))
       || (serviceOrderId && !UUID_RE.test(serviceOrderId))
     ) {
-      return NextResponse.json({ error: "Nieprawidlowe ID w metadanych sesji" }, { status: 400 });
+      return NextResponse.json({ error: "Nieprawidłowe ID w metadanych sesji." }, { status: 400 });
     }
 
     const { data: contract } = await supabase
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!sourceMatchesContract({ applicationId, serviceOrderId, sourceType }, typedContract)) {
-      return NextResponse.json({ error: "Nieprawidlowe powiazanie sesji z kontraktem" }, { status: 400 });
+      return NextResponse.json({ error: "Nieprawidłowe powiązanie sesji z kontraktem." }, { status: 400 });
     }
 
     if (typedContract.status === "active") {
@@ -244,7 +244,7 @@ export async function POST(req: NextRequest) {
         ]);
 
       if (serviceOrderSyncError) {
-        throw new Error(`Nie udalo sie zaktualizowac statusu zamowienia: ${serviceOrderSyncError.message}`);
+        throw new Error(`Nie udało się zaktualizować statusu zamówienia: ${serviceOrderSyncError.message}`);
       }
     }
 
@@ -274,7 +274,7 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     console.error("[verify-payment] Error:", error);
     return NextResponse.json(
-      { error: "Nie udalo sie zweryfikowac platnosci. Sprobuj ponownie za chwile." },
+      { error: "Nie udało się zweryfikować płatności. Spróbuj ponownie za chwilę." },
       { status: 500 },
     );
   }

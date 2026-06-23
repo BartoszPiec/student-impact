@@ -1,5 +1,6 @@
 const vercelEnv = process.env.VERCEL_ENV;
 const isVercelProduction = vercelEnv === "production";
+const allowTestStripeInProduction = process.env.ALLOW_TEST_STRIPE_IN_PRODUCTION === "true";
 
 function fail(message) {
   console.error(`[deploy-env] ${message}`);
@@ -22,15 +23,30 @@ if (isVercelProduction) {
   requireValue("NEXT_PUBLIC_APP_URL");
   requireValue("UPSTASH_REDIS_REST_URL");
   requireValue("UPSTASH_REDIS_REST_TOKEN");
-  requireValue("SENTRY_DSN");
+  if (!allowTestStripeInProduction) {
+    requireValue("SENTRY_DSN");
+  }
 
-  if (!process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")) {
-    fail("Production deploy requires STRIPE_SECRET_KEY to use a live Stripe key.");
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+  const stripeSecretKeyAllowed =
+    stripeSecretKey?.startsWith("sk_live_") ||
+    (allowTestStripeInProduction && stripeSecretKey?.startsWith("sk_test_"));
+
+  if (!stripeSecretKeyAllowed) {
+    fail(
+      "Production deploy requires STRIPE_SECRET_KEY to use a live Stripe key, or ALLOW_TEST_STRIPE_IN_PRODUCTION=true with a test key for pilot deployments.",
+    );
   }
 
   const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY;
-  if (!publishableKey?.startsWith("pk_live_")) {
-    fail("Production deploy requires a live Stripe publishable key.");
+  const publishableKeyAllowed =
+    publishableKey?.startsWith("pk_live_") ||
+    (allowTestStripeInProduction && publishableKey?.startsWith("pk_test_"));
+
+  if (!publishableKeyAllowed) {
+    fail(
+      "Production deploy requires a live Stripe publishable key, or ALLOW_TEST_STRIPE_IN_PRODUCTION=true with a test key for pilot deployments.",
+    );
   }
 
   if (process.env.STRIPE_WEBHOOK_PROCESS_INLINE === "true") {

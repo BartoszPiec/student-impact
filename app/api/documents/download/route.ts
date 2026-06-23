@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
     });
 
   if (signedUrlError || !signedUrlData?.signedUrl) {
-    return NextResponse.json({ error: "Nie udalo sie wygenerowac linku do pobrania." }, { status: 500 });
+    return NextResponse.json({ error: "Nie udało sie wygenerowac linku do pobrania." }, { status: 500 });
   }
 
   return NextResponse.redirect(signedUrlData.signedUrl);

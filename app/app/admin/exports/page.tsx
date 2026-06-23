@@ -12,11 +12,11 @@ async function readErrorMessage(response: Response) {
 
   if (contentType.includes("application/json")) {
     const payload = await response.json().catch(() => null);
-    return payload?.message || payload?.error || "Blad pobierania pliku.";
+    return payload?.message || payload?.error || "Błąd pobierania pliku.";
   }
 
   const text = await response.text().catch(() => "");
-  return text.trim() || "Blad pobierania pliku.";
+  return text.trim() || "Błąd pobierania pliku.";
 }
 
 export default function AdminExportsPage() {
@@ -44,8 +44,8 @@ export default function AdminExportsPage() {
       URL.revokeObjectURL(link.href);
       toast.success(`Pobrano ${filename}.`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Nieznany blad pobierania.";
-      toast.error(`Blad: ${message}`);
+      const message = error instanceof Error ? error.message : "Nieznany błąd pobierania.";
+      toast.error(`Błąd: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -113,7 +113,7 @@ export default function AdminExportsPage() {
           </p>
 
           <ul className="mt-4 space-y-1 text-xs text-slate-500">
-            <li>Imie i nazwisko, PESEL, data urodzenia</li>
+            <li>Imię i nazwisko, PESEL, data urodzenia</li>
             <li>Rezydencja podatkowa PL i zwolnienie PIT u26</li>
             <li>Kwota brutto, zaliczka PIT i kwota netto</li>
             <li>ID kontraktu dla latwego powiazania z operacjami</li>
@@ -138,7 +138,7 @@ export default function AdminExportsPage() {
             </div>
             <div>
               <h2 className="text-lg font-black text-white">Rejestr faktur CSV</h2>
-              <p className="text-sm text-slate-400">Eksport danych platnosci Stripe i prowizji platformy.</p>
+              <p className="text-sm text-slate-400">Eksport danych płatności Stripe i prowizji platformy.</p>
             </div>
           </div>
 

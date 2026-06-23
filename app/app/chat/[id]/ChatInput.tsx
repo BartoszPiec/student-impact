@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
 import { Paperclip, Send, Banknote, CalendarClock, Plus } from "lucide-react";
 import { sendTextMessage, sendFileMessage, sendEventMessage } from "@/app/app/chat/_actions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -23,7 +23,7 @@ export function ChatInput({
 }) {
   const [message, setMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [attachment, setAttachment] = useState<{ url: string; type: "image" | "file"; name: string } | null>(null);
+  const [attachment, setAttachment] = useState<{ ref: string; type: "image" | "file"; name: string } | null>(null);
   const [rateOpen, setRateOpen] = useState(false);
   const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [rateValue, setRateValue] = useState("");
@@ -41,7 +41,7 @@ export function ChatInput({
     setAttachment(null);
 
     if (currentAttachment) {
-      await sendFileMessage(conversationId, currentAttachment.name, currentAttachment.url, currentAttachment.type);
+      await sendFileMessage(conversationId, currentAttachment.name, currentAttachment.ref, currentAttachment.type);
     }
 
     if (content.trim()) {
@@ -55,22 +55,13 @@ export function ChatInput({
 
     try {
       setIsUploading(true);
-      const supabase = createClient();
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("chat-attachments")
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("chat-attachments").getPublicUrl(fileName);
-
+      const uploaded = await uploadPrivateFile({
+        file,
+        purpose: "chat_attachment",
+        conversationId,
+      });
       const type = file.type.startsWith("image/") ? "image" : "file";
-      setAttachment({ url: publicUrl, type, name: file.name });
+      setAttachment({ ref: uploaded.ref, type, name: uploaded.name });
     } catch (error) {
       console.error("Upload failed:", error);
       alert("Błąd wysyłania pliku.");
@@ -101,7 +92,7 @@ export function ChatInput({
   };
 
   return (
-    <div className="flex flex-col gap-2 relative w-full px-4">
+    <div className="relative flex w-full flex-col gap-2 px-0 sm:px-4">
       {locked ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
           {lockedMessage}
@@ -109,11 +100,10 @@ export function ChatInput({
       ) : null}
 
       {attachment ? (
-        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 p-2 text-xs w-fit">
+        <div className="flex w-full max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 p-2 text-xs sm:w-fit">
           {attachment.type === "image" ? (
-            <div className="h-8 w-8 overflow-hidden rounded bg-slate-300">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={attachment.url} alt="preview" className="h-full w-full object-cover" />
+            <div className="flex h-8 w-8 items-center justify-center rounded bg-indigo-100 text-indigo-600">
+              <Paperclip className="h-4 w-4" />
             </div>
           ) : (
             <div className="flex h-8 w-8 items-center justify-center rounded bg-indigo-100 text-indigo-600">
@@ -121,7 +111,7 @@ export function ChatInput({
             </div>
           )}
 
-          <span className="max-w-[150px] truncate">{attachment.name}</span>
+          <span className="max-w-[220px] truncate sm:max-w-[150px]">{attachment.name}</span>
           <button
             type="button"
             onClick={() => setAttachment(null)}
@@ -175,7 +165,7 @@ export function ChatInput({
                 void handleSend();
               }
             }}
-            className="h-auto rounded-xl border-transparent bg-slate-50 py-6 pl-4 pr-12 shadow-sm transition-all placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
+            className="h-auto rounded-xl border-transparent bg-slate-50 py-4 pl-4 pr-12 shadow-sm transition-all placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 sm:py-6"
             autoComplete="off"
             disabled={locked || isUploading}
             readOnly={locked}

@@ -1,12 +1,11 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any, react/no-unescaped-entities */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { UploadForm } from "../UploadForm";
@@ -15,37 +14,30 @@ import { ReviewForm } from "../ReviewForm";
 
 
 import {
-    submitDeliverable,
-    reviewDeliverable,
     submitReview,
-    fundMilestoneAction,
-    generateContract,
-    generateContractDocuments,
-    acceptContractDocument,
     fundContractAction,
-    reopenMilestoneNegotiationAction,
     submitMilestoneWorkAction,
     reviewMilestoneAction,
-    getSignedStorageUrl
+    getSignedStorageUrl,
+    addResource
 } from "../../_actions";
 import { toast } from "sonner";
-import { Shield, ShieldCheck, AlertCircle, CircleDollarSign, CheckCircle2, Lock, Clock, FileText, ChevronDown, ChevronUp, Star, Medal, MessageSquare, XCircle, Link2 } from "lucide-react";
+import { Shield, ShieldCheck, AlertCircle, CircleDollarSign, CheckCircle2, Lock, Clock, FileText, ChevronDown, ChevronUp, Star, Medal, MessageSquare, XCircle, Link2, Download, UploadCloud } from "lucide-react";
 import { PaymentModal } from "@/app/components/payment-modal";
 import { MilestoneNegotiation } from "./MilestoneNegotiation";
 import { ContractDocumentsCard } from "./ContractDocumentsCard";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
 
 import { SecureImageViewer } from "@/app/components/SecureImageViewer";
 import { ReviewBreakdown } from "@/components/reviews/ReviewBreakdown";
 import { parseDetailedReviewComment } from "@/lib/reviews";
 
 export function StatusTab({
-    status,
     applicationStatus,
     isStudent,
     isCompany,
     applicationId,
-    currentDeliv, // Keeping for backward compat just in case
     deliverables,
     myReview,
     theirReview,
@@ -56,6 +48,7 @@ export function StatusTab({
     studentInstructions = null,
     contractDocuments = [],
     isServiceOrder = false,
+    resources = [],
 }: any) {
     // State for Payment Modal
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -88,7 +81,6 @@ export function StatusTab({
 
     // Progress helpers
     const isAnyFunded = milestones.some((m: any) => ['funded', 'in_progress', 'delivered', 'completed', 'released', 'accepted'].includes(m.status));
-    const allFunded = milestones.length > 0 && milestones.every((m: any) => ['funded', 'in_progress', 'delivered', 'completed', 'released', 'accepted'].includes(m.status));
 
     // Calculate Total Budget strictly from milestones to avoid mismatches
     const contractBudget = milestones.reduce((sum: number, m: any) => sum + (Number(m.amount_minor ?? (m.amount * 100)) / 100), 0);
@@ -118,24 +110,18 @@ export function StatusTab({
     };
 
     // Global Progress Logic
-    let progress = 5;
     let currentStep = 1;
 
     if (contract?.status === 'completed') {
-        progress = 100;
         currentStep = 5;
     } else if (milestones.some((m: any) => m.status === 'delivered')) {
-        progress = 75;
         currentStep = 4; // Verification phase (at least one delivered)
     } else if (isAnyFunded) {
         // In sequential funding, work starts as soon as at least one milestone is funded.
-        progress = 60;
         currentStep = 4;
     } else if (canEnterEscrow) {
-        progress = 25;
         currentStep = 3; // Waiting for funding
     } else if (hasAgreedMilestones) {
-        progress = 18;
         currentStep = 2; // Contract acceptance
     }
 
@@ -281,16 +267,16 @@ export function StatusTab({
 
                         <div className="text-center md:text-left relative z-10">
                             <h3 className="text-lg font-bold text-slate-800 mb-2">
-                                {currentStep === 1 && "Ustalanie etapow"}
-                                {currentStep === 2 && "Akceptacja umow"}
-                                {currentStep === 3 && "Escrow / platnosc"}
-                                {currentStep >= 4 && "Realizacja etapow"}
+                                {currentStep === 1 && "Ustalanie etapów"}
+                                {currentStep === 2 && "Akceptacja umów"}
+                                {currentStep === 3 && "Escrow / płatność"}
+                                {currentStep >= 4 && "Realizacja etapów"}
                             </h3>
                             <p className="text-slate-500 text-sm max-w-lg leading-relaxed">
-                                {currentStep === 1 && "Najpierw ustalcie zakres i harmonogram etapow."}
-                                {currentStep === 2 && "Po zatwierdzeniu etapow obie strony musza zaakceptowac swoje umowy."}
-                                {currentStep === 3 && (fundingMode === "full" ? "Firma moze teraz wplacic calosc budzetu do bezpiecznego depozytu." : "Firma moze teraz zasilic depozyt dla nastepnego etapu.")}
-                                {currentStep >= 4 && "Srodki sa zabezpieczone w depozycie. Student realizuje kolejne etapy zgodnie z harmonogramem."}
+                                {currentStep === 1 && "Najpierw ustalcie zakres i harmonogram etapów."}
+                                {currentStep === 2 && "Po zatwierdzeniu etapów obie strony musza zaakceptować swoje umowy."}
+                                {currentStep === 3 && (fundingMode === "full" ? "Firma może teraz wplacic calosc budzetu do bezpiecznego depozytu." : "Firma może teraz zasilic depozyt dla nastepnego etapu.")}
+                                {currentStep >= 4 && "Srodki są zabezpieczone w depozycie. Student realizuje kolejne etapy zgodnie z harmonogramem."}
                             </p>
                         </div>
 
@@ -323,7 +309,6 @@ export function StatusTab({
                 <MilestoneNegotiation
                     applicationId={applicationId}
                     contract={contract}
-                    milestones={milestones}
                     isCompany={isCompany}
                     isStudent={isStudent}
                     totalAmount={totalAmount}
@@ -376,13 +361,14 @@ export function StatusTab({
                             isCompany={isCompany}
                             applicationId={applicationId}
                             deliverables={deliverables}
+                            resources={resources}
                             onOpenSecureViewer={(url: string, name: string, fileType: "image" | "pdf") => setViewerState({ isOpen: true, url, fileName: name, fileType })}
                         />
                     ))}
                 </div>
             )}
             {/* REVIEW SECTION (Completed Only) */}
-            {contract?.status === 'completed' && (
+            {isContractDone && (
                 <Card className="rounded-2xl border-slate-200 shadow-sm bg-gradient-to-br from-indigo-50/50 to-white overflow-hidden">
                     <CardHeader className="border-b border-indigo-50 bg-white/50">
                         <CardTitle className="flex items-center gap-2 text-indigo-900">
@@ -390,7 +376,7 @@ export function StatusTab({
                             Podsumowanie współpracy
                         </CardTitle>
                         <CardDescription>
-                            Zlecenie zostało zakończone. {isCompany ? "Oceń współpracę ze studentem." : "Oto opinia wystawiona przez klienta."}
+                            Zlecenie zostało zakończone. {isCompany ? "Oceń współpracę ze studentem." : "Możesz ocenić firmę i zobaczyć opinię klienta."}
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-6 md:p-8">
@@ -465,6 +451,37 @@ export function StatusTab({
                                         <p className="text-slate-400 text-sm">Klient jeszcze nie wystawił oceny za to zlecenie.</p>
                                     </div>
                                 )}
+
+                                <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                    {myReview ? (
+                                        <div>
+                                            <h4 className="mb-4 text-xs font-bold uppercase tracking-wide text-slate-500">Twoja opinia o firmie</h4>
+                                            <div className="mb-4 flex items-center gap-2">
+                                                <div className="flex gap-1">
+                                                    {[1, 2, 3, 4, 5].map(star => (
+                                                        <Star
+                                                            key={star}
+                                                            className={`w-5 h-5 ${star <= myReview.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                <span className="ml-2 font-bold text-slate-700">{myReview.rating}/5</span>
+                                            </div>
+                                            <ReviewBreakdown ratings={myReviewDetails?.categories ?? {}} compact />
+                                            <div className="mt-3 italic text-slate-600">
+                                                {myReviewDetails?.displayComment ? `"${myReviewDetails.displayComment}"` : "Bez dodatkowego komentarza."}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div>
+                                                <h4 className="font-bold text-slate-900">Wystaw opinię firmie</h4>
+                                                <p className="mt-1 text-sm text-slate-500">Opinia pomaga innym studentom ocenić jakość współpracy.</p>
+                                            </div>
+                                            <ReviewForm applicationId={applicationId} action={submitReview} />
+                                        </div>
+                                    )}
+                                </div>
                             </>
                         )}
                     </CardContent>
@@ -506,7 +523,108 @@ export function StatusTab({
     );
 }
 
-function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, deliverables, onOpenSecureViewer }: any) {
+function MilestoneResources({ applicationId, resources, isCompany }: any) {
+    const [isUploading, setIsUploading] = useState(false);
+
+    async function openResource(resource: any) {
+        if (!resource?.file_path) return;
+
+        try {
+            const signedUrl = await getSignedStorageUrl("deliverables", String(resource.file_path), 600);
+            window.open(signedUrl, "_blank", "noopener,noreferrer");
+        } catch (error) {
+            console.error(error);
+            toast.error("Nie udało się otworzyć materiału.");
+        }
+    }
+
+    async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        try {
+            const uploaded = await uploadPrivateFile({
+                file,
+                purpose: "deliverable_resource",
+                sourceId: applicationId,
+            });
+
+            const formData = new FormData();
+            formData.append("filename", uploaded.name);
+            formData.append("fileUrl", uploaded.path);
+            formData.append("fileSize", String(uploaded.size));
+
+            await addResource(applicationId, formData);
+            toast.success("Materiał został dodany do zlecenia.");
+        } catch (error) {
+            console.error(error);
+            const message = error instanceof Error ? error.message : "Nie udało się dodać materiału.";
+            toast.error(message);
+        } finally {
+            setIsUploading(false);
+            event.target.value = "";
+        }
+    }
+
+    return (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h5 className="flex items-center gap-2 font-bold text-slate-800">
+                        <FileText className="h-4 w-4 text-indigo-600" />
+                        Materiały od firmy
+                    </h5>
+                    <p className="mt-1 text-sm text-slate-500">
+                        Briefy, screeny, logotypy i dodatkowe wytyczne dostępne bez wychodzenia poza platformę.
+                    </p>
+                </div>
+
+                {isCompany && (
+                    <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 text-sm font-bold text-indigo-700 transition-colors hover:bg-indigo-100">
+                        <UploadCloud className="h-4 w-4" />
+                        {isUploading ? "Wysyłanie..." : "Dodaj materiał"}
+                        <input
+                            type="file"
+                            className="hidden"
+                            onChange={handleUpload}
+                            disabled={isUploading}
+                        />
+                    </label>
+                )}
+            </div>
+
+            {resources.length > 0 ? (
+                <div className="mt-4 grid gap-2">
+                    {resources.map((resource: any) => (
+                        <button
+                            key={resource.id}
+                            type="button"
+                            onClick={() => openResource(resource)}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-left transition-colors hover:border-indigo-200 hover:bg-indigo-50"
+                        >
+                            <span className="min-w-0">
+                                <span className="block truncate text-sm font-semibold text-slate-700">
+                                    {resource.file_name || "Materiał"}
+                                </span>
+                                <span className="text-xs text-slate-400">
+                                    {resource.created_at ? new Date(resource.created_at).toLocaleDateString("pl-PL") : "Dodano do zlecenia"}
+                                </span>
+                            </span>
+                            <Download className="h-4 w-4 shrink-0 text-slate-400" />
+                        </button>
+                    ))}
+                </div>
+            ) : (
+                <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+                    Brak materiałów od firmy dla tego zlecenia.
+                </div>
+            )}
+        </div>
+    );
+}
+
+function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, deliverables, resources, onOpenSecureViewer }: any) {
     async function openDeliverableFile(file: any, allowFullAccess = false) {
         try {
             let signed = "";
@@ -530,11 +648,11 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
             } else if ((isImage || isPdf) && onOpenSecureViewer) {
                 onOpenSecureViewer(signed, file.name, isPdf ? "pdf" : "image");
             } else {
-                toast.info("Pelny plik bedzie dostepny po akceptacji etapu. Popros studenta o preview w formacie PNG/JPG/PDF.");
+                toast.info("Pelny plik bedzie dostępny po akceptacji etapu. Popros studenta o preview w formacie PNG/JPG/PDF.");
             }
         } catch (err) {
             console.error(err);
-            alert("Nie udalo sie otworzyc pliku.");
+            alert("Nie udało sie otworzyć pliku.");
         }
     }
 
@@ -544,6 +662,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
     const milestoneDeliverables = deliverables?.filter((d: any) => d.milestone_id === milestone.id) || [];
     const latestDeliverable = milestoneDeliverables[0]; // Assuming order by created_at desc
     const hasFullFileAccess = (deliverable: any) =>
+        isStudent ||
         ["accepted", "released", "completed"].includes(String(deliverable?.status)) ||
         ["accepted", "released", "completed"].includes(String(milestone.status));
 
@@ -553,7 +672,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
         'in_progress': { label: 'W trakcie', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
         'delivered': { label: 'Czeka na akceptację', color: 'bg-amber-50 text-amber-700 border-amber-200' },
         'completed': { label: 'Zakończone', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-        'released': { label: 'Wypłacone', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' }
+        'released': { label: 'Zaakceptowany', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' }
     }[milestone.status as string] || { label: milestone.status, color: 'bg-gray-100' };
 
     return (
@@ -595,6 +714,11 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
 
                 <CollapsibleContent className="border-t border-slate-100 bg-slate-50/50">
                     <div className="p-6 space-y-8">
+                        <MilestoneResources
+                            applicationId={applicationId}
+                            resources={resources ?? []}
+                            isCompany={isCompany}
+                        />
 
                         {/* STUDENT ACTIONS */}
                         {isStudent && ['funded', 'in_progress', 'rejected'].includes(milestone.status) && (

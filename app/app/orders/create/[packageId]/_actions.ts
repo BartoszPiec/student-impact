@@ -51,7 +51,7 @@ export async function createOrder(formData: FormData) {
     .maybeSingle();
 
   if (profile?.role !== "company") {
-    throw new Error("Zamowienia uslug moze skladac tylko konto firmowe.");
+    throw new Error("Zamowienia usług może skladac tylko konto firmowe.");
   }
 
   const packageId = formData.get("packageId") as string;
@@ -78,7 +78,7 @@ export async function createOrder(formData: FormData) {
   }
 
   if (pkgData.student_id && pkgData.student_id === user.id && pkgData.is_system !== true) {
-    throw new Error("Nie mozesz zamowic wlasnej uslugi.");
+    throw new Error("Nie mozesz zamowic wlasnej usługi.");
   }
 
   const entries = Array.from(formData.entries());

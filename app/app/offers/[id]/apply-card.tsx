@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { applyToOffer } from "./_actions";
 import { Loader2, CheckCircle2, AlertCircle, Banknote, UploadCloud, FileText, X, Zap, ArrowLeft, ShieldCheck } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
 import { ApplySheet } from "@/app/app/jobs/apply-sheet";
 import { JobOffer } from "@/app/app/jobs/job-card";
 import { cn } from "@/lib/utils";
@@ -144,25 +144,8 @@ export default function ApplyCard({
 
   // File Upload Helper
   const uploadCv = async (file: File): Promise<string> => {
-    const supabase = createClient();
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('cvs')
-      .upload(filePath, file);
-
-    if (uploadError) {
-      throw new Error(`Błąd przesyłania CV: ${uploadError.message}`);
-    }
-
-    // Get Public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('cvs')
-      .getPublicUrl(filePath);
-
-    return publicUrl;
+    const uploaded = await uploadPrivateFile({ file, purpose: "cv" });
+    return uploaded.ref;
   };
 
   const handleSubmit = () => {

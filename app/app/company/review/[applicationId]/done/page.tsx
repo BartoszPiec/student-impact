@@ -69,13 +69,10 @@ export default async function CompanyReviewDonePage({
     .maybeSingle();
 
   const studentLabel =
-    (studentProfile as any)?.name ||
-    (studentProfile as any)?.email ||
+    studentProfile?.name ||
     "student";
 
   // ✅ akcja otwierająca czat (historia)
-  const chatAction = openChatForApplication.bind(null, applicationId);
-
   return (
     <main className="space-y-6">
       <div className="flex items-start justify-between gap-4">

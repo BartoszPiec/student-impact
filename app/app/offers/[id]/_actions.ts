@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { trySendNotification } from "@/lib/notifications/server";
 import { ensureConversationIdForApplication } from "@/lib/services/service-order-conversations";
+import { assertCanAccessStorageRef, assertUploadedObjectExists } from "@/lib/security/storage";
 
 type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type JsonPayload = Record<string, unknown>;
@@ -94,7 +95,7 @@ export async function applyToOffer(
 
     if (currentProfileError || currentProfile?.role !== "student") {
       logs.push(`Role guard failed: ${currentProfileError?.message ?? currentProfile?.role ?? "missing"}`);
-      return { error: "Tylko konto studenta moze aplikowac na zadanie.", debug: logs };
+      return { error: "Tylko konto studenta może aplikowac na zadanie.", debug: logs };
     }
 
     // Pobierz ofertę (do walidacji + powiadomień)
@@ -126,6 +127,16 @@ export async function applyToOffer(
     }
 
     let applicationId = existing?.id;
+    let verifiedCvRef: string | null = null;
+
+    if (cvUrl) {
+      const cvRef = await assertCanAccessStorageRef(user.id, cvUrl);
+      if (cvRef.bucket !== "cvs") {
+        return { error: "Nieprawidlowy plik CV.", debug: logs };
+      }
+      await assertUploadedObjectExists(cvRef);
+      verifiedCvRef = cvRef.ref;
+    }
 
     if (existing?.id) {
       // Heal Check
@@ -206,7 +217,7 @@ export async function applyToOffer(
           message_to_company: (message ?? "").trim() || null,
           status: autoAccepted ? "accepted" : "sent", // AUTO ACCEPT
           proposed_stawka: proposed,
-          cv_url: cvUrl || null
+          cv_url: verifiedCvRef
         })
         .select("id")
         .single();
@@ -328,7 +339,7 @@ export async function applyToOffer(
         */
       }
     } catch (innerErr: unknown) {
-      const message = innerErr instanceof Error ? innerErr.message : "Nieznany blad";
+      const message = innerErr instanceof Error ? innerErr.message : "Nieznany błąd";
       logs.push(`Inner Logic Error: ${message}`);
       console.error(innerErr);
       throw innerErr;
@@ -343,7 +354,7 @@ export async function applyToOffer(
     return { success: true, redirectUrl: `/app/offers/${offerId}`, debug: logs };
 
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Wystapil nieoczekiwany blad.";
+    const message = err instanceof Error ? err.message : "Wystąpił nieoczekiwany błąd.";
     const digest = err && typeof err === "object" && "digest" in err ? String(err.digest) : null;
     console.error("applyToOffer error:", err);
     logs.push(`FATAL: ${message}`);

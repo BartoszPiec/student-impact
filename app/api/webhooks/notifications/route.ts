@@ -54,46 +54,50 @@ function getEmailContent(type: string, payload: NotificationPayload = {}) {
     case "cooperation_cancelled":
       subject = `Zlecenie anulowane: ${safePayload.offer_title || "Nieznane zlecenie"}`;
       html = `
-        <h2>Zlecenie zostalo anulowane</h2>
+        <h2>Zlecenie zostało anulowane</h2>
         <p>Uzytkownik (${safePayload.cancelled_by || "druga strona"}) anulowal zlecenie <strong>${safePayload.offer_title || ""}</strong>.</p>
         <p>Powod anulowania: ${safePayload.cancel_reason || "Brak dodatkowej informacji."}</p>
         <p>Szczegoly: ${safePayload.snippet || ""}</p>
       `;
       break;
     case "deliverable_submitted":
+    case "milestone_submitted":
       subject = `Nowe pliki do weryfikacji: ${safePayload.milestone_title || "Etap"}`;
       html = `
         <h2>Student przeslal pliki!</h2>
         <p>Przeslano nowe pliki do weryfikacji w ramach etapu: <strong>${safePayload.milestone_title || ""}</strong>.</p>
-        <p>Zaloguj sie do panelu realizacji, aby je sprawdzic i zaakceptowac lub odrzucic.</p>
+        <p>Zaloguj sie do panelu realizacji, aby je sprawdzic i zaakceptować lub odrzucic.</p>
       `;
       break;
     case "deliverable_accepted":
-      subject = `Pliki zaakceptowane: ${safePayload.milestone_title || "Etap"}`;
+    case "milestone_accepted":
+      subject = `Etap zaakceptowany: ${safePayload.milestone_title || "Etap"}`;
       html = `
         <h2>Dobra robota!</h2>
-        <p>Firma zaakceptowala pliki z etapu: <strong>${safePayload.milestone_title || ""}</strong>.</p>
+        <p>Firma zaakceptowala etap: <strong>${safePayload.milestone_title || ""}</strong>.</p>
+        <p>Możesz przejść do kolejnego etapu lub podsumowania zlecenia.</p>
       `;
       break;
     case "deliverable_rejected":
+    case "milestone_rejected":
       subject = `Poprawki wymagane: ${safePayload.milestone_title || "Etap"}`;
       html = `
         <h2>Firma poprosila o poprawki</h2>
-        <p>Pliki w etapie <strong>${safePayload.milestone_title || ""}</strong> zostaly odrzucone. Zaloguj sie, aby przeczytac komentarz i wgrac poprawiona wersje.</p>
+        <p>Pliki w etapie <strong>${safePayload.milestone_title || ""}</strong> zostały odrzucone. Zaloguj sie, aby przeczytac komentarz i wgrać poprawiona wersje.</p>
       `;
       break;
     case "escrow_funded":
       subject = "Depozyt zabezpieczony - start zlecenia!";
       html = `
-        <h2>Srodki zostaly zabezpieczone</h2>
+        <h2>Srodki zostały zabezpieczone</h2>
         <p>Firma wplacila depozyt na poczet zlecenia. Mozesz bezpiecznie rozpoczac prace!</p>
       `;
       break;
     case "review_received":
       subject = "Otrzymales nowa opinie!";
       html = `
-        <h2>Nowa opinia o wspolpracy</h2>
-        <p>Druga strona wystawila opinie po zakonczeniu zlecenia. Zobacz ja w swoim profilu.</p>
+        <h2>Nowa opinia o współpracy</h2>
+        <p>Druga strona wystawila opinie po zakończeniu zlecenia. Zobacz ja w swoim profilu.</p>
       `;
       break;
     case "new_message":
@@ -105,11 +109,11 @@ function getEmailContent(type: string, payload: NotificationPayload = {}) {
       `;
       break;
     case "offer_accepted":
-      subject = "Twoja aplikacja zostala zaakceptowana!";
+      subject = "Twoja aplikacja została zaakceptowana!";
       html = `
         <h2>Gratulacje!</h2>
         <p>Firma zaakceptowala Twoja aplikacje na zlecenie <strong>${safePayload.offer_title || ""}</strong>.</p>
-        <p>Zaloguj sie do platformy, aby sprawdzic szczegoly i warunki wspolpracy.</p>
+        <p>Zaloguj sie do platformy, aby sprawdzic szczegoly i warunki współpracy.</p>
       `;
       break;
   }

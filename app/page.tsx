@@ -1,9 +1,5 @@
-"use client";
-
-import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
-  CheckCircle2,
   Star,
   Globe,
   Video,
@@ -14,9 +10,7 @@ import {
   Clipboard,
   PenTool,
   Bot,
-  Scale,
   Database,
-  Sparkles,
   ArrowRight,
   Shield,
   Zap,
@@ -24,19 +18,12 @@ import {
   TrendingUp,
   Clock,
   BadgeCheck,
-  ChevronRight,
   Menu,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { HowItWorksSwitcher, ServiceDetailsModal } from "./landing-interactive";
 
 // --- Types ---
 interface ServiceData {
@@ -135,44 +122,20 @@ const SERVICE_DATA: Record<string, ServiceData> = {
   },
 };
 
-function RevealOnScroll({ children, className, delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
-  const [isVisible, setIsVisible] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) { setIsVisible(true); observer.unobserve(entry.target); }
-    }, { threshold: 0.12 });
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
-
+function RevealOnScroll({ children, className }: { children: React.ReactNode; className?: string; delay?: number }) {
   return (
-    <div
-      ref={ref}
-      style={{ transitionDelay: `${delay}ms` }}
-      className={cn("transition-all duration-700", isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8", className)}
-    >
+    <div className={className}>
       {children}
     </div>
   );
 }
 
 export default function LandingPage() {
-  const [activeModel, setActiveModel] = useState<"standard" | "longterm" | "services">("standard");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
   const navLinks = [
     { label: "Jak to działa", href: "#jak-dziala" },
-    { label: "Zadania", href: "#uslugi" },
+    { label: "Zadania", href: "#usługi" },
     { label: "Dla kogo", href: "#dla-firm" },
     { label: "Opinie", href: "#opinie" },
-  ];
-
-  const collaborationModels = [
-    { id: "standard", label: "Zlecenie jednorazowe", value: "standard" as const },
-    { id: "longterm", label: "Współpraca długoterminowa", value: "longterm" as const },
-    { id: "services", label: "Usługi studentów", value: "services" as const },
   ];
 
   return (
@@ -182,9 +145,9 @@ export default function LandingPage() {
           NAVIGATION
       ══════════════════════════════════════════ */}
       <nav className="fixed top-0 z-50 w-full bg-[#0f2460]/95 backdrop-blur-xl border-b border-white/10">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 text-white font-extrabold text-xl">
+          <Link href="/" className="flex items-center gap-2 text-lg font-extrabold text-white sm:text-xl">
             <span className="text-2xl">🎓</span>
             <span>Student<span className="text-[#7c8ef7]">2</span>Work</span>
           </Link>
@@ -206,38 +169,46 @@ export default function LandingPage() {
               </Button>
             </Link>
             <Link href="/auth?role=company">
-              <Button className="rounded-full px-6 bg-[#7c8ef7] hover:bg-[#6b7ff0] text-white font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105">
+              <Button className="rounded-full px-6 bg-[#5367d9] hover:bg-[#4658c7] text-white font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105">
                 Deleguj pierwsze zadanie
               </Button>
             </Link>
           </div>
 
-          {/* Mobile menu toggle */}
-          <button className="md:hidden text-white p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-        </div>
-
-        {/* Mobile menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden bg-[#0f2460] border-t border-white/10 px-6 py-4 space-y-4">
-            {navLinks.map(link => (
-              <a key={link.label} href={link.href} className="block text-white/80 font-semibold py-2" onClick={() => setMobileMenuOpen(false)}>
-                {link.label}
-              </a>
-            ))}
-            <div className="flex flex-col gap-3 pt-2">
-              <Link href="/auth"><Button variant="outline" className="w-full border-white/20 text-white rounded-full">Zaloguj się</Button></Link>
-              <Link href="/auth?role=company"><Button className="w-full bg-[#7c8ef7] text-white rounded-full font-bold">Zatrudnij studenta</Button></Link>
+          {/* Mobile menu */}
+          <details className="group md:hidden">
+            <summary
+              aria-controls="mobile-navigation"
+              className="relative z-10 flex cursor-pointer list-none rounded-xl p-2 text-white hover:bg-white/10 [&::-webkit-details-marker]:hidden"
+            >
+              <span className="sr-only">Otwórz menu</span>
+              <Menu className="h-6 w-6 group-open:hidden" />
+              <X className="hidden h-6 w-6 group-open:block" />
+            </summary>
+            <div
+              id="mobile-navigation"
+              className="fixed left-0 right-0 top-[64px] z-50 space-y-4 border-t border-white/10 bg-[#0f2460] px-4 py-4 shadow-2xl sm:px-6 md:hidden"
+            >
+              {navLinks.map(link => (
+                <a key={link.label} href={link.href} className="block text-white/80 font-semibold py-2">
+                  {link.label}
+                </a>
+              ))}
+              <div className="flex flex-col gap-3 pt-2">
+                <Link href="/auth"><Button variant="outline" className="w-full border-white/20 text-white rounded-full">Zaloguj się</Button></Link>
+                <Link href="/auth?role=company"><Button className="w-full bg-[#5367d9] text-white rounded-full font-bold">Zatrudnij studenta</Button></Link>
+              </div>
             </div>
-          </div>
-        )}
+          </details>
+        </div>
       </nav>
+
+      <main>
 
       {/* ══════════════════════════════════════════
           HERO
       ══════════════════════════════════════════ */}
-      <section className="relative min-h-screen flex items-center bg-[#0f2460] overflow-hidden pt-20">
+      <section className="relative flex overflow-hidden bg-[#0f2460] pt-16 md:min-h-[100svh] md:items-center md:pt-20">
         {/* Background decor */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#7c8ef7]/10 rounded-full blur-[120px]" />
@@ -247,19 +218,19 @@ export default function LandingPage() {
             style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
         </div>
 
-        <div className="relative z-10 mx-auto w-full max-w-7xl px-6 py-24 lg:py-32">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
+        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-24 lg:py-32">
+          <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
             {/* Left: text */}
             <div>
               <RevealOnScroll>
-                <div className="inline-flex items-center gap-2 rounded-full border border-[#7c8ef7]/30 bg-[#7c8ef7]/10 px-4 py-1.5 text-sm font-semibold text-[#a5b4fc] mb-8">
+                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#7c8ef7]/30 bg-[#7c8ef7]/10 px-3 py-1.5 text-xs font-semibold text-[#a5b4fc] sm:mb-8 sm:px-4 sm:text-sm">
                   <Zap className="w-4 h-4" />
                   Dla właścicieli firm, founderów i managerów
                 </div>
               </RevealOnScroll>
 
               <RevealOnScroll delay={100}>
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] mb-6">
+                <h1 className="mb-5 text-[2.15rem] font-extrabold leading-[1.08] text-white sm:mb-6 sm:text-5xl lg:text-6xl">
                   Deleguj zadania,{" "}
                   tam gdzie nie opłaca się{" "}
                   <span className="relative inline-block">
@@ -270,7 +241,10 @@ export default function LandingPage() {
               </RevealOnScroll>
 
               <RevealOnScroll delay={200}>
-                <p className="text-lg text-white/70 leading-relaxed mb-10 max-w-xl">
+                <p className="mb-7 max-w-xl text-base leading-7 text-white/70 sm:hidden">
+                  Wrzucasz zadanie, student je realizuje, a płatność czeka bezpiecznie w Escrow do akceptacji efektu.
+                </p>
+                <p className="mb-7 hidden max-w-xl text-base leading-7 text-white/70 sm:mb-10 sm:block sm:text-lg sm:leading-relaxed">
                   Masz zadanie → wrzucasz → ktoś kompetentny robi.
                   Szybko, bez etatu, bez rekrutacji, bez chaosu.
                   Dodatkowe ręce do pracy wtedy, kiedy ich potrzebujesz.
@@ -278,15 +252,15 @@ export default function LandingPage() {
               </RevealOnScroll>
 
               <RevealOnScroll delay={300}>
-                <div className="flex flex-wrap gap-4 mb-12">
-                  <Link href="/auth?role=company">
-                    <Button className="h-14 rounded-full px-8 text-base font-bold bg-[#7c8ef7] hover:bg-[#6b7ff0] text-white shadow-xl shadow-indigo-500/30 transition-all hover:scale-105">
+                <div className="mb-8 flex flex-col gap-3 sm:mb-12 sm:flex-row sm:flex-wrap sm:gap-4">
+                  <Link href="/auth?role=company" className="w-full sm:w-auto">
+                    <Button className="h-12 w-full rounded-full bg-[#5367d9] px-6 text-base font-bold text-white shadow-xl shadow-indigo-500/30 transition-all hover:scale-105 hover:bg-[#4658c7] sm:h-14 sm:w-auto sm:px-8">
                       Deleguj pierwsze zadanie
                       <ArrowRight className="ml-2 w-5 h-5" />
                     </Button>
                   </Link>
-                  <Link href="/auth?role=student">
-                    <Button variant="outline" className="h-14 rounded-full px-8 text-base font-bold border-white/20 text-white bg-white/5 hover:bg-white/10 transition-all">
+                  <Link href="/auth?role=student" className="w-full sm:w-auto">
+                    <Button variant="outline" className="h-12 w-full rounded-full border-white/20 bg-white/5 px-6 text-base font-bold text-white transition-all hover:bg-white/10 sm:h-14 sm:w-auto sm:px-8">
                       Zacznij jako student
                     </Button>
                   </Link>
@@ -294,7 +268,7 @@ export default function LandingPage() {
               </RevealOnScroll>
 
               <RevealOnScroll delay={400}>
-                <div className="flex flex-wrap items-center gap-6 text-white/50 text-sm">
+                <div className="flex flex-col gap-3 text-sm text-white/50 sm:flex-row sm:flex-wrap sm:items-center sm:gap-6">
                   {[
                     { icon: Clock, text: "Start w 24h" },
                     { icon: Shield, text: "Płatności Escrow" },
@@ -305,6 +279,22 @@ export default function LandingPage() {
                       <span>{text}</span>
                     </div>
                   ))}
+                </div>
+                <div className="mt-7 rounded-[1.5rem] border border-white/10 bg-white/10 p-4 shadow-2xl shadow-indigo-950/20 backdrop-blur-xl lg:hidden">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="rounded-full bg-[#7c8ef7]/20 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#c7d2fe]">
+                      Przykład zadania
+                    </span>
+                    <span className="text-sm font-black text-white">450 zł</span>
+                  </div>
+                  <div className="text-sm font-black leading-snug text-white">
+                    Research 80 firm do kampanii B2B
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px] font-bold text-white/60">
+                    <div className="rounded-xl bg-white/5 px-2 py-2">24h start</div>
+                    <div className="rounded-xl bg-white/5 px-2 py-2">Escrow</div>
+                    <div className="rounded-xl bg-white/5 px-2 py-2">PDF umowy</div>
+                  </div>
                 </div>
               </RevealOnScroll>
             </div>
@@ -385,12 +375,14 @@ export default function LandingPage() {
         </div>
       </section>
 
+      </main>
+
       {/* ══════════════════════════════════════════
           TRUST BAR / STATS
       ══════════════════════════════════════════ */}
       <section className="bg-white py-16 px-6">
         <div className="mx-auto max-w-7xl">
-          <p className="text-center text-sm font-bold text-slate-400 uppercase tracking-widest mb-10">
+          <p className="text-center text-sm font-bold text-slate-600 uppercase tracking-widest mb-10">
             Proces przygotowany pod pilotaż
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -404,7 +396,7 @@ export default function LandingPage() {
                 <div className="text-3xl mb-3">{stat.icon}</div>
                 <div className="text-3xl font-extrabold text-[#0f2460] mb-1">{stat.value}</div>
                 <div className="text-sm font-bold text-slate-700 mb-0.5">{stat.label}</div>
-                <div className="text-xs text-slate-400">{stat.sub}</div>
+                <div className="text-xs text-slate-600">{stat.sub}</div>
               </RevealOnScroll>
             ))}
           </div>
@@ -414,10 +406,10 @@ export default function LandingPage() {
       {/* ══════════════════════════════════════════
           FOR COMPANIES — VALUE PROPS
       ══════════════════════════════════════════ */}
-      <section id="dla-firm" className="bg-slate-50 py-24 px-6">
+      <section id="dla-firm" className="bg-slate-50 px-4 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-7xl">
-          <RevealOnScroll className="text-center mb-16">
-            <p className="text-sm font-bold text-[#7c8ef7] uppercase tracking-widest mb-3">Dla kogo jest Student2Work?</p>
+          <RevealOnScroll className="mb-10 text-center sm:mb-16">
+            <p className="text-sm font-bold text-[#5367d9] uppercase tracking-widest mb-3">Dla kogo jest Student2Work?</p>
             <h2 className="text-3xl md:text-5xl font-extrabold text-[#0f2460] mb-4">
               Znasz to{" "}
               <span className="relative inline-block">
@@ -431,7 +423,7 @@ export default function LandingPage() {
             </p>
           </RevealOnScroll>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid gap-5 md:grid-cols-3 md:gap-8">
             {[
               {
                 icon: Clock,
@@ -471,7 +463,7 @@ export default function LandingPage() {
               },
             ].map((item, i) => (
               <RevealOnScroll key={item.title} delay={i * 80}
-                className="bg-white rounded-2xl p-8 border border-slate-100 hover:border-[#7c8ef7]/30 hover:shadow-xl transition-all group">
+                className="group rounded-2xl border border-slate-100 bg-white p-5 transition-all hover:border-[#7c8ef7]/30 hover:shadow-xl sm:p-8">
                 <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-5 transition-transform group-hover:scale-110", item.color)}>
                   <item.icon className="w-6 h-6" />
                 </div>
@@ -486,10 +478,10 @@ export default function LandingPage() {
       {/* ══════════════════════════════════════════
           HOW IT WORKS
       ══════════════════════════════════════════ */}
-      <section id="jak-dziala" className="bg-white py-24 px-6">
+      <section id="jak-dziala" className="bg-white px-4 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-7xl">
-          <RevealOnScroll className="text-center mb-12">
-            <p className="text-sm font-bold text-[#7c8ef7] uppercase tracking-widest mb-3">Jak to działa</p>
+          <RevealOnScroll className="mb-10 text-center sm:mb-12">
+            <p className="text-sm font-bold text-[#5367d9] uppercase tracking-widest mb-3">Jak to działa</p>
             <h2 className="text-3xl md:text-5xl font-extrabold text-[#0f2460] mb-4">
               Prosto jak{" "}
               <span className="relative inline-block">
@@ -500,74 +492,17 @@ export default function LandingPage() {
             <p className="text-lg text-slate-500">Masz zadanie → wrzucasz → ktoś kompetentny robi. Wybierz model współpracy.</p>
           </RevealOnScroll>
 
-          {/* Model tabs */}
-          <div className="flex flex-wrap justify-center gap-2 mb-14">
-            {collaborationModels.map((m) => (
-              <button key={m.id} onClick={() => setActiveModel(m.value)}
-                className={cn(
-                  "px-6 py-3 rounded-full text-sm font-bold transition-all border",
-                  activeModel === m.value
-                    ? "bg-[#0f2460] text-white border-[#0f2460] shadow-lg"
-                    : "bg-white text-slate-500 border-slate-200 hover:border-[#7c8ef7] hover:text-[#7c8ef7]"
-                )}>
-                {m.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Steps */}
-          {(() => {
-            const steps = {
-              standard: [
-                { n: "01", title: "Opisujesz zadanie", desc: "Wrzucasz opis tego, co potrzebujesz. Budżet, deadline, zakres. Zajmuje to mniej niż 5 minut.", icon: "📋" },
-                { n: "02", title: "Dostajesz oferty", desc: "W ciągu 24h otrzymujesz aplikacje od zweryfikowanych wykonawców. Przeglądasz portfolio, wybierasz najlepszego.", icon: "🔍" },
-                { n: "03", title: "Praca rusza", desc: "Ustalasz etapy i terminy. Wykonawca raportuje postępy. Ty akceptujesz lub prosisz o poprawki.", icon: "⚡" },
-                { n: "04", title: "Płacisz po akceptacji", desc: "Zadowolony z efektu? Akceptujesz, środki z Escrow trafiają do wykonawcy. Koniec, bez fakturowania.", icon: "✅" },
-              ],
-              longterm: [
-                { n: "01", title: "Określasz potrzeby", desc: "Opisujesz zakres stałych obowiązków, oczekiwany wymiar czasu i stawkę. Zdalnie lub hybrydowo.", icon: "📋" },
-                { n: "02", title: "Wybierasz osobę", desc: "Przeglądasz profile, rozmawiasz przez czat. Decydujesz kto wchodzi do Twojego operacyjnego stacku.", icon: "🤝" },
-                { n: "03", title: "Stała współpraca", desc: "Osoba pracuje regularnie. Ty masz dedykowane ręce bez kosztów rekrutacji i HR.", icon: "📆" },
-                { n: "04", title: "Skalujesz lub kończysz", desc: "Potrzebujesz więcej? Dodajesz kolejną osobę. Projekt się skończył? Kończysz bez wypowiedzenia.", icon: "📈" },
-              ],
-              services: [
-                { n: "01", title: "Wybierasz kategorię zadania", desc: "Przeglądasz katalog: Growth, Ops, Admin. Każda kategoria to konkretne typy zadań, nie ogólniki.", icon: "🛍️" },
-                { n: "02", title: "Zamawiasz pakiet", desc: "Gotowe pakiety z ceną i terminem — bez negocjacji, bez briefingu. Klikasz i potwierdzasz.", icon: "📦" },
-                { n: "03", title: "Dostajesz efekt", desc: "Wykonawca dostarcza w ustalonym czasie. Sprawdzasz, akceptujesz lub prosisz o poprawkę.", icon: "🔄" },
-                { n: "04", title: "Wracasz po kolejne", desc: "Zadanie zrobione, firma działa sprawniej. Wróć kiedy chcesz — bez onboardingu od zera.", icon: "⭐" },
-              ],
-            };
-            return (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {steps[activeModel].map((step, i) => (
-                  <RevealOnScroll key={step.n} delay={i * 80}
-                    className="relative bg-slate-50 rounded-2xl p-7 border border-slate-100 hover:border-[#7c8ef7]/40 hover:bg-white hover:shadow-xl transition-all group">
-                    <div className="text-3xl mb-5">{step.icon}</div>
-                    <div className="absolute top-6 right-6 text-5xl font-extrabold text-slate-100 group-hover:text-[#7c8ef7]/10 transition-colors leading-none select-none">
-                      {step.n}
-                    </div>
-                    <h3 className="text-base font-bold text-[#0f2460] mb-2">{step.title}</h3>
-                    <p className="text-sm text-slate-500 leading-relaxed">{step.desc}</p>
-                    {i < 3 && (
-                      <div className="hidden lg:block absolute top-1/2 -right-3 z-10 w-6 h-6 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-sm">
-                        <ChevronRight className="w-3 h-3 text-[#7c8ef7]" />
-                      </div>
-                    )}
-                  </RevealOnScroll>
-                ))}
-              </div>
-            );
-          })()}
+          <HowItWorksSwitcher />
         </div>
       </section>
 
       {/* ══════════════════════════════════════════
           SERVICES
       ══════════════════════════════════════════ */}
-      <section id="uslugi" className="bg-slate-50 py-24 px-6">
+      <section id="usługi" className="bg-slate-50 px-4 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-7xl">
-          <RevealOnScroll className="text-center mb-14">
-            <p className="text-sm font-bold text-[#7c8ef7] uppercase tracking-widest mb-3">Katalog zadań</p>
+          <RevealOnScroll className="mb-10 text-center sm:mb-14">
+            <p className="text-sm font-bold text-[#5367d9] uppercase tracking-widest mb-3">Katalog zadań</p>
             <h2 className="text-3xl md:text-5xl font-extrabold text-[#0f2460] mb-4">
               Co możesz{" "}
               <span className="relative inline-block">
@@ -578,10 +513,18 @@ export default function LandingPage() {
             <p className="text-lg text-slate-500">Kliknij kategorię, żeby zobaczyć przykłady zadań i orientacyjne ceny</p>
           </RevealOnScroll>
 
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-5 lg:grid-cols-4">
-            {Object.keys(SERVICE_DATA).map((name, i) => (
-              <RevealOnScroll key={name} delay={i * 40}>
-                <ServiceDetailsModal name={name} />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 md:gap-5 lg:grid-cols-4">
+            {Object.entries(SERVICE_DATA).map(([name, data], index) => (
+              <RevealOnScroll key={name} delay={index * 40}>
+                <ServiceDetailsModal
+                  name={name}
+                  data={{
+                    description: data.description,
+                    stats: data.stats,
+                    examples: data.examples,
+                    funFact: data.funFact,
+                  }}
+                />
               </RevealOnScroll>
             ))}
           </div>
@@ -591,10 +534,10 @@ export default function LandingPage() {
       {/* ══════════════════════════════════════════
           TESTIMONIALS
       ══════════════════════════════════════════ */}
-      <section id="opinie" className="bg-white py-24 px-6">
+      <section id="opinie" className="bg-white px-4 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-7xl">
-          <RevealOnScroll className="text-center mb-16">
-            <p className="text-sm font-bold text-[#7c8ef7] uppercase tracking-widest mb-3">Opinie klientów</p>
+          <RevealOnScroll className="mb-10 text-center sm:mb-16">
+            <p className="text-sm font-bold text-[#5367d9] uppercase tracking-widest mb-3">Opinie klientów</p>
             <h2 className="text-3xl md:text-5xl font-extrabold text-[#0f2460] mb-4">
               Firmy, które{" "}
               <span className="relative inline-block">
@@ -605,18 +548,18 @@ export default function LandingPage() {
             <p className="text-lg text-slate-500">Właściciele firm i managerowie, którzy przestali robić wszystko sami.</p>
           </RevealOnScroll>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid gap-5 md:grid-cols-3 md:gap-8">
             {[
               { name: "Michał Nowak", role: "CEO · TechStart Sp. z o.o.", badge: "Founder", text: "Miałem backlog 20 zadań, które zalegały od miesięcy. Wrzuciłem je na Student2Work — połowa była gotowa w tydzień. Taniej niż agencja, szybciej niż rekrutacja." },
               { name: "Katarzyna Wiśniewska", role: "Operations Manager · 40-osobowa firma", badge: "Ops Manager", text: "Co tydzień wrzucam 3-4 zadania: research, aktualizacje CRM, prezentacje. Działa jak wewnętrzny team, bez kosztów etatu. Nie wyobrażam sobie powrotu do starego modelu." },
               { name: "Tomasz Lewandowski", role: "Head of Sales · SaaS B2B", badge: "Sales Lead", text: "Lead research był naszym bottleneckiem. Teraz mam kogoś kto buduje listy kontaktów — ja zamykam deale. ROI odczułem po pierwszym tygodniu." },
             ].map((t, i) => (
               <RevealOnScroll key={t.name} delay={i * 100}>
-                <div className="bg-white rounded-2xl border border-slate-100 p-8 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all">
+                <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl sm:p-8">
                   <div className="flex gap-1 mb-5">
                     {[1,2,3,4,5].map(s => <Star key={s} className="w-4 h-4 fill-amber-400 text-amber-400" />)}
                   </div>
-                  <p className="text-slate-600 leading-relaxed mb-6 italic">"{t.text}"</p>
+                  <p className="mb-6 leading-relaxed text-slate-600 italic">&quot;{t.text}&quot;</p>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-[#0f2460] flex items-center justify-center text-white font-bold text-sm">
@@ -624,7 +567,7 @@ export default function LandingPage() {
                       </div>
                       <div>
                         <div className="font-bold text-sm text-[#0f2460]">{t.name}</div>
-                        <div className="text-xs text-slate-400">{t.role}</div>
+                        <div className="text-xs text-slate-600">{t.role}</div>
                       </div>
                     </div>
                     <span className={cn(
@@ -644,7 +587,7 @@ export default function LandingPage() {
       {/* ══════════════════════════════════════════
           CTA
       ══════════════════════════════════════════ */}
-      <section className="bg-[#0f2460] py-24 px-6 relative overflow-hidden">
+      <section className="relative overflow-hidden bg-[#0f2460] px-4 py-16 sm:px-6 sm:py-24">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#7c8ef7]/10 rounded-full blur-[120px]" />
           <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-blue-600/10 rounded-full blur-[80px]" />
@@ -659,15 +602,15 @@ export default function LandingPage() {
               Jedno zadanie. Bez rekrutacji, bez etatu, bez chaosu.
               Zacznij teraz — rejestracja zajmuje 2 minuty.
             </p>
-            <div className="flex flex-wrap justify-center gap-4">
-              <Link href="/auth?role=company">
-                <Button className="h-14 rounded-full px-10 text-base font-bold bg-[#7c8ef7] hover:bg-[#6b7ff0] text-white shadow-xl shadow-indigo-500/30 transition-all hover:scale-105">
+            <div className="flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
+              <Link href="/auth?role=company" className="w-full sm:w-auto">
+                <Button className="h-12 w-full rounded-full bg-[#5367d9] px-6 text-base font-bold text-white shadow-xl shadow-indigo-500/30 transition-all hover:scale-105 hover:bg-[#4658c7] sm:h-14 sm:w-auto sm:px-10">
                   Deleguj pierwsze zadanie
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
               </Link>
-              <Link href="/auth?role=student">
-                <Button variant="outline" className="h-14 rounded-full px-10 text-base font-bold border-white/20 text-white bg-white/5 hover:bg-white/10 transition-all">
+              <Link href="/auth?role=student" className="w-full sm:w-auto">
+                <Button variant="outline" className="h-12 w-full rounded-full border-white/20 bg-white/5 px-6 text-base font-bold text-white transition-all hover:bg-white/10 sm:h-14 sm:w-auto sm:px-10">
                   Zacznij jako wykonawca
                 </Button>
               </Link>
@@ -682,9 +625,9 @@ export default function LandingPage() {
       {/* ══════════════════════════════════════════
           FOOTER
       ══════════════════════════════════════════ */}
-      <footer className="bg-[#081840] px-6 py-14">
+      <footer className="bg-[#081840] px-4 py-12 sm:px-6 sm:py-14">
         <div className="mx-auto max-w-7xl">
-          <div className="grid md:grid-cols-4 gap-10 mb-12">
+          <div className="mb-10 grid gap-8 md:mb-12 md:grid-cols-4 md:gap-10">
             <div className="md:col-span-2">
               <div className="text-xl font-extrabold text-white mb-3">
                 🎓 Student<span className="text-[#7c8ef7]">2</span>Work
@@ -694,7 +637,7 @@ export default function LandingPage() {
               </p>
             </div>
             <div>
-              <div className="text-xs font-bold text-white/30 uppercase tracking-widest mb-4">Platforma</div>
+              <div className="text-xs font-bold text-white/60 uppercase tracking-widest mb-4">Platforma</div>
               <ul className="space-y-3">
                 {["Jak to działa", "Katalog usług", "Dla firm", "Dla studentów"].map(l => (
                   <li key={l}><a href="#" className="text-white/50 text-sm hover:text-white transition-colors">{l}</a></li>
@@ -702,7 +645,7 @@ export default function LandingPage() {
               </ul>
             </div>
             <div>
-              <div className="text-xs font-bold text-white/30 uppercase tracking-widest mb-4">Prawne</div>
+              <div className="text-xs font-bold text-white/60 uppercase tracking-widest mb-4">Prawne</div>
               <ul className="space-y-3">
                 {["Regulamin", "Polityka prywatności", "Kontakt"].map(l => (
                   <li key={l}><a href="#" className="text-white/50 text-sm hover:text-white transition-colors">{l}</a></li>
@@ -710,9 +653,9 @@ export default function LandingPage() {
               </ul>
             </div>
           </div>
-          <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="text-white/30 text-sm">© {new Date().getFullYear()} Student2Work. Wszelkie prawa zastrzeżone.</div>
-            <div className="flex items-center gap-2 text-white/30 text-sm">
+          <div className="flex flex-col items-start justify-between gap-4 border-t border-white/10 pt-8 md:flex-row md:items-center">
+            <div className="text-white/60 text-sm">© {new Date().getFullYear()} Student2Work. Wszelkie prawa zastrzeżone.</div>
+            <div className="flex items-center gap-2 text-white/60 text-sm">
               <Shield className="w-4 h-4 text-green-400" />
               Płatności chronione systemem Escrow
             </div>
@@ -720,85 +663,5 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
-  );
-}
-
-// ── Service Modal ───────────────────────────────────────────────
-function ServiceDetailsModal({ name }: { name: string }) {
-  const data = SERVICE_DATA[name];
-  const Icon = data.icon;
-
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <div className="group cursor-pointer rounded-2xl border border-slate-200/70 bg-white p-6 text-center shadow-sm transition-all hover:-translate-y-1 hover:border-[#7c8ef7]/40 hover:shadow-xl">
-          <div className="w-12 h-12 rounded-xl bg-[#0f2460]/5 flex items-center justify-center mx-auto mb-4 group-hover:bg-[#7c8ef7]/10 transition-colors">
-            <Icon className="w-6 h-6 text-[#0f2460] group-hover:text-[#7c8ef7] transition-colors" />
-          </div>
-          <div className="font-bold text-sm text-[#0f2460] group-hover:text-[#7c8ef7] transition-colors leading-tight">{name}</div>
-          <div className="mt-2 text-[10px] text-slate-400 font-medium">Zakres: {data.stats.scope}</div>
-        </div>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl rounded-[2rem] border-none p-0 overflow-hidden">
-        <div className="bg-[#0f2460] p-8 pb-6">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center text-white">
-                <Icon className="w-8 h-8" />
-              </div>
-              <div>
-                <DialogTitle className="text-2xl font-extrabold text-white">{name}</DialogTitle>
-                <div className="flex items-center gap-1.5 mt-1 text-white/60 text-xs">
-                  <BadgeCheck className="w-3.5 h-3.5" />
-                  <span>Proces z umową i kontrolą statusu</span>
-                </div>
-              </div>
-            </div>
-          </DialogHeader>
-        </div>
-
-        <div className="p-8 bg-white space-y-6">
-          <p className="text-slate-600 leading-relaxed">{data.description}</p>
-
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            {[
-              { label: "Cena", value: data.stats.price },
-              { label: "Czas realizacji", value: data.stats.time },
-              { label: "Zakres", value: data.stats.scope },
-              { label: "Tryb", value: data.stats.mode },
-            ].map(s => (
-              <div key={s.label} className="bg-slate-50 rounded-xl p-4 text-center border border-slate-100">
-                <div className="text-sm font-extrabold text-[#0f2460] mb-1">{s.value}</div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{s.label}</div>
-              </div>
-            ))}
-          </div>
-
-          <div>
-            <h4 className="font-bold text-[#0f2460] mb-3">Przykładowe projekty</h4>
-            <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {data.examples.map(ex => (
-                <li key={ex} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-600 hover:bg-[#7c8ef7]/5 transition-colors border border-transparent hover:border-[#7c8ef7]/20">
-                  <CheckCircle2 className="w-4 h-4 text-[#7c8ef7] shrink-0" />
-                  {ex}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="rounded-xl border-l-4 border-[#7c8ef7] bg-[#7c8ef7]/5 p-5">
-            <div className="font-bold text-[#0f2460] mb-1 text-sm">💡 Ciekawostka</div>
-            <p className="text-sm text-slate-500">{data.funFact}</p>
-          </div>
-
-          <Link href="/auth?role=company">
-            <Button className="w-full h-12 rounded-full bg-[#0f2460] hover:bg-[#1a3a8f] text-white font-bold shadow-lg transition-all hover:scale-[1.02]">
-              Znajdź eksperta w tej kategorii
-              <ArrowRight className="ml-2 w-4 h-4" />
-            </Button>
-          </Link>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }

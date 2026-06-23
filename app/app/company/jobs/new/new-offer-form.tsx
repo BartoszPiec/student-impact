@@ -25,7 +25,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
 
 const CATEGORIES = [
   "Administracja biurowa",
@@ -309,23 +309,12 @@ export default function NewOfferForm({
       setIsUploading(true);
       setError(null);
 
-      const supabase = createClient();
-      const filename = `${Date.now()}-${file.name.replace(/\s/g, "_")}`;
-
-      const { data, error: uploadError } = await supabase.storage
-        .from("offer_attachments")
-        .upload(filename, file);
-
-      if (uploadError) throw uploadError;
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("offer_attachments").getPublicUrl(data.path);
-
-      setUploadedFileUrl(publicUrl);
-    } catch (uploadError: any) {
+      const uploaded = await uploadPrivateFile({ file, purpose: "offer_attachment" });
+      setUploadedFileUrl(uploaded.ref);
+    } catch (uploadError: unknown) {
+      const message = uploadError instanceof Error ? uploadError.message : "Nieznany błąd";
       console.error(uploadError);
-      setError(`Blad przesylania pliku: ${uploadError.message}`);
+      setError(`Błąd przesyłania pliku: ${message}`);
     } finally {
       setIsUploading(false);
     }
@@ -345,7 +334,7 @@ export default function NewOfferForm({
         !formData.osoba_prowadzaca.trim()
       ) {
         validationError =
-          "Uzupelnij tytul, opis, kategorie, cel wspolpracy, oczekiwany rezultat, kryteria akceptacji i osobe prowadzaca.";
+          "Uzupelnij tytul, opis, kategorie, cel współpracy, oczekiwany rezultat, kryteria akceptacji i osobe prowadzaca.";
       }
     }
 
@@ -437,8 +426,8 @@ export default function NewOfferForm({
 
     try {
       await createOffer(payload);
-    } catch (submitError: any) {
-      setError(submitError.message);
+    } catch (submitError: unknown) {
+      setError(submitError instanceof Error ? submitError.message : "Nie udało sie utworzyc oferty.");
       setIsLoading(false);
     }
   };
@@ -448,7 +437,7 @@ export default function NewOfferForm({
       <div className="space-y-2 text-center">
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">Jaki rodzaj oferty chcesz dodac?</h2>
         <p className="mx-auto max-w-2xl text-sm leading-6 text-slate-500">
-          Wybierz format wspolpracy, ktory najlepiej pasuje do tego, jak chcesz pracowac z wykonawca.
+          Wybierz format współpracy, który najlepiej pasuje do tego, jak chcesz pracowac z wykonawca.
         </p>
       </div>
 
@@ -487,7 +476,7 @@ export default function NewOfferForm({
           </div>
           <h3 className="text-lg font-bold text-slate-900">Oferta pracy lub stazu</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Dluzsza wspolpraca, staz albo rola projektowa. Dobre, gdy chcesz opisac szerszy zakres i oczekiwania.
+            Dluzsza wspolpraca, staż albo rola projektowa. Dobre, gdy chcesz opisac szerszy zakres i oczekiwania.
           </p>
         </button>
       </div>
@@ -614,7 +603,7 @@ export default function NewOfferForm({
             </div>
 
             <div className="space-y-2">
-              <Label className={fieldLabelClass}>Preferowany model wspolpracy</Label>
+              <Label className={fieldLabelClass}>Preferowany model współpracy</Label>
               <select
                 className={cn(
                   inputClass,
@@ -635,9 +624,9 @@ export default function NewOfferForm({
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
             <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900">
               <Info className="h-4 w-4 text-indigo-500" />
-              Model wspolpracy jest dzis przede wszystkim informacja dla kandydata.
+              Model współpracy jest dzis przede wszystkim informacja dla kandydata.
             </div>
-            Obecny workflow platformy najpewniej najlepiej pokrywa B2B i umowe zlecenie. Jesli wybierasz UoP lub staz,
+            Obecny workflow platformy najpewniej najlepiej pokrywa B2B i umowę zlecenie. Jesli wybierasz UoP lub staż,
             potraktuj to jako preferencje do dalszego ustalenia, a nie gotowy workflow platformowy.
           </div>
 
@@ -647,7 +636,7 @@ export default function NewOfferForm({
                 <ShieldAlert className="h-4 w-4 text-amber-600" />
                 Uwaga dla UoP i stazu
               </div>
-              Ten wybor komunikuje preferowany model wspolpracy, ale nie oznacza jeszcze, ze cala logika formalna i
+              Ten wybor komunikuje preferowany model współpracy, ale nie oznacza jeszcze, ze cala logika formalna i
               dokumentowa jest obslugiwana automatycznie przez platforme.
             </div>
           )}
@@ -672,7 +661,7 @@ export default function NewOfferForm({
               onChange={(e) => handleChange("benefits", e.target.value)}
               placeholder={`- elastyczne godziny
 - onboarding i feedback
-- mozliwosc dluzszej wspolpracy`}
+- mozliwosc dluzszej współpracy`}
             />
           </div>
 
@@ -684,8 +673,8 @@ export default function NewOfferForm({
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Informacje formalne i do umowy</h3>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
-                  Te odpowiedzi pomagaja przygotowac wspolprace i wychwycic ryzyka przed umowa. Nie uruchamiaja jeszcze
-                  automatycznej obslugi prawnej.
+                  Te odpowiedzi pomagaja przygotowac współpracę i wychwycic ryzyka przed umowa. Nie uruchamiaja jeszcze
+                  automatycznej obsługi prawnej.
                 </p>
               </div>
             </div>
@@ -705,15 +694,15 @@ export default function NewOfferForm({
                 "indigo",
               )}
               {renderDecisionField(
-                "Czy wykonawca moze pokazac efekt w portfolio?",
+                "Czy wykonawca może pokazac efekt w portfolio?",
                 "To upraszcza rozmowe o publikacji projektu po wdrozeniu lub premierze.",
                 formData.portfolio_dozwolone,
                 (nextValue) => handleChange("portfolio_dozwolone", nextValue),
                 "indigo",
               )}
               {renderDecisionField(
-                "Czy materialy firmy sa legalnie udostepnione?",
-                "Dotyczy np. licencji do fontow, zdjec, assetow, dostepow i plikow przekazywanych wykonawcy.",
+                "Czy materialy firmy są legalnie udostepnione?",
+                "Dotyczy np. licencji do fontow, zdjec, assetow, dostępów i plikow przekazywanych wykonawcy.",
                 formData.materialy_legalnie_udostepnione,
                 (nextValue) => handleChange("materialy_legalnie_udostepnione", nextValue),
                 "indigo",
@@ -724,9 +713,9 @@ export default function NewOfferForm({
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
             <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900">
               <Info className="h-4 w-4 text-indigo-500" />
-              Dane formalne stron pobierzemy pozniej z profili i dokumentow.
+              Dane formalne stron pobierzemy później z profili i dokumentów.
             </div>
-            Dane identyfikacyjne firmy, dane do faktur i dane osobowe stron nie sa duplikowane w ogloszeniu. Te
+            Dane identyfikacyjne firmy, dane do faktur i dane osobowe stron nie są duplikowane w ogloszeniu. Te
             informacje pozostaja w profilach i snapshotach kontraktu.
           </div>
         </div>
@@ -819,14 +808,14 @@ export default function NewOfferForm({
             <div>
               <h3 className="text-lg font-bold text-slate-900">Materialy i zasoby od firmy</h3>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                To miejsce na linki, briefy, dostepy i pliki, ktore firma przekaze po akceptacji zgloszenia. To nie
+                To miejsce na linki, briefy, dostępy i pliki, które firma przekaze po akceptacji zgłoszenia. To nie
                 jest lista obowiazkow wykonawcy.
               </p>
             </div>
           </div>
 
           <Input
-            placeholder="Link do materialow (Google Drive, Dropbox, Figma, Notion...)"
+            placeholder="Link do materiałów (Google Drive, Dropbox, Figma, Notion...)"
             value={formData.obligations}
             onChange={(e) => handleChange("obligations", e.target.value)}
             className="mb-4 h-14 rounded-2xl border-amber-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:ring-amber-100"
@@ -906,7 +895,7 @@ export default function NewOfferForm({
             >
               <p className="text-sm font-bold">Firma ustala etapy z gory</p>
               <p className="mt-2 text-xs leading-6 text-slate-500">
-                Dobre dla zadan z gotowym harmonogramem. Etapy beda widoczne dla studenta przed aplikacja, a wyplata
+                Dobre dla zadań z gotowym harmonogramem. Etapy będą widoczne dla studenta przed aplikacja, a wypłata
                 nastapi po odbiorze calego zadania.
               </p>
             </button>
@@ -998,8 +987,8 @@ export default function NewOfferForm({
             <div>
               <h3 className="text-lg font-bold text-slate-900">Informacje formalne i do umowy</h3>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                Te odpowiedzi pomagaja ulozyc wspolprace i zweryfikowac ryzyka jeszcze przed umowa. Nie wlaczaja same
-                z siebie automatycznej obslugi prawnej.
+                Te odpowiedzi pomagaja ulozyc współpracę i zweryfikowac ryzyka jeszcze przed umowa. Nie wlaczaja same
+                z siebie automatycznej obsługi prawnej.
               </p>
             </div>
           </div>
@@ -1020,15 +1009,15 @@ export default function NewOfferForm({
               "amber",
             )}
             {renderDecisionField(
-              "Czy wykonawca moze pokazac efekt w portfolio?",
+              "Czy wykonawca może pokazac efekt w portfolio?",
               "To upraszcza rozmowe o publikacji projektu po wdrozeniu lub premierze.",
               formData.portfolio_dozwolone,
               (nextValue) => handleChange("portfolio_dozwolone", nextValue),
               "amber",
             )}
             {renderDecisionField(
-              "Czy materialy firmy sa legalnie udostepnione?",
-              "Dotyczy np. licencji do fontow, zdjec, assetow, dostepow i plikow przekazywanych wykonawcy.",
+              "Czy materialy firmy są legalnie udostepnione?",
+              "Dotyczy np. licencji do fontow, zdjec, assetow, dostępów i plikow przekazywanych wykonawcy.",
               formData.materialy_legalnie_udostepnione,
               (nextValue) => handleChange("materialy_legalnie_udostepnione", nextValue),
               "amber",
@@ -1039,9 +1028,9 @@ export default function NewOfferForm({
         <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
           <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900">
             <Info className="h-4 w-4 text-amber-500" />
-            Dane formalne stron pobierzemy pozniej z profili i dokumentow.
+            Dane formalne stron pobierzemy później z profili i dokumentów.
           </div>
-          Dane identyfikacyjne firmy, dane do faktur i dane osobowe stron nie sa duplikowane w ogloszeniu. Te
+          Dane identyfikacyjne firmy, dane do faktur i dane osobowe stron nie są duplikowane w ogloszeniu. Te
           informacje pozostaja w profilach i snapshotach kontraktu.
         </div>
       </div>
@@ -1055,7 +1044,7 @@ export default function NewOfferForm({
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
-                {isJob ? "Oferta pracy / staz" : "Mikrozlecenie"}
+                {isJob ? "Oferta pracy / staż" : "Mikrozlecenie"}
               </Badge>
               {formData.kategoria && (
                 <Badge variant="outline" className="border-indigo-200 bg-indigo-50 text-indigo-700">
@@ -1092,7 +1081,7 @@ export default function NewOfferForm({
               </div>
               <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
                 <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  Model wspolpracy
+                  Model współpracy
                 </div>
                 <div className="text-sm font-semibold text-slate-900">{formData.contract_type || "Do ustalenia"}</div>
               </div>
@@ -1150,7 +1139,7 @@ export default function NewOfferForm({
           </div>
 
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
-            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cel wspolpracy</div>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cel współpracy</div>
             <div className="text-sm font-semibold text-slate-900">{formData.cel_wspolpracy || "Do ustalenia"}</div>
           </div>
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
@@ -1173,9 +1162,9 @@ export default function NewOfferForm({
           <div className="mt-6 rounded-[1.5rem] border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
             <div className="mb-2 flex items-center gap-2 font-semibold">
               <ShieldAlert className="h-4 w-4 text-amber-600" />
-              To jest preferowany model wspolpracy
+              To jest preferowany model współpracy
             </div>
-            UoP i staz nie oznaczaja jeszcze pelnej automatyzacji calej logiki formalnej. Potraktuj to jako sygnal dla
+            UoP i staż nie oznaczaja jeszcze pelnej automatyzacji calej logiki formalnej. Potraktuj to jako sygnal dla
             kandydata i temat do dalszego ustalenia.
           </div>
         )}
@@ -1186,7 +1175,7 @@ export default function NewOfferForm({
               <Zap className="h-4 w-4 text-amber-600" />
               Oferta platform service
             </div>
-            To ustawienie zmienia logike rozliczenia po stronie platformy. Upewnij sie, ze brief i materialy sa jasne
+            To ustawienie zmienia logike rozliczenia po stronie platformy. Upewnij sie, ze brief i materialy są jasne
             jeszcze przed publikacja.
           </div>
         )}
@@ -1379,7 +1368,7 @@ export default function NewOfferForm({
             <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2">
                 <Label className={fieldLabelClass}>
-                  Cel wspolpracy <span className="text-red-500">*</span>
+                  Cel współpracy <span className="text-red-500">*</span>
                 </Label>
                 <Textarea
                   value={formData.cel_wspolpracy}
@@ -1396,7 +1385,7 @@ export default function NewOfferForm({
                 <Textarea
                   value={formData.oczekiwany_rezultat}
                   onChange={(e) => handleChange("oczekiwany_rezultat", e.target.value)}
-                  placeholder="Co konkretnie ma zostac dostarczone na koncu wspolpracy?"
+                  placeholder="Co konkretnie ma zostac dostarczone na koncu współpracy?"
                   className={cn(textareaClass, "min-h-[150px]", isJob ? "focus-visible:ring-indigo-100" : "focus-visible:ring-amber-100")}
                 />
               </div>
@@ -1421,7 +1410,7 @@ export default function NewOfferForm({
               <Input
                 value={formData.osoba_prowadzaca}
                 onChange={(e) => handleChange("osoba_prowadzaca", e.target.value)}
-                placeholder="Imie i rola osoby, ktora doprecyzowuje brief i odbiera rezultat"
+                placeholder="Imię i rola osoby, która doprecyzowuje brief i odbiera rezultat"
                 className={cn(inputClass, isJob ? "focus-visible:ring-indigo-100" : "focus-visible:ring-amber-100")}
               />
             </div>
@@ -1431,7 +1420,7 @@ export default function NewOfferForm({
         {step === 3 && renderStep3()}
         {step === 4 && renderStep4()}
 
-        <div className="mt-10 flex items-center justify-between border-t border-slate-200 pt-8">
+        <div className="mobile-sticky-actions mt-10 flex items-center justify-between gap-3 border-t border-slate-200 pt-8">
           <Button
             variant="ghost"
             onClick={prevStep}

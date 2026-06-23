@@ -90,7 +90,7 @@ function getDeliveryLabel(selected: PackageVariant, baseDeliveryDays: number) {
 function getVariantLead(variant: PackageVariant): string {
   const scope = (variant.scope || "").trim();
   if (!scope) {
-    return "Zakres dopasowany do potrzeb tego poziomu wspolpracy.";
+    return "Zakres dopasowany do potrzeb tego poziomu współpracy.";
   }
   return scope;
 }
@@ -215,7 +215,7 @@ function buildVariantFormatStatus(variant: PackageVariant): Record<FormatCardKey
     carousel: {
       available: hasCarousel,
       note: hasCarousel
-        ? "Karuzele dostepne w ramach materialow feed"
+        ? "Karuzele dostępne w ramach materiałów feed"
         : "Brak karuzeli w standardowym zakresie",
     },
     reel: {
@@ -332,7 +332,7 @@ export function VariantSyncedSnapshot({
           </div>
         </div>
         <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Zakres wspolpracy</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Zakres współpracy</p>
           <div className="h-2 w-full rounded-full bg-slate-100">
             <div className={`h-2 rounded-full bg-gradient-to-r ${gradient} w-4/5`} />
           </div>

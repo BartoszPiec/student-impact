@@ -313,9 +313,10 @@ export default function CustomizePackageForm({
         } else {
           await createCustomizedOffer(packageId, formData);
         }
-      } catch (error: any) {
+      } catch (caught: unknown) {
+        const error = caught instanceof Error ? caught : new Error("Wystąpił nieznany błąd.");
         if (error.message === "NEXT_REDIRECT" || error.message?.includes("NEXT_REDIRECT")) return;
-        alert("Blad: " + (error.message || "Wystapil nieznany blad."));
+        alert("Błąd: " + (error.message || "Wystąpił nieznany błąd."));
       }
     });
   };
@@ -365,7 +366,7 @@ export default function CustomizePackageForm({
               <span className="space-y-1">
                 <span className="block font-bold text-slate-900">Przydziel automatycznie</span>
                 <span className="block text-sm text-slate-600">
-                  Platforma przypisze pierwszego dostepnego studenta z kategorii Design.
+                  Platforma przypisze pierwszego dostępnego studenta z kategorii Design.
                 </span>
               </span>
             </label>
@@ -455,7 +456,7 @@ export default function CustomizePackageForm({
       {!useDynamicBrief && isAutomation ? (
         <LegacySection
           title="Scenariusz automatyzacji"
-          description="Opisz co dzieje sie recznie i jaki ma byc efekt."
+          description="Opisz co dzieje sie ręcznie i jaki ma byc efekt."
           icon={<Zap className="h-5 w-5 text-blue-600" />}
           tone="border-blue-100 shadow-blue-500/10"
         >
@@ -482,7 +483,7 @@ export default function CustomizePackageForm({
               id="notes"
               name="notes"
               defaultValue={initialData.notes}
-              placeholder="Wszelkie inne informacje, ktore moga byc przydatne..."
+              placeholder="Wszelkie inne informacje, które mogą byc przydatne..."
               className="min-h-[120px] border-slate-200 bg-white text-base"
             />
           </div>

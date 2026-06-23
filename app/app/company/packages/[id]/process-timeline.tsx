@@ -46,7 +46,7 @@ export function ProcessTimeline({ markdownContent, gradient, variants, fallbackS
     const filterVariantText = (text: string) => {
         if (!activeVariant || !text) return text;
 
-        let processedText = text;
+        const processedText = text;
         if (!processedText.includes("/")) return processedText;
 
         const parts = processedText.split(/\s*\/\s*/);

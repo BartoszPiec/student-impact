@@ -7,7 +7,7 @@ import { pl } from "date-fns/locale";
 import { FileText } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-type ContractRow = {
+export type ContractRow = {
   id: string;
   created_at: string;
   status: string;
@@ -211,7 +211,7 @@ export function ContractsTable({
                     <p className="font-bold text-slate-500">
                       {statusFilter === "all" && !deferredSearch
                         ? emptyMessage
-                        : "Brak kontraktow pasujacych do wybranych filtrow."}
+                        : "Brak kontraktów pasujacych do wybranych filtrow."}
                     </p>
                   </div>
                 </td>

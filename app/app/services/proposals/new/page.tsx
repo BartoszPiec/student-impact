@@ -33,19 +33,19 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
       <div className="container max-w-4xl space-y-8 py-10">
         <Link href="/app/services/my" className="flex w-fit items-center gap-2 text-sm text-slate-500 hover:text-slate-900">
           <ArrowLeft className="h-4 w-4" />
-          Wroc do moich uslug
+          Wroc do moich usług
         </Link>
 
         <Card className="rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40">
           <CardHeader>
-            <CardTitle>Nie wybrano uslugi do propozycji</CardTitle>
+            <CardTitle>Nie wybrano usługi do propozycji</CardTitle>
             <CardDescription>
-              Wejdz do listy swoich uslug i wybierz pakiet, z ktorego chcesz wyslac prywatna propozycje firmie.
+              Wejdz do listy swoich usług i wybierz pakiet, z którego chcesz wysłać prywatną propozycje firmie.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild className="rounded-2xl bg-slate-900 px-6 text-white hover:bg-indigo-600">
-              <Link href="/app/services/my">Przejdz do moich uslug</Link>
+              <Link href="/app/services/my">Przejdz do moich usług</Link>
             </Button>
           </CardContent>
         </Card>
@@ -65,14 +65,14 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
       <div className="container max-w-4xl space-y-8 py-10">
         <Link href="/app/services/my" className="flex w-fit items-center gap-2 text-sm text-slate-500 hover:text-slate-900">
           <ArrowLeft className="h-4 w-4" />
-          Wroc do moich uslug
+          Wroc do moich usług
         </Link>
 
         <Card className="rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40">
           <CardHeader>
-            <CardTitle>Nie znaleziono uslugi</CardTitle>
+            <CardTitle>Nie znaleziono usługi</CardTitle>
             <CardDescription>
-              Ten pakiet nie nalezy do Ciebie albo nie jest juz dostepny do wysylania propozycji.
+              Ten pakiet nie nalezy do Ciebie albo nie jest już dostępny do wysylania propozycji.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -95,9 +95,9 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
               Prywatna propozycja
             </div>
             <div className="space-y-2">
-              <h1 className="text-4xl font-black tracking-tight md:text-5xl">Zaproponuj wspolprace firmie</h1>
+              <h1 className="text-4xl font-black tracking-tight md:text-5xl">Zaproponuj współpracę firmie</h1>
               <p className="max-w-2xl text-lg font-medium text-indigo-100/70">
-                Wysylasz prywatna propozycje z juz istniejacego pakietu uslug. Po akceptacji wszystko wpada do tego samego
+                Wysylasz prywatną propozycje z już istniejacego pakietu usług. Po akceptacji wszystko wpada do tego samego
                 flow: negocjacja, kontrakt, escrow i realizacja.
               </p>
             </div>
@@ -106,7 +106,7 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
           <Link href="/app/services/my">
             <Button variant="outline" className="h-12 rounded-2xl border-white/10 bg-white/5 px-6 font-bold text-white hover:bg-white/10">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Wroc do moich uslug
+              Wroc do moich usług
             </Button>
           </Link>
         </div>
@@ -115,17 +115,17 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
       <div className="grid gap-8 lg:grid-cols-[1.4fr_0.9fr]">
         <Card className="rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40">
           <CardHeader className="space-y-2">
-            <CardTitle>Nowa prywatna propozycja</CardTitle>
+            <CardTitle>Nowa prywatną propozycja</CardTitle>
             <CardDescription>
-              Ta wiadomosc pojawi sie firmie w jej panelu zamowien uslug. Guard po stronie serwera pozwala wysylac
-              propozycje tylko do firm, z ktorymi masz juz potwierdzona wspolprace.
+              Ta wiadomosc pojawi sie firmie w jej panelu zamowien usług. Guard po stronie serwera pozwala wysylac
+              propozycje tylko do firm, z ktorymi masz już potwierdzona współpracę.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {eligibleCompanies.length === 0 ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-                Nie masz jeszcze firmy, do ktorej mozna wyslac prywatna propozycje. Ta opcja odblokowuje sie dopiero po
-                co najmniej jednej dotychczasowej wspolpracy.
+                Nie masz jeszcze firmy, do której można wysłać prywatną propozycje. Ta opcja odblokowuje sie dopiero po
+                co najmniej jednej dotychczasowej współpracy.
               </div>
             ) : (
               <form action={createPrivateProposalAction} className="space-y-6">
@@ -143,7 +143,7 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
                     className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
                   >
                     <option value="" disabled>
-                      Wybierz firme z historii wspolpracy
+                      Wybierz firme z historii współpracy
                     </option>
                     {eligibleCompanies.map((company) => (
                       <option key={company.user_id} value={company.user_id}>
@@ -157,7 +157,7 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <label htmlFor="proposal_goal" className="text-sm font-semibold text-slate-700">
-                      Cel wspolpracy
+                      Cel współpracy
                     </label>
                     <textarea
                       id="proposal_goal"
@@ -246,10 +246,10 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
                 <div className="flex flex-wrap items-center gap-3 pt-2">
                   <Button type="submit" className="h-12 rounded-2xl bg-slate-900 px-6 font-black text-white hover:bg-indigo-600">
                     <SendHorizonal className="mr-2 h-4 w-4" />
-                    Wyslij prywatna propozycje
+                    Wyslij prywatną propozycje
                   </Button>
                   <p className="text-sm font-medium text-slate-500">
-                    Po zapisaniu propozycja od razu pojawi sie w panelu firmy jako nowe zamowienie uslugi.
+                    Po zapisaniu propozycja od razu pojawi sie w panelu firmy jako nowe zamowienie usługi.
                   </p>
                 </div>
               </form>
@@ -260,8 +260,8 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
         <div className="space-y-6">
           <Card className="rounded-[2rem] border border-slate-100 shadow-lg shadow-slate-200/30">
             <CardHeader>
-              <CardTitle>Wybrana usluga</CardTitle>
-              <CardDescription>To z tego pakietu tworzysz prywatna propozycje.</CardDescription>
+              <CardTitle>Wybrana usługa</CardTitle>
+              <CardDescription>To z tego pakietu tworzysz prywatną propozycje.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-slate-600">
               <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-indigo-600">
@@ -270,7 +270,7 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
               </div>
               <div>
                 <h2 className="text-xl font-black text-slate-900">{servicePackage.title}</h2>
-                <p className="mt-2 leading-relaxed">{servicePackage.description || "Brak opisu uslugi."}</p>
+                <p className="mt-2 leading-relaxed">{servicePackage.description || "Brak opisu usługi."}</p>
               </div>
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cena bazowa</p>
@@ -283,9 +283,9 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
 
           <Card className="rounded-[2rem] border border-slate-100 shadow-lg shadow-slate-200/30">
             <CardHeader>
-              <CardTitle>Firmy, do ktorych mozesz napisac</CardTitle>
+              <CardTitle>Firmy, do których mozesz napisac</CardTitle>
               <CardDescription>
-                Lista jest budowana na podstawie zakonczonych lub aktywnych kontraktow z Twojej historii.
+                Lista jest budowana na podstawie zakonczonych lub aktywnych kontraktów z Twojej historii.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">

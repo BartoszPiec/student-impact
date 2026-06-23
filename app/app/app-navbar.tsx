@@ -4,8 +4,9 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
+import dynamic from "next/dynamic";
 import {
-  Activity,
   Briefcase,
   CircleDollarSign,
   FileText,
@@ -21,7 +22,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdminNav } from "@/components/admin/admin-nav";
-import NotificationsBell from "@/components/notifications-bell";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -31,7 +31,11 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { signOut } from "./_actions/auth";
-import { UnreadChatBadge } from "./_components/UnreadChatBadge";
+
+const NotificationsBell = dynamic(() => import("@/components/notifications-bell"));
+const UnreadChatBadge = dynamic(() =>
+  import("./_components/UnreadChatBadge").then((module) => module.UnreadChatBadge)
+);
 
 type AppNavbarUser = {
   id: string;
@@ -91,6 +95,41 @@ function AppNavLink({
   );
 }
 
+function getMobileNavItems(role: string | null) {
+  if (role === "company") {
+    return [
+      { href: "/app/company/packages", label: "Katalog", icon: Search },
+      { href: "/app/company/offers", label: "Oferty", icon: LayoutGrid },
+      { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true },
+      { href: "/app/profile", label: "Profil", icon: User },
+    ];
+  }
+
+  if (role === "student") {
+    return [
+      { href: "/app/jobs", label: "Zlecenia", icon: Search },
+      { href: "/app/applications", label: "Aplikacje", icon: FileText },
+      { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true },
+      { href: "/app/profile", label: "Profil", icon: User },
+    ];
+  }
+
+  if (role === "admin") {
+    return [
+      { href: "/app/admin", label: "Admin", icon: LayoutGrid },
+      { href: "/app/admin/users", label: "Użytkownicy", icon: User },
+      { href: "/app/admin/offers", label: "Oferty", icon: FileText },
+      { href: "/app/profile", label: "Profil", icon: User },
+    ];
+  }
+
+  return [
+    { href: "/app", label: "Start", icon: LayoutGrid },
+    { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true },
+    { href: "/app/profile", label: "Profil", icon: User },
+  ];
+}
+
 export function AppNavbar({
   user,
   role,
@@ -100,17 +139,20 @@ export function AppNavbar({
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
+  const mobileNavItems = getMobileNavItems(role);
+
   return (
+    <>
     <header className="sticky top-0 z-50 w-full bg-slate-950/95 backdrop-blur-xl">
-      <div className="mx-auto w-full max-w-[2000px] px-4 md:px-8 xl:px-12 py-2.5">
-        <div className="h-14 flex items-center gap-4 px-3 rounded-2xl bg-slate-950/95 backdrop-blur-xl shadow-[0_8px_32px_-8px_rgba(0,0,0,0.4)] border border-white/5">
+      <div className="mx-auto w-full max-w-[2000px] px-3 py-2.5 sm:px-4 lg:px-8 xl:px-12">
+        <div className="flex h-14 items-center gap-2 rounded-2xl border border-white/5 bg-slate-950/95 px-2 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.4)] backdrop-blur-xl sm:gap-4 sm:px-3">
           <div className="flex shrink-0 items-center gap-3">
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
               <SheetTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="md:hidden text-white/60 hover:text-white hover:bg-white/10 rounded-xl h-9 w-9"
+                  className="lg:hidden text-white/60 hover:text-white hover:bg-white/10 rounded-xl h-9 w-9"
                   suppressHydrationWarning
                 >
                   <Menu className="h-5 w-5" />
@@ -118,7 +160,7 @@ export function AppNavbar({
               </SheetTrigger>
               <SheetContent
                 side="left"
-                className="w-[300px] sm:w-[360px] flex flex-col pt-8 bg-slate-950 border-r border-white/5 z-[100]"
+                className="flex flex-col bg-slate-950 pt-8 border-r border-white/5 z-[100]"
               >
                 <SheetHeader className="px-1 mb-6 text-left border-b border-white/5 pb-6">
                   <SheetTitle className="flex items-center gap-3">
@@ -143,7 +185,7 @@ export function AppNavbar({
                         Panel Firmy
                       </div>
                       <AppNavLink href="/app/company/packages" icon={Search} onClick={() => setIsOpen(false)} pathname={pathname}>
-                        Katalog Uslug
+                        Katalog Usług
                       </AppNavLink>
                       <AppNavLink href="/app/company/offers" icon={LayoutGrid} onClick={() => setIsOpen(false)} pathname={pathname}>
                         Moje ogloszenia
@@ -152,14 +194,14 @@ export function AppNavbar({
                         Dokumenty
                       </AppNavLink>
                       <AppNavLink href="/app/company/orders" icon={Briefcase} onClick={() => setIsOpen(false)} pathname={pathname}>
-                        Zamowienia uslug
+                        Zamowienia usług
                       </AppNavLink>
                       <AppNavLink href="/app/chat" icon={MessageSquare} onClick={() => setIsOpen(false)} pathname={pathname}>
                         Wiadomosci
                         {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
                       </AppNavLink>
                       <AppNavLink href="/app/company/jobs/new" icon={PlusCircle} onClick={() => setIsOpen(false)} pathname={pathname}>
-                        Dodaj oferte
+                        Dodaj ofertę
                       </AppNavLink>
                     </>
                   )}
@@ -176,7 +218,7 @@ export function AppNavbar({
                         Aplikacje
                       </AppNavLink>
                       <AppNavLink href="/app/services/my" icon={Briefcase} onClick={() => setIsOpen(false)} pathname={pathname}>
-                        Uslugi
+                        Usługi
                       </AppNavLink>
                       <AppNavLink href="/app/finances" icon={CircleDollarSign} onClick={() => setIsOpen(false)} pathname={pathname}>
                         Finanse
@@ -209,7 +251,7 @@ export function AppNavbar({
                           <User className="h-4 w-4 text-white" />
                         </div>
                         <div className="flex-1 overflow-hidden">
-                          <div className="text-sm font-bold text-white truncate">Twoj Profil</div>
+                          <div className="text-sm font-bold text-white truncate">Twój Profil</div>
                           <div className="text-xs text-white/40 truncate">{user.email}</div>
                         </div>
                       </Link>
@@ -226,7 +268,7 @@ export function AppNavbar({
                       onClick={() => setIsOpen(false)}
                       className="block w-full text-center rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-5 py-3.5 font-bold text-sm shadow-xl shadow-indigo-500/25"
                     >
-                      Dolacz teraz
+                      Dołącz teraz
                     </Link>
                   )}
                 </div>
@@ -239,9 +281,11 @@ export function AppNavbar({
             >
               <div className="relative">
                 <div className="absolute inset-0 bg-indigo-500/30 blur-lg rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <img
+                <Image
                   src="/logo.png"
                   alt="Logo"
+                  width={128}
+                  height={32}
                   className="h-7 w-auto relative z-10 transition-transform duration-300 group-hover:scale-110"
                 />
               </div>
@@ -251,11 +295,11 @@ export function AppNavbar({
             </Link>
           </div>
 
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 px-3 md:flex">
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 px-3 lg:flex">
             {role === "company" && (
               <>
                 <AppNavLink href="/app/company/packages" icon={Search} pathname={pathname}>
-                  Katalog Uslug
+                  Katalog Usług
                 </AppNavLink>
                 <AppNavLink href="/app/company/offers" icon={LayoutGrid} pathname={pathname}>
                   Moje ogloszenia
@@ -264,7 +308,7 @@ export function AppNavbar({
                   Dokumenty
                 </AppNavLink>
                 <AppNavLink href="/app/company/orders" icon={Briefcase} pathname={pathname}>
-                  Zamowienia uslug
+                  Zamowienia usług
                 </AppNavLink>
                 <AppNavLink href="/app/chat" icon={MessageSquare} pathname={pathname}>
                   Wiadomosci
@@ -280,7 +324,7 @@ export function AppNavbar({
                   )}
                 >
                   <PlusCircle className="h-4 w-4" />
-                  <span>Dodaj oferte</span>
+                  <span>Dodaj ofertę</span>
                 </Link>
               </>
             )}
@@ -294,7 +338,7 @@ export function AppNavbar({
                   Aplikacje
                 </AppNavLink>
                 <AppNavLink href="/app/services/my" icon={Briefcase} pathname={pathname}>
-                  Uslugi
+                  Usługi
                 </AppNavLink>
                 <AppNavLink href="/app/finances" icon={CircleDollarSign} pathname={pathname}>
                   Finanse
@@ -311,7 +355,7 @@ export function AppNavbar({
             )}
           </nav>
 
-          <div className="flex items-center gap-2 pl-3 ml-2 border-l border-white/5">
+          <div className="ml-auto flex items-center gap-1 border-l border-white/5 pl-2 sm:gap-2 sm:pl-3 lg:ml-2">
             {user && (
               <div className="relative [&_button]:text-white/60 [&_button]:hover:text-white [&_button]:hover:bg-white/10 [&_button]:rounded-xl">
                 <NotificationsBell unread={unread} />
@@ -347,12 +391,44 @@ export function AppNavbar({
                 href="/auth"
                 className="rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white px-5 py-2 hover:shadow-lg hover:shadow-indigo-500/30 hover:-translate-y-0.5 transition-all active:scale-95 font-black text-xs uppercase tracking-widest shadow-md shadow-indigo-500/20"
               >
-                Dolacz
+                Dołącz
               </Link>
             )}
           </div>
         </div>
       </div>
     </header>
+
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200/70 bg-white/90 px-3 pb-[calc(env(safe-area-inset-bottom)+0.55rem)] pt-2 shadow-[0_-14px_40px_-24px_rgba(15,23,42,0.55)] backdrop-blur-2xl lg:hidden">
+      <div className="mx-auto grid max-w-md grid-cols-4 gap-1 rounded-[1.35rem] border border-slate-200/70 bg-white px-1.5 py-1.5 shadow-lg shadow-slate-200/60">
+        {mobileNavItems.map(({ href, label, icon: Icon, chat }) => {
+          const active = isPathActive(pathname, href);
+
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[10px] font-black transition-all",
+                active
+                  ? "bg-slate-950 text-white shadow-md shadow-slate-400/20"
+                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+              )}
+            >
+              <span className="relative">
+                <Icon className={cn("h-4 w-4", active ? "text-white" : "text-slate-500")} />
+                {chat && user && unreadChat > 0 ? (
+                  <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-red-500 px-1 text-center text-[9px] leading-4 text-white">
+                    {unreadChat > 9 ? "9+" : unreadChat}
+                  </span>
+                ) : null}
+              </span>
+              <span className="max-w-full truncate">{label}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+    </>
   );
 }

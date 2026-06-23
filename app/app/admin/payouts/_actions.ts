@@ -58,7 +58,7 @@ function amountNetMinorFromPayout(payout: PayoutRow): number {
 
   const amountNet = Number(payout.amount_net);
   if (!Number.isFinite(amountNet) || amountNet <= 0) {
-    throw new Error("Nieprawidlowa kwota wyplaty.");
+    throw new Error("Nieprawidłowa kwota wypłaty.");
   }
 
   return Math.round(amountNet * 100);
@@ -77,7 +77,7 @@ export async function markPayoutProcessing(payoutId: string) {
     .eq("id", payoutId)
     .eq("status", "pending");
 
-  if (error) throw new Error("Nie udalo sie zmienic statusu: " + error.message);
+  if (error) throw new Error("Nie udało sie zmienić statusu: " + error.message);
 
   revalidatePath("/app/admin/payouts");
 }
@@ -93,11 +93,11 @@ export async function markPayoutPaid(payoutId: string) {
     .maybeSingle();
 
   if (payoutError) {
-    throw new Error("Nie udalo sie pobrac wyplaty: " + payoutError.message);
+    throw new Error("Nie udało sie pobrać wypłaty: " + payoutError.message);
   }
 
   if (!payout) {
-    throw new Error("Nie znaleziono wyplaty");
+    throw new Error("Nie znaleziono wypłaty");
   }
 
   const typedPayout = payout as unknown as PayoutRow;
@@ -119,11 +119,11 @@ export async function markPayoutPaid(payoutId: string) {
     }
 
     if (transferResult.status === "not_found") {
-      throw new Error("Nie znaleziono wyplaty");
+      throw new Error("Nie znaleziono wypłaty");
     }
 
     if (transferResult.status === "not_payable_status") {
-      throw new Error("Tej wyplaty nie mozna juz przetworzyc w aktualnym statusie.");
+      throw new Error("Tej wypłaty nie można już przetworzyc w aktualnym statusie.");
     }
   }
 
@@ -143,7 +143,7 @@ export async function markPayoutPaid(payoutId: string) {
 
   if (rpcError) {
     console.error("RPC Error processing payout:", rpcError);
-    throw new Error("Nie udalo sie zatwierdzic wyplaty: " + rpcError.message);
+    throw new Error("Nie udało sie zatwierdzic wypłaty: " + rpcError.message);
   }
 
   revalidatePath("/app/admin/payouts");

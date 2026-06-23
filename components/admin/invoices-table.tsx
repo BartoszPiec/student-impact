@@ -185,7 +185,7 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceRow[] }) {
                     <p className="font-bold text-slate-500">
                       {deferredSearch || statusFilter !== "all"
                         ? "Brak faktur pasujacych do wybranych filtrow."
-                        : "Brak faktur do wyswietlenia."}
+                        : "Brak faktur do wyświetlenia."}
                     </p>
                   </div>
                 </td>

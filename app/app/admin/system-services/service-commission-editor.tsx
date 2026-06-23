@@ -30,11 +30,11 @@ export function ServiceCommissionEditor({
       );
 
       if (result?.error) {
-        toast.error(`Blad zapisu prowizji: ${result.error}`);
+        toast.error(`Błąd zapisu prowizji: ${result.error}`);
         return;
       }
 
-      toast.success("Prowizja uslugi zostala zaktualizowana.");
+      toast.success("Prowizja usługi została zaktualizowana.");
     });
   };
 

@@ -23,9 +23,9 @@ export default async function NewSystemServicePage() {
       </Button>
 
       <div className="mb-6 space-y-1">
-        <h1 className="text-3xl font-black text-white">Nowa Usluga Systemowa</h1>
+        <h1 className="text-3xl font-black text-white">Nowa Usługa Systemowa</h1>
         <p className="text-base text-slate-300">
-          Zdefiniuj parametry, stawke i materialy dla nowej uslugi gwarantowanej.
+          Zdefiniuj parametry, stawke i materialy dla nowej usługi gwarantowanej.
         </p>
       </div>
 

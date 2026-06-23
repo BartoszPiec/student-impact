@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { createClient } from "@/lib/supabase/client";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
 import { Label } from "@/components/ui/label";
 import { Loader2, File, Link2, Plus, UploadCloud, Send, X } from "lucide-react";
 
@@ -88,16 +88,10 @@ export function UploadForm({
     "image/png",
     "image/gif",
     "image/webp",
-    "image/svg+xml",
     "application/zip",
     "application/x-zip-compressed",
     "application/x-rar-compressed",
     "application/x-7z-compressed",
-    "application/json",
-    "text/html",
-    "text/css",
-    "application/javascript",
-    "text/javascript",
   ]);
   const MAX_FILE_SIZE_MB = 50;
   const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -120,27 +114,23 @@ export function UploadForm({
     }
 
     setIsUploading(true);
-    const supabase = createClient();
     const newFiles: FileAttachment[] = [];
 
     try {
       for (let i = 0; i < e.target.files.length; i++) {
         const file = e.target.files[i];
-        const fileExt = file.name.split(".").pop();
-        const fileName = `${applicationId}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-        const { error } = await supabase.storage
-          .from("deliverables")
-          .upload(fileName, file);
-
-        if (error) throw error;
+        const uploaded = await uploadPrivateFile({
+          file,
+          purpose: "deliverable",
+          sourceId: applicationId,
+        });
 
         newFiles.push({
           kind: "file",
-          name: file.name,
-          bucket: "deliverables",
-          path: fileName,
-          size: file.size,
+          name: uploaded.name,
+          bucket: uploaded.bucket,
+          path: uploaded.path,
+          size: uploaded.size,
         });
       }
       setAttachments((prev) => [...prev, ...newFiles]);

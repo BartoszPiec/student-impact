@@ -61,4 +61,7 @@ QA_LIVE_COLLAB.md
 .claude/settings.local.json
 .codex-temp/
 codex-dev.*
+.next-dev.log
 supabase/.temp/
+
+.vercel

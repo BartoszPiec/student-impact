@@ -14,6 +14,48 @@ export const dynamic = "force-dynamic";
 
 type Params = Promise<{ id: string }>;
 
+type AdminOffer = {
+  id: string;
+  tytul: string | null;
+  opis: string | null;
+  typ: string | null;
+  stawka: number | null;
+  salary_range_min: number | null;
+  salary_range_max: number | null;
+  location: string | null;
+  is_remote: boolean | null;
+  contract_type: string | null;
+  status: string | null;
+  commission_rate: number | null;
+  is_platform_service: boolean | null;
+  created_at: string;
+  company_id: string | null;
+  company: { nazwa: string | null } | null;
+};
+
+type AdminApplication = {
+  id: string;
+  status: string | null;
+  student_id: string;
+  created_at: string;
+  proposed_stawka: number | null;
+  agreed_stawka: number | null;
+  counter_stawka: number | null;
+};
+
+type AdminContract = {
+  id: string;
+  application_id: string;
+  status: string | null;
+  terms_status: string | null;
+  total_amount: number | string | null;
+  currency: string | null;
+  commission_rate: number | null;
+  created_at: string;
+  student_id: string | null;
+  student: { public_name: string | null } | null;
+};
+
 function formatMoney(value: number | string | null | undefined, currency = "PLN") {
   return Number(value || 0).toLocaleString("pl-PL", {
     style: "currency",
@@ -116,8 +158,8 @@ export default async function AdminOfferDetailPage({ params }: { params: Params 
     notFound();
   }
 
-  const offer = offerResult.data as any;
-  const applications = (applicationsResult.data || []) as any[];
+  const offer = offerResult.data as unknown as AdminOffer;
+  const applications = (applicationsResult.data || []) as unknown as AdminApplication[];
   const studentIds = [...new Set(applications.map((application) => application.student_id).filter(Boolean))];
   const applicationIds = applications.map((application) => application.id);
 
@@ -148,7 +190,7 @@ export default async function AdminOfferDetailPage({ params }: { params: Params 
       : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const contracts = (contractsResult.data || []) as any[];
+  const contracts = (contractsResult.data || []) as unknown as AdminContract[];
   const contractIds = contracts.map((contract) => contract.id);
 
   const payoutsResult =
@@ -402,7 +444,7 @@ export default async function AdminOfferDetailPage({ params }: { params: Params 
 
         <div className="space-y-3">
           {contracts.length === 0 ? (
-            <div className="text-sm text-slate-500">Brak kontraktow powiazanych z ta oferta.</div>
+            <div className="text-sm text-slate-500">Brak kontraktów powiazanych z ta oferta.</div>
           ) : (
             contracts.map((contract) => {
               const payoutStats = payoutsByContractId.get(contract.id);

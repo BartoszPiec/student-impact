@@ -15,7 +15,7 @@ export default async function AdminAnalyticsPage() {
         <div className="rounded-[2.5rem] border border-red-500/20 bg-red-500/5 p-12 text-center shadow-xl shadow-black/20">
           <h2 className="mb-4 text-2xl font-black text-red-400">Analytics Error</h2>
           <p className="mb-8 italic text-slate-300">
-            Nie udalo sie pobrac danych analitycznych. Upewnij sie, ze migracja RPC zostala zaaplikowana.
+            Nie udało sie pobrać danych analitycznych. Upewnij sie, ze migracja RPC została zaaplikowana.
           </p>
           <pre className="mx-auto max-w-2xl overflow-auto rounded-2xl border border-white/10 bg-slate-950 p-6 text-left font-mono text-xs text-emerald-400">
             {JSON.stringify(error, null, 2)}

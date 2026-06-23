@@ -234,7 +234,7 @@ export default function JobsTab({ offers, serviceOrders, statsMap }: JobsTabProp
       <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-2xl font-black tracking-tight text-slate-950">Moje ogloszenia i uslugi</h2>
+            <h2 className="text-2xl font-black tracking-tight text-slate-950">Moje ogloszenia i usługi</h2>
             <p className="mt-1 text-sm font-medium text-slate-500">
               {actionItems.length > 0
                 ? `${actionItems.length} elementow czeka teraz na decyzje firmy.`

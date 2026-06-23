@@ -6,6 +6,7 @@ import { PageContainer } from "@/components/ui/page-container";
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import OffersTabs from "./offers-tabs";
 import { CheckCircle2, FileText, Plus } from "lucide-react";
+import { getRequestContext } from "@/lib/auth/request-context";
 
 export const dynamic = "force-dynamic";
 
@@ -93,35 +94,25 @@ export default async function CompanyOffersPage({
     : resolvedSearchParams.created;
   const offerCreated = createdParam === "1";
 
-  const { data: userData } = await supabase.auth.getUser();
-  const user = userData.user;
+  const { user, role } = await getRequestContext();
   if (!user) redirect("/auth");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single();
+  if (role !== "company") redirect("/app");
 
-  if (profile?.role !== "company") redirect("/app");
-
-  const { data: allOffers, error } = await supabase
-    .from("offers")
-    .select("id, tytul, typ, stawka, status, created_at, location, salary_range_min, salary_range_max, is_remote, contract_type, is_platform_service")
-    .eq("company_id", user.id)
-    .order("created_at", { ascending: false });
-
-  const { data: serviceOrders } = await supabase
-    .from("service_orders")
-    .select(`
-        id,
-        created_at,
-        status,
-        amount,
-        package:service_packages(*)
-    `)
-    .eq("company_id", user.id)
-    .order("created_at", { ascending: false });
+  const [offersResult, serviceOrdersResult] = await Promise.all([
+    supabase
+      .from("offers")
+      .select("id, tytul, typ, stawka, status, created_at, location, salary_range_min, salary_range_max, is_remote, contract_type, is_platform_service")
+      .eq("company_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("service_orders")
+      .select("id, created_at, status, amount, package:service_packages(title)")
+      .eq("company_id", user.id)
+      .order("created_at", { ascending: false }),
+  ]);
+  const { data: allOffers, error } = offersResult;
+  const serviceOrders = serviceOrdersResult.data;
 
   const offers = (allOffers ?? []) as OfferRow[];
   const jobs = offers.filter((offer) => offer.is_platform_service !== true);
@@ -291,7 +282,7 @@ export default async function CompanyOffersPage({
 
         {error ? (
           <div className="mb-8 rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
-            Nie udalo sie pobrac wszystkich ofert. Odswiez strone albo wroc za chwile.
+            Nie udało sie pobrać wszystkich ofert. Odśwież stronę albo wróć za chwile.
           </div>
         ) : null}
 

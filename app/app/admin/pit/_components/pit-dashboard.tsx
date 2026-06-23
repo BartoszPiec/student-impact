@@ -12,7 +12,6 @@ import {
   Clock,
   Receipt,
   Search,
-  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { markPitBatchPaid, markPitPaid } from "../_actions";
@@ -151,8 +150,8 @@ export default function PitDashboard({ withholdings }: Props) {
         });
         toast.success("Oznaczono jako oplacone.");
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Nieznany blad";
-        toast.error(`Blad: ${message}`);
+        const message = error instanceof Error ? error.message : "Nieznany błąd";
+        toast.error(`Błąd: ${message}`);
       }
     });
   };
@@ -167,8 +166,8 @@ export default function PitDashboard({ withholdings }: Props) {
         setSelectedIds(new Set());
         toast.success(`Oznaczono ${count} pozycji jako oplacone.`);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Nieznany blad";
-        toast.error(`Blad: ${message}`);
+        const message = error instanceof Error ? error.message : "Nieznany błąd";
+        toast.error(`Błąd: ${message}`);
       }
     });
   };
@@ -190,8 +189,8 @@ export default function PitDashboard({ withholdings }: Props) {
               Zaliczki PIT
             </h1>
             <p className="max-w-2xl font-medium leading-relaxed text-slate-400">
-              Operacyjny panel zaliczek podatkowych. Pozwala wyszukiwac studentow,
-              grupowac rekordy po okresie i zamykac platnosci do urzedu bez nowych migracji.
+              Operacyjny panel zaliczek podatkowych. Pozwala wyszukiwać studentow,
+              grupować rekordy po okresie i zamykać płatności do urzedu bez nowych migracji.
             </p>
           </div>
         </div>
@@ -300,7 +299,7 @@ export default function PitDashboard({ withholdings }: Props) {
               <p className="font-bold text-slate-500">
                 {deferredSearch
                   ? "Brak zaliczek PIT pasujacych do wyszukiwania."
-                  : "Brak zaliczek PIT do wyswietlenia."}
+                  : "Brak zaliczek PIT do wyświetlenia."}
               </p>
             </div>
           </div>

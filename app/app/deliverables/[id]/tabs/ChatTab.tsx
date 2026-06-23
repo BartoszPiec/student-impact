@@ -26,7 +26,7 @@ export async function ChatTab({ conversationId }: { conversationId?: string }) {
 
     const { data: msgs } = await supabase
         .from("messages")
-        .select("id, sender_id, content, created_at, attachment_url, attachment_type")
+        .select("id, sender_id, content, created_at, read_at, attachment_url, attachment_type, event, payload")
         .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true });
 

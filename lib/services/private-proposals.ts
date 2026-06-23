@@ -12,7 +12,7 @@ export type EligibleCompany = {
   website?: string | null;
 };
 
-export async function listEligibleCompaniesForStudent(supabase: any, studentId: string): Promise<EligibleCompany[]> {
+export async function listEligibleCompaniesForStudent(supabase: SupabaseClient, studentId: string): Promise<EligibleCompany[]> {
   const { data: contracts, error: contractsError } = await supabase
     .from("contracts")
     .select("company_id")
@@ -49,7 +49,7 @@ export async function listEligibleCompaniesForStudent(supabase: any, studentId: 
 }
 
 export async function assertStudentCanPrivatelyProposeToCompany(
-  supabase: any,
+  supabase: SupabaseClient,
   studentId: string,
   companyId: string,
 ) {
@@ -66,3 +66,4 @@ export async function assertStudentCanPrivatelyProposeToCompany(
     throw new Error("Możesz wysłać prywatną propozycję tylko do firmy, z którą już współpracowałeś.");
   }
 }
+import type { SupabaseClient } from "@supabase/supabase-js";

@@ -1,16 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { pl } from "date-fns/locale";
-import { Bell, MessageSquare, Briefcase, FileText, Inbox, Sparkles, Filter, CircleDollarSign, CheckCircle2, XCircle, Star, Ban, AlertTriangle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Bell, MessageSquare, Briefcase, FileText, Sparkles, Filter, CircleDollarSign, CheckCircle2, XCircle, Star, Ban, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getNotificationTitle } from "./utils";
+import { markNotificationRead } from "./_actions";
+
+type NotificationPayload = {
+    redirect_path?: string;
+    conversation_id?: string;
+    application_id?: string;
+    contract_id?: string;
+    snippet?: string;
+    [key: string]: unknown;
+};
+
+type NotificationItem = {
+    id: string;
+    typ: string;
+    read_at: string | null;
+    created_at: string;
+    content?: string | null;
+    payload?: NotificationPayload | null;
+};
 
 interface NotificationListProps {
-    notifications: any[];
+    notifications: NotificationItem[];
 }
 
 function NotificationIcon({ type }: { type: string }) {
@@ -116,7 +135,13 @@ function formatDateRelative(date: Date) {
 }
 
 export default function NotificationList({ notifications }: NotificationListProps) {
+    const router = useRouter();
     const [filter, setFilter] = useState<"all" | "unread" | "messages" | "orders">("all");
+    const [items, setItems] = useState(notifications);
+
+    useEffect(() => {
+        setItems(notifications);
+    }, [notifications]);
 
     const MESSAGE_TYPES = ["message_new", "MESSAGE", "new_message"];
     const ORDER_TYPES = [
@@ -131,16 +156,42 @@ export default function NotificationList({ notifications }: NotificationListProp
         "review_received", "review_submitted", "cooperation_cancelled", "JOB_COMPLETED", "job_approved",
     ];
 
-    const filteredList = notifications.filter((n) => {
+    const filteredList = items.filter((n) => {
         if (filter === "unread") return !n.read_at;
         if (filter === "messages") return MESSAGE_TYPES.includes(n.typ);
         if (filter === "orders") return ORDER_TYPES.includes(n.typ);
         return true;
     });
 
-    const unreadCount = notifications.filter(n => !n.read_at).length;
-    const messageCount = notifications.filter(n => MESSAGE_TYPES.includes(n.typ)).length;
-    const ordersCount = notifications.filter(n => ORDER_TYPES.includes(n.typ)).length;
+    const unreadCount = items.filter(n => !n.read_at).length;
+    const messageCount = items.filter(n => MESSAGE_TYPES.includes(n.typ)).length;
+    const ordersCount = items.filter(n => ORDER_TYPES.includes(n.typ)).length;
+
+    const handleNotificationClick = (
+        event: MouseEvent<HTMLAnchorElement>,
+        notification: NotificationItem,
+        href: string,
+    ) => {
+        if (notification.read_at) {
+            return;
+        }
+
+        event.preventDefault();
+        const readAt = new Date().toISOString();
+        setItems((previous) =>
+            previous.map((item) =>
+                item.id === notification.id ? { ...item, read_at: readAt } : item,
+            ),
+        );
+
+        markNotificationRead(notification.id)
+            .catch((error) => {
+                console.error("Nie udało się oznaczyć powiadomienia jako przeczytanego:", error);
+            })
+            .finally(() => {
+                router.push(href);
+            });
+    };
 
     return (
         <div className="space-y-6">
@@ -155,7 +206,7 @@ export default function NotificationList({ notifications }: NotificationListProp
                             : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                     )}
                 >
-                    Wszystkie <span className="ml-1 opacity-60 text-xs">{notifications.length}</span>
+                    Wszystkie <span className="ml-1 opacity-60 text-xs">{items.length}</span>
                 </button>
                 <button
                     onClick={() => setFilter("unread")}
@@ -228,6 +279,7 @@ export default function NotificationList({ notifications }: NotificationListProp
                             <Link
                                 key={notification.id}
                                 href={href}
+                                onClick={(event) => handleNotificationClick(event, notification, href)}
                                 className={`group block p-5 rounded-[1.5rem] bg-white border transition-all duration-300 overflow-hidden relative ${!isRead
                                         ? "border-indigo-100 shadow-lg shadow-indigo-100/20 ring-1 ring-indigo-50 z-10"
                                         : "border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 hover:z-10"

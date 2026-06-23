@@ -1,29 +1,6 @@
 import { withSentryConfig } from '@sentry/nextjs';
 import type { NextConfig } from "next";
 
-function getSupabaseOrigin() {
-  const fallback = "https://klxsxtumrkxfdrkessrg.supabase.co";
-  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  if (!rawUrl) {
-    return fallback;
-  }
-
-  try {
-    return new URL(rawUrl).origin;
-  } catch {
-    return fallback;
-  }
-}
-
-function getSupabaseHost() {
-  try {
-    return new URL(getSupabaseOrigin()).host;
-  } catch {
-    return "klxsxtumrkxfdrkessrg.supabase.co";
-  }
-}
-
 const nextConfig: NextConfig = {
   /* config options here */
   images: {
@@ -38,26 +15,7 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     const isDev = process.env.NODE_ENV === "development";
-    const supabaseOrigin = getSupabaseOrigin();
-    const supabaseHost = getSupabaseHost();
-
-    const csp = [
-      "default-src 'self'",
-      `script-src 'self' ${isDev ? "'unsafe-eval' 'unsafe-inline'" : "'unsafe-inline'"} https://js.stripe.com https://browser.sentry-cdn.com https://challenges.cloudflare.com`,
-      "style-src 'self' 'unsafe-inline'",
-      `img-src 'self' data: blob: ${supabaseOrigin} https://*.stripe.com`,
-      `connect-src 'self' ${supabaseOrigin} wss://${supabaseHost} https://api.stripe.com https://*.ingest.sentry.io https://challenges.cloudflare.com`,
-      "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
-      "font-src 'self' data:",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      "frame-ancestors 'none'",
-      ...(!isDev ? ["upgrade-insecure-requests"] : []),
-    ].join("; ");
-
     const securityHeaders = [
-      { key: "Content-Security-Policy", value: csp },
       { key: "X-Frame-Options", value: "DENY" },
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -76,7 +34,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+const sentryOptions = {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 
@@ -91,7 +49,7 @@ export default withSentryConfig(nextConfig, {
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
 
   // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
+  widenClientFileUpload: Boolean(process.env.CI || process.env.VERCEL),
 
   // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
   // This can increase your server load as well as your hosting bill.
@@ -112,4 +70,8 @@ export default withSentryConfig(nextConfig, {
       removeDebugLogging: true,
     },
   },
-});
+};
+
+export default process.env.CI || process.env.VERCEL
+  ? withSentryConfig(nextConfig, sentryOptions)
+  : nextConfig;

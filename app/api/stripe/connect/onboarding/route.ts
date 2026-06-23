@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveServerAppUrl } from "@/lib/app-url";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
 import { isPayoutAccountReady } from "@/lib/stripe/connect-readiness";
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: "Musisz byc zalogowany." }, { status: 401 });
+      return NextResponse.json({ error: "Musisz być zalogowany." }, { status: 401 });
     }
 
     const ip = getRequestIp(req);
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
     );
     if (!limitResult.success) {
       return NextResponse.json(
-        { error: "Zbyt wiele prob. Sprobuj ponownie za chwile." },
+        { error: "Zbyt wiele prób. Spróbuj ponownie za chwilę." },
         { status: 429 },
       );
     }
@@ -45,10 +46,11 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (profile?.role !== "student") {
-      return NextResponse.json({ error: "Konto Stripe do wyplat jest dostepne tylko dla studentow." }, { status: 403 });
+      return NextResponse.json({ error: "Konto Stripe do wypłat jest dostępne tylko dla studentów." }, { status: 403 });
     }
 
-    const { data: studentProfile } = await supabase
+    const admin = createAdminClient();
+    const { data: studentProfile } = await admin
       .from("student_profiles")
       .select("stripe_account_id")
       .eq("user_id", user.id)
@@ -74,16 +76,20 @@ export async function POST(req: NextRequest) {
 
       stripeAccountId = account.id;
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await admin
         .from("student_profiles")
-        .upsert({
-          user_id: user.id,
-          stripe_account_id: stripeAccountId,
-        });
+        .upsert(
+          {
+            user_id: user.id,
+            stripe_account_id: stripeAccountId,
+            stripe_onboarding_completed_at: null,
+          },
+          { onConflict: "user_id" },
+        );
 
       if (updateError) {
         return NextResponse.json(
-          { error: "Nie udalo sie zapisac konta Stripe studenta." },
+          { error: "Nie udało się zapisać konta Stripe studenta." },
           { status: 500 },
         );
       }
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
       const account = await stripe.accounts.retrieve(stripeAccountId);
       accountReady = isPayoutAccountReady(account);
 
-      await supabase
+      await admin
         .from("student_profiles")
         .update({
           stripe_onboarding_completed_at: accountReady ? new Date().toISOString() : null,
@@ -122,7 +128,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[stripe-connect-onboarding]", error);
     return NextResponse.json(
-      { error: "Nie udalo sie przygotowac konta wyplat Stripe. Sprobuj ponownie za chwile." },
+      { error: "Nie udało się przygotować konta wypłat Stripe. Spróbuj ponownie za chwilę." },
       { status: 500 },
     );
   }

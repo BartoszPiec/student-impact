@@ -1,16 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Coins,
     Clock,
     Sparkles,
-    User,
-    Briefcase,
     Star,
     ArrowLeft,
-    CheckCircle2,
     ShieldCheck,
     Clapperboard,
     Palette,
@@ -21,14 +17,11 @@ import {
     Languages,
     Scale,
     TrendingUp,
-    Cpu,
-    Zap
+    Cpu
 } from "lucide-react";
 import OrderForm from "./order-form";
-import { createOrder } from "./_actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 
 // Configuration for category-specific styles
 const categoryConfig: Record<string, { icon: React.ReactNode; gradient: string; lightBg: string; darkText: string }> = {

@@ -140,7 +140,8 @@ export function PaymentModal({
             } else {
                 throw new Error('Brak URL do płatności');
             }
-        } catch (error: any) {
+        } catch (caught: unknown) {
+            const error = caught instanceof Error ? caught : new Error("Wystąpił nieznany błąd.");
             console.error('Stripe payment error:', error);
             setErrorMessage(error.message || 'Wystąpił błąd podczas przetwarzania płatności');
             setStep('error');
@@ -160,7 +161,8 @@ export function PaymentModal({
                 setTimeout(() => {
                     onClose();
                 }, 2000);
-            } catch (error: any) {
+            } catch (caught: unknown) {
+                const error = caught instanceof Error ? caught : new Error("Wystąpił nieznany błąd.");
                 console.error(error);
                 setErrorMessage(error.message || 'Błąd płatności');
                 setStep('error');

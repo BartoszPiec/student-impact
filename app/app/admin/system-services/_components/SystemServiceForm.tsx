@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ShieldAlert, Zap, Loader2, UploadCloud, CheckCircle2, DollarSign, Plus, Trash2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -182,23 +182,11 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
 
     try {
       setIsUploading(true);
-      const supabase = createClient();
-      const filename = `params/${Date.now()}-${file.name.replace(/\s/g, "_")}`;
-
-      const { data, error: uploadError } = await supabase.storage
-        .from("offer_attachments")
-        .upload(filename, file);
-
-      if (uploadError) throw uploadError;
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("offer_attachments").getPublicUrl(data.path);
-
-      setUploadedFileUrl(publicUrl);
+      const uploaded = await uploadPrivateFile({ file, purpose: "system_offer_attachment" });
+      setUploadedFileUrl(uploaded.ref);
     } catch (uploadError) {
-      const message = uploadError instanceof Error ? uploadError.message : "Nieznany blad";
-      setError(`Blad przesylania pliku: ${message}`);
+      const message = uploadError instanceof Error ? uploadError.message : "Nieznany błąd";
+      setError(`Błąd przesyłania pliku: ${message}`);
     } finally {
       setIsUploading(false);
     }
@@ -282,7 +270,7 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
         router.push("/app/admin/system-services");
       }
     } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : "Nieznany blad";
+      const message = submitError instanceof Error ? submitError.message : "Nieznany błąd";
       setError(message);
       setIsLoading(false);
     }
@@ -298,7 +286,7 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
       )}
 
       <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3">
-        <p className="text-sm font-semibold text-indigo-900">Panel edycji uslugi systemowej</p>
+        <p className="text-sm font-semibold text-indigo-900">Panel edycji usługi systemowej</p>
         <p className="mt-1 text-sm text-indigo-700">
           W tym miejscu ustawiasz publiczny opis, cene (lub warianty) i materialy tylko dla wykonawcy.
         </p>
@@ -314,7 +302,7 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
             </div>
             <CardContent className="space-y-5 p-6">
               <div className="space-y-2">
-                <Label className="text-sm font-semibold text-slate-700">Tytul uslugi</Label>
+                <Label className="text-sm font-semibold text-slate-700">Tytul usługi</Label>
                 <Input
                   className={cn(inputClassName, "h-12 text-base font-semibold")}
                   placeholder="np. Miesieczny pakiet social media"
@@ -354,7 +342,7 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
                 <Label className="text-sm font-semibold text-slate-700">Opis publiczny</Label>
                 <Textarea
                   className={cn(textareaClassName, "min-h-[320px] p-4 text-sm leading-7")}
-                  placeholder="Opisz na czym polega usluga i co firma dostaje."
+                  placeholder="Opisz na czym polega usługa i co firma dostaje."
                   required
                   value={formData.opis}
                   onChange={(event) => handleChange("opis", event.target.value)}
@@ -394,7 +382,7 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
               ) : (
                 <>
                   <p className="text-sm text-slate-600">
-                    Ceny glowne beda liczone automatycznie na podstawie wariantow.
+                    Ceny glowne będą liczone automatycznie na podstawie wariantów.
                   </p>
 
                   <div className="space-y-4">
@@ -479,7 +467,7 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
                       <Plus className="mr-2 h-4 w-4" /> Dodaj wariant
                     </Button>
                     <p className="text-sm font-semibold text-slate-700">
-                      Zakres ceny: {variantSummary?.label ?? "uzupelnij ceny wariantow"}
+                      Zakres ceny: {variantSummary?.label ?? "uzupelnij ceny wariantów"}
                     </p>
                   </div>
                 </>
@@ -557,10 +545,10 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <div className="text-sm font-medium text-slate-500">Zakres z wariantow</div>
+                  <div className="text-sm font-medium text-slate-500">Zakres z wariantów</div>
                   <div className="text-3xl font-black text-slate-900">{variantSummary?.label ?? "Brak cen"}</div>
                   <div className="text-xs text-slate-500">
-                    Liczba wariantow: <span className="font-semibold text-slate-700">{variants.length}</span>
+                    Liczba wariantów: <span className="font-semibold text-slate-700">{variants.length}</span>
                   </div>
                 </div>
               )}
@@ -576,7 +564,7 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
                   ) : offerId ? (
                     "Zapisz zmiany"
                   ) : (
-                    "Publikuj usluge"
+                    "Publikuj usługę"
                   )}
                 </Button>
               </div>

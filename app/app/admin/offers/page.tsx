@@ -1,10 +1,17 @@
 import { BriefcaseBusiness } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { AdminOffersTable } from "./admin-offers-table";
+import { ADMIN_PAGE_SIZE, getPageNumber, ServerPagination } from "@/components/admin/server-pagination";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminOffersPage() {
+export default async function AdminOffersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ page?: string | string[] }>;
+}) {
+  const currentPage = getPageNumber((await searchParams)?.page);
+  const rangeStart = (currentPage - 1) * ADMIN_PAGE_SIZE;
   const supabase = await createClient();
 
   const { data: offers } = await supabase
@@ -19,7 +26,12 @@ export default async function AdminOffersPage() {
       company_id,
       company_profiles (nazwa)
     `)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(rangeStart, rangeStart + ADMIN_PAGE_SIZE);
+
+  const rows = offers ?? [];
+  const hasNextPage = rows.length > ADMIN_PAGE_SIZE;
+  const pagedOffers = rows.slice(0, ADMIN_PAGE_SIZE);
 
   return (
     <div className="space-y-8 pb-12">
@@ -45,7 +57,8 @@ export default async function AdminOffersPage() {
         </div>
       </div>
 
-      <AdminOffersTable offers={offers || []} />
+      <AdminOffersTable offers={pagedOffers} />
+      <ServerPagination pathname="/app/admin/offers" currentPage={currentPage} hasNextPage={hasNextPage} />
     </div>
   );
 }

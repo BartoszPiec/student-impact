@@ -23,7 +23,7 @@ export default function CompanyReviewForm({
         onSubmit={async (review) => {
           await submitCompanyReview({ applicationId, studentId, review });
         }}
-        submitLabel="Zapisz ocene"
+        submitLabel="Zapisz ocenę"
       />
     </div>
   );

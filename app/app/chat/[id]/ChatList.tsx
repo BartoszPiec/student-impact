@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { markConversationAsUnread, markMessagesAsRead, toggleMessageFlag } from "../_actions";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getOlderMessages, markConversationAsUnread, markMessagesAsRead, toggleMessageFlag } from "../_actions";
 import { useRouter } from "next/navigation";
 import { normalizeMessage } from "@/app/lib/chat/chatEventUtils";
 import { TextBubble } from "../_components/TextBubble";
@@ -53,12 +53,14 @@ export function ChatList({
     conversationId,
     applicationStatus,
     conversationStatus,
+    initialHasMore,
 }: {
     messages: ChatMessageRecord[];
     userId: string;
     conversationId: string;
     applicationStatus?: string | null;
     conversationStatus?: string | null;
+    initialHasMore?: boolean;
 }) {
     const supabase = useMemo(() => createClient(), []);
     const router = useRouter();
@@ -66,9 +68,31 @@ export function ChatList({
     const suppressAutoReadRef = useRef(false);
     const [liveMessages, setLiveMessages] = useState<ChatMessageRecord[]>(messages);
     const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(initialHasMore ?? false);
+    const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+
+    const mergeMessage = useCallback((message: ChatMessageRecord) => {
+        setLiveMessages((previous) => {
+            const existingIndex = previous.findIndex((item) => item.id === message.id);
+            const next = existingIndex >= 0 ? [...previous] : [...previous, message];
+
+            if (existingIndex >= 0) {
+                next[existingIndex] = { ...next[existingIndex], ...message };
+            }
+
+            next.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+            return next;
+        });
+    }, []);
 
     useEffect(() => {
-        setLiveMessages(messages);
+        setLiveMessages((previous) => {
+            const merged = new Map(previous.map((message) => [message.id, message]));
+            for (const message of messages) merged.set(message.id, message);
+            return Array.from(merged.values()).sort(
+                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+            );
+        });
     }, [messages]);
 
     useEffect(() => {
@@ -84,17 +108,20 @@ export function ChatList({
                 },
                 (payload) => {
                     const incoming = payload.new as ChatMessageRecord;
-                    const normalized = normalizeMessage(incoming, userId);
-
-                    setLiveMessages((previous) => {
-                        if (previous.some((message) => message.id === normalized.id)) {
-                            return previous;
-                        }
-
-                        const next = [...previous, incoming];
-                        next.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-                        return next;
-                    });
+                    mergeMessage(incoming);
+                },
+            )
+            .on(
+                "postgres_changes",
+                {
+                    event: "UPDATE",
+                    schema: "public",
+                    table: "messages",
+                    filter: `conversation_id=eq.${conversationId}`,
+                },
+                (payload) => {
+                    const updated = payload.new as ChatMessageRecord;
+                    mergeMessage(updated);
                 },
             )
             .subscribe();
@@ -102,7 +129,7 @@ export function ChatList({
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [conversationId, userId, supabase]);
+    }, [conversationId, mergeMessage, supabase]);
 
     // 1. Normalize messages
     const normalizedMessages = useMemo(() => {
@@ -226,11 +253,39 @@ export function ChatList({
         router.refresh();
     };
 
+    const handleLoadOlder = async () => {
+        const firstMessage = liveMessages[0];
+        if (!firstMessage || isLoadingOlder) return;
+
+        setIsLoadingOlder(true);
+        try {
+            const olderMessages = await getOlderMessages(conversationId, firstMessage.created_at, 100);
+            setLiveMessages((previous) => {
+                const merged = new Map(previous.map((message) => [message.id, message]));
+                for (const message of olderMessages) merged.set(message.id, message);
+                return Array.from(merged.values()).sort(
+                    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+                );
+            });
+            setHasMore(olderMessages.length === 100);
+        } finally {
+            setIsLoadingOlder(false);
+        }
+    };
+
     return (
-        <div className="flex flex-col gap-6 py-6 pb-4">
+        <div className="flex flex-col gap-4 py-3 pb-4 sm:gap-6 sm:py-6">
+            {hasMore ? (
+                <div className="flex justify-center">
+                    <Button type="button" variant="outline" onClick={handleLoadOlder} disabled={isLoadingOlder} className="rounded-full">
+                        {isLoadingOlder ? "Ładowanie…" : "Pokaż starsze wiadomości"}
+                    </Button>
+                </div>
+            ) : null}
             {normalizedMessages.map((msg, index) => {
                 const rawMessage = liveMessages.find((message) => message.id === msg.id);
                 const isFlagged = Array.isArray(rawMessage?.flagged_by) && rawMessage.flagged_by.includes(userId);
+                const isTimelineEvent = msg.event.includes("system") || msg.event.includes("accepted") || msg.event.includes("rejected");
                 const dateKey = new Date(msg.created_at).toDateString();
                 const previousMessage = normalizedMessages[index - 1];
                 const previousDateKey = previousMessage
@@ -241,15 +296,15 @@ export function ChatList({
                 return (
                     <div key={msg.id} className="w-full">
                         {showDate && (
-                            <div className="flex justify-center mb-6">
+                            <div className="mb-4 flex justify-center sm:mb-6">
                                 <span className="text-xs font-medium text-slate-400 bg-slate-100/50 px-3 py-1 rounded-full">
                                     {format(new Date(msg.created_at), "d MMMM", { locale: pl })}
                                 </span>
                             </div>
                         )}
 
-                        <div className={`group/message flex flex-col ${msg.event.includes('system') || msg.event.includes('accepted') || msg.event.includes('rejected') ? 'items-center' : (msg.is_mine ? "items-end" : "items-start")} gap-1`}>
-                            <div className={`flex items-center gap-2 ${msg.is_mine ? "flex-row-reverse" : "flex-row"}`}>
+                        <div className={`group/message flex min-w-0 flex-col ${isTimelineEvent ? 'items-center' : (msg.is_mine ? "items-end" : "items-start")} gap-1`}>
+                            <div className={`flex max-w-full items-center gap-1 sm:gap-2 ${msg.is_mine ? "flex-row-reverse" : "flex-row"}`}>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button
@@ -349,9 +404,15 @@ export function ChatList({
 
 
                             {/* Timestamp */}
-                            {!msg.event.includes('system') && !msg.event.includes('accepted') && !msg.event.includes('rejected') && (
-                                <span className="text-[10px] text-slate-400 px-1 opacity-70">
-                                    {format(new Date(msg.created_at), "HH:mm")}
+                            {!isTimelineEvent && (
+                                <span className="flex items-center gap-1 px-1 text-[10px] text-slate-400 opacity-70">
+                                    <span>{format(new Date(msg.created_at), "HH:mm")}</span>
+                                    {msg.is_mine ? (
+                                        <>
+                                            <span aria-hidden="true">•</span>
+                                            <span>{rawMessage?.read_at ? "Przeczytano" : "Wysłano"}</span>
+                                        </>
+                                    ) : null}
                                 </span>
                             )}
                         </div>

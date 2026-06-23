@@ -57,7 +57,7 @@ export default async function AdminFinanceLedgerPage() {
     .limit(200);
 
   if (error) {
-    return <div className="p-8 text-red-500">Blad pobierania ksiegi: {error.message}</div>;
+    return <div className="p-8 text-red-500">Błąd pobierania ksiegi: {error.message}</div>;
   }
 
   const lines = (data || []) as LedgerLine[];
@@ -167,7 +167,7 @@ export default async function AdminFinanceLedgerPage() {
               {lines.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-20 text-center font-bold text-slate-500">
-                    Brak linii ksiegowych do wyswietlenia.
+                    Brak linii ksiegowych do wyświetlenia.
                   </td>
                 </tr>
               ) : (

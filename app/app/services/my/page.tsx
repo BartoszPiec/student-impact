@@ -47,14 +47,14 @@ export default async function MyServicesPage({
                 description="Zarządzaj swoimi usługami, edytuj cenniki i monitoruj zainteresowanie Twoją ofertą."
                 icon={<LayoutGrid className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
                 actions={
-                    <div className="flex items-center gap-3">
-                        <Button asChild variant="outline" className="h-12 rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white">
+                    <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+                        <Button asChild variant="outline" className="h-12 w-full rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white sm:w-auto">
                             <Link href="/app/services/dashboard">
                                 <Inbox className="mr-2 h-4 w-4" />
                                 Panel Zleceń
                             </Link>
                         </Button>
-                        <Button asChild className="h-12 rounded-2xl bg-white px-6 font-black text-slate-900 shadow-xl hover:bg-slate-100">
+                        <Button asChild className="h-12 w-full rounded-2xl bg-white px-6 font-black text-slate-900 shadow-xl hover:bg-slate-100 sm:w-auto">
                             <Link href="/app/services/new">
                                 <Plus className="mr-2 h-4 w-4" />
                                 Dodaj usługę
@@ -89,13 +89,13 @@ export default async function MyServicesPage({
                 )}
 
                 {/* SERVICES GRID */}
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
                     {services?.map((service: ServicePackage) => (
                         <div
                             key={service.id}
-                            className="group relative flex flex-col rounded-[2rem] border border-slate-100 bg-white p-8 shadow-xl shadow-slate-200/50 transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10"
+                            className="group relative flex flex-col rounded-[1.75rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/50 transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10 sm:rounded-[2rem] sm:p-8"
                         >
-                            <div className="mb-6 flex items-start justify-between">
+                            <div className="mb-5 flex items-start justify-between gap-3 sm:mb-6">
                                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 transition-colors duration-500 group-hover:bg-indigo-600 group-hover:text-white">
                                     <ShieldCheck className="h-6 w-6" />
                                 </div>
@@ -113,9 +113,9 @@ export default async function MyServicesPage({
                                 </div>
                             </div>
 
-                            <div className="mb-8 flex-1 space-y-3">
+                            <div className="mb-6 flex-1 space-y-3 sm:mb-8">
                                 <h3
-                                    className="line-clamp-1 text-xl font-black leading-tight text-slate-900 transition-colors group-hover:text-indigo-600"
+                                    className="line-clamp-2 text-xl font-black leading-tight text-slate-900 transition-colors group-hover:text-indigo-600 sm:line-clamp-1"
                                     title={service.title}
                                 >
                                     {service.title}
@@ -125,7 +125,7 @@ export default async function MyServicesPage({
                                 </p>
                             </div>
 
-                            <div className="flex items-center justify-between border-t border-slate-50 pt-6">
+                            <div className="flex items-center justify-between gap-4 border-t border-slate-50 pt-5 sm:pt-6">
                                 <div>
                                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
                                         Cena netto

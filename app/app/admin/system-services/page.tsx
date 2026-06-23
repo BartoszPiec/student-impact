@@ -49,7 +49,7 @@ export default async function AdminSystemServicesPage(props: {
   if (error) {
     return (
       <div className="rounded-[2.5rem] border border-rose-500/20 bg-rose-500/5 p-8 text-rose-100">
-        Blad pobierania uslug: {error.message}
+        Błąd pobierania usług: {error.message}
       </div>
     );
   }
@@ -82,7 +82,7 @@ export default async function AdminSystemServicesPage(props: {
           >
             <Link href="/app/admin/system-services/new">
               <Plus className="mr-2 h-4 w-4" />
-              Dodaj usluge
+              Dodaj usługę
             </Link>
           </Button>
         </div>
@@ -110,9 +110,9 @@ export default async function AdminSystemServicesPage(props: {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/5">
               <Zap className="h-8 w-8 text-slate-500" />
             </div>
-            <h3 className="text-lg font-bold text-white">Brak uslug systemowych</h3>
+            <h3 className="text-lg font-bold text-white">Brak usług systemowych</h3>
             <p className="mt-2 text-slate-400">
-              Dodaj pierwsza usluge, aby pojawila sie na gieldzie i w panelu admina.
+              Dodaj pierwsza usługę, aby pojawila sie na gieldzie i w panelu admina.
             </p>
           </div>
         )}
@@ -185,7 +185,7 @@ function ServiceCard({ service }: { service: AdminServicePackage }) {
             className="w-full rounded-xl border-white/10 bg-white/5 font-bold text-slate-200 hover:bg-white/10 hover:text-white"
           >
             <Link href={`/app/company/packages/${service.id}`}>
-              Podglad uslugi
+              Podglad usługi
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>

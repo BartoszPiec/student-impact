@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
 import { redirect } from "next/navigation";
 import CatalogClient from "./catalog-client";
+import Link from "next/link";
+import { getRequestContext } from "@/lib/auth/request-context";
 
 export const dynamic = "force-dynamic";
 
@@ -16,17 +18,11 @@ const fullBleedStyle = {
 
 export default async function ServicesCatalogPage() {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, role } = await getRequestContext();
 
     if (!user) redirect("/auth");
 
-    const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .single();
-
-    const isCompany = profile?.role === "company";
+    const isCompany = role === "company";
 
     // Pobierz WSZYSTKIE pakiety (systemowe i studenckie)
     const { data: allPackages } = await supabase
@@ -65,7 +61,7 @@ export default async function ServicesCatalogPage() {
                     {isCompany && (
                         <div className="mt-8 flex flex-wrap gap-4">
                             <Button asChild variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-none backdrop-blur-md">
-                                <a href="/app/company/packages">Twoje Zamówienia →</a>
+                                <Link href="/app/company/packages">Twoje Zamówienia →</Link>
                             </Button>
                         </div>
                     )}

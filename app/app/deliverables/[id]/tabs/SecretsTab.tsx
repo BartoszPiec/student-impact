@@ -8,7 +8,20 @@ import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, Copy, Trash2, Key, ShieldCheck, Check } from "lucide-react";
 import { addSecret, deleteSecret } from "@/app/app/deliverables/_actions";
 
-function SecretItem({ secret, onDelete }: { secret: any, onDelete?: () => void }) {
+type Secret = {
+    id: string;
+    title: string;
+    secret_value: string;
+    created_at: string;
+};
+
+type SecretsTabProps = {
+    applicationId: string;
+    secrets: Secret[];
+    isCompany: boolean;
+};
+
+function SecretItem({ secret, onDelete }: { secret: Secret, onDelete?: () => void }) {
     const [visible, setVisible] = useState(false);
 
     const [copied, setCopied] = useState(false);
@@ -61,9 +74,8 @@ function SecretItem({ secret, onDelete }: { secret: any, onDelete?: () => void }
 
 export function SecretsTab({
     applicationId,
-    secrets,
-    isCompany
-}: any) {
+    secrets
+}: SecretsTabProps) {
     const [isAdding, setIsAdding] = useState(false);
 
     return (
@@ -86,7 +98,7 @@ export function SecretsTab({
                         </div>
                     ) : (
                         <div className="grid gap-3">
-                            {secrets.map((s: any) => (
+                            {secrets.map((s) => (
                                 <SecretItem
                                     key={s.id}
                                     secret={s}
@@ -106,7 +118,7 @@ export function SecretsTab({
                             setIsAdding(false);
                         }} className="bg-white p-4 rounded-xl border mt-4 shadow-sm space-y-4 animate-in fade-in slide-in-from-top-2">
                             <div className="space-y-2">
-                                <Label>Nazwa (np. "Login do Instagrama")</Label>
+                                <Label>Nazwa (np. &quot;Login do Instagrama&quot;)</Label>
                                 <Input name="title" required placeholder="Wpisz nazwę..." />
                             </div>
                             <div className="space-y-2">

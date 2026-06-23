@@ -22,7 +22,7 @@ export default async function EditSystemServicePage({ params }: { params: Promis
     .single();
 
   if (error || !offer) {
-    return <div className="p-10 text-center text-red-400">Nie znaleziono takiej uslugi lub wystapil blad.</div>;
+    return <div className="p-10 text-center text-red-400">Nie znaleziono takiej usługi lub wystąpił błąd.</div>;
   }
 
   return (

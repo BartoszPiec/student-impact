@@ -35,12 +35,12 @@ export function DocumentCard({ document, className }: DocumentCardProps) {
   return (
     <article
       className={cn(
-        "rounded-[2rem] border border-slate-100 bg-white p-5 shadow-lg shadow-slate-200/30",
+        "rounded-[1.5rem] border border-slate-100 bg-white p-4 shadow-lg shadow-slate-200/30 sm:rounded-[2rem] sm:p-5",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 gap-3 sm:gap-4">
           <div
             className={cn(
               "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
@@ -50,7 +50,7 @@ export function DocumentCard({ document, className }: DocumentCardProps) {
             <Icon className="h-5 w-5" />
           </div>
 
-          <div className="min-w-0 space-y-2">
+          <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={cn(
@@ -66,20 +66,24 @@ export function DocumentCard({ document, className }: DocumentCardProps) {
             </div>
 
             <div>
-              <h3 className="line-clamp-1 text-base font-black text-slate-900">{document.title}</h3>
-              <p className="mt-1 text-sm font-medium text-slate-400">
+              <h3 className="line-clamp-2 break-words text-base font-black text-slate-900">{document.title}</h3>
+              <p className="mt-1 break-words text-sm font-medium text-slate-400">
                 {document.counterpartName}
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-              <span className="inline-flex items-center gap-1">
-                <FileText className="h-3.5 w-3.5" />
-                {document.fileName}
+              <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 truncate" title={document.fileName}>
+                  {document.fileName}
+                </span>
               </span>
-              <span className="inline-flex items-center gap-1">
-                <FileBadge2 className="h-3.5 w-3.5" />
-                {getDocumentTypeDescription(document.type)}
+              <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+                <FileBadge2 className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 break-words">
+                  {getDocumentTypeDescription(document.type)}
+                </span>
               </span>
               {document.createdAt ? (
                 <span>
@@ -95,12 +99,12 @@ export function DocumentCard({ document, className }: DocumentCardProps) {
             href={document.downloadUrl}
             target="_blank"
             rel="noreferrer"
-            className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-700 transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+            className="w-full shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-700 transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 sm:w-auto sm:py-2"
           >
             Pobierz PDF
           </a>
         ) : (
-          <span className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500">
+          <span className="w-full shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs font-bold text-slate-500 sm:w-auto sm:py-2">
             Brak pliku
           </span>
         )}

@@ -25,12 +25,12 @@ export function StripeOnboardingButton({ state }: { state: StripeOnboardingState
       const data = await response.json() as { url?: string; error?: string };
 
       if (!response.ok || !data.url) {
-        throw new Error(data.error || "Nie udalo sie przygotowac Stripe.");
+        throw new Error(data.error || "Nie udało się przygotować Stripe.");
       }
 
       window.location.href = data.url;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Nie udalo sie otworzyc Stripe.");
+      toast.error(error instanceof Error ? error.message : "Nie udało się otworzyć Stripe.");
       setLoading(false);
     }
   };

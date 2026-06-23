@@ -141,7 +141,7 @@ async function enforceApplicationsRateLimit(userId: string, action: string, targ
   const rateKey = buildRateLimitKey(["applications", action, userId, ip, targetId]);
   const rateLimitResult = await enforceRateLimit("apply", rateKey);
   if (!rateLimitResult.success) {
-    throw new Error("Zbyt wiele operacji na aplikacjach. Sprobuj ponownie za chwile.");
+    throw new Error("Zbyt wiele operacji na aplikacjach. Spróbuj ponownie za chwile.");
   }
 }
 
@@ -666,16 +666,16 @@ export async function withdrawApplication(
   const appRow = data as ApplicationRowBase | null;
   if (error || !appRow) {
     revalidatePath("/app/applications");
-    return { error: "Nie znaleziono zgloszenia." };
+    return { error: "Nie znaleziono zgłoszenia." };
   }
 
   if (appRow.student_id !== user.id) {
-    return { error: "Brak dostepu do zgloszenia." };
+    return { error: "Brak dostepu do zgłoszenia." };
   }
 
   if (appRow.status !== "sent" && appRow.status !== "countered") {
     revalidatePath("/app/applications");
-    return { error: `Nie mozna usunac zgloszenia o statusie: ${appRow.status}` };
+    return { error: `Nie można usunac zgłoszenia o statusie: ${appRow.status}` };
   }
 
   const { error: updateError } = await supabase
@@ -704,7 +704,7 @@ export async function withdrawApplication(
         application_id: applicationId,
         offer_id: appRow.offer_id,
         offer_title: offer.tytul,
-        snippet: `Kandydat wycofal zgloszenie do oferty "${offer.tytul ?? "oferta"}".`,
+        snippet: `Kandydat wycofal zgłoszenie do oferty "${offer.tytul ?? "oferta"}".`,
       });
     }
   } catch {
@@ -790,7 +790,7 @@ export async function submitQuoteProposal(
 
     const newApp = newAppData as IdRow | null;
     if (error || !newApp) {
-      throw new Error(error?.message || "Nie udalo sie zlozyc oferty.");
+      throw new Error(error?.message || "Nie udało sie złożyć oferty.");
     }
 
     appId = newApp.id;
@@ -820,7 +820,7 @@ export async function submitQuoteProposal(
   } catch (err: unknown) {
     console.error("Error sending message/notify:", err);
     return {
-      error: err instanceof Error ? err.message : "Nie udalo sie wyslac wiadomosci.",
+      error: err instanceof Error ? err.message : "Nie udało sie wysłać wiadomości.",
     };
   }
 

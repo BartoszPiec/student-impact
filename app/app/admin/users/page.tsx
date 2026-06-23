@@ -1,6 +1,7 @@
 import { Users } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UsersTable } from "@/components/admin/users-table";
+import { ADMIN_PAGE_SIZE, getPageNumber, ServerPagination } from "@/components/admin/server-pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -13,20 +14,29 @@ type ProfileRow = {
   created_at: string;
 };
 
-export default async function AdminUsersPage() {
+export default async function AdminUsersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ page?: string | string[] }>;
+}) {
+  const currentPage = getPageNumber((await searchParams)?.page);
+  const rangeStart = (currentPage - 1) * ADMIN_PAGE_SIZE;
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("profiles")
     .select("user_id, role, created_at")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(rangeStart, rangeStart + ADMIN_PAGE_SIZE);
 
   if (error) {
     return (
-      <div className="p-8 text-red-500">Blad pobierania uzytkownikow: {error.message}</div>
+      <div className="p-8 text-red-500">Błąd pobierania użytkowników: {error.message}</div>
     );
   }
 
-  const profiles = ((data || []) as Array<Pick<ProfileRow, "user_id" | "role" | "created_at">>) || [];
+  const profileRows = ((data || []) as Array<Pick<ProfileRow, "user_id" | "role" | "created_at">>) || [];
+  const hasNextPage = profileRows.length > ADMIN_PAGE_SIZE;
+  const profiles = profileRows.slice(0, ADMIN_PAGE_SIZE);
   const studentIds = profiles
     .filter((profile) => profile.role === "student")
     .map((profile) => profile.user_id);
@@ -85,6 +95,7 @@ export default async function AdminUsersPage() {
       </div>
 
       <UsersTable users={users as ProfileRow[]} />
+      <ServerPagination pathname="/app/admin/users" currentPage={currentPage} hasNextPage={hasNextPage} />
     </div>
   );
 }

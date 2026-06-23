@@ -1,10 +1,17 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ContractsTable } from "@/components/admin/contracts-table";
+import { ContractsTable, type ContractRow } from "@/components/admin/contracts-table";
 import { BriefcaseBusiness } from "lucide-react";
+import { ADMIN_PAGE_SIZE, getPageNumber, ServerPagination } from "@/components/admin/server-pagination";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminContractsPage() {
+export default async function AdminContractsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ page?: string | string[] }>;
+}) {
+  const currentPage = getPageNumber((await searchParams)?.page);
+  const rangeStart = (currentPage - 1) * ADMIN_PAGE_SIZE;
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("contracts")
@@ -22,13 +29,18 @@ export default async function AdminContractsPage() {
       student:student_profiles(public_name),
       company:company_profiles(nazwa)
     `)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(rangeStart, rangeStart + ADMIN_PAGE_SIZE);
 
   if (error) {
     return (
-      <div className="p-8 text-red-500">Blad pobierania kontraktow: {error.message}</div>
+      <div className="p-8 text-red-500">Błąd pobierania kontraktów: {error.message}</div>
     );
   }
+
+  const rows = (data ?? []) as ContractRow[];
+  const hasNextPage = rows.length > ADMIN_PAGE_SIZE;
+  const contracts = rows.slice(0, ADMIN_PAGE_SIZE);
 
   return (
     <div className="space-y-8 pb-12">
@@ -46,16 +58,17 @@ export default async function AdminContractsPage() {
             Kontrakty
           </h1>
           <p className="text-slate-400 max-w-xl font-medium leading-relaxed">
-            Administracyjny przeglad wszystkich kontraktow wraz ze statusem, zrodlem i
+            Administracyjny przeglad wszystkich kontraktów wraz ze statusem, zrodlem i
             prowizja.
           </p>
         </div>
       </div>
 
       <ContractsTable
-        contracts={(data || []) as any[]}
-        emptyMessage="Brak kontraktow do wyswietlenia."
+        contracts={contracts}
+        emptyMessage="Brak kontraktów do wyświetlenia."
       />
+      <ServerPagination pathname="/app/admin/contracts" currentPage={currentPage} hasNextPage={hasNextPage} />
     </div>
   );
 }

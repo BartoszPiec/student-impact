@@ -2,17 +2,13 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Clock, FileText, Lock, MessageSquare, Briefcase, Building2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Briefcase, Building2, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Components for Tabs
-import { StatusTab } from "./tabs/StatusTab";
-import { FilesTab } from "./tabs/FilesTab";
-import { SecretsTab } from "./tabs/SecretsTab";
-import { ChatTab } from "./tabs/ChatTab"; // We might embed Chat or just link
 import { findConversationForServiceOrder } from "@/lib/services/service-order-conversations";
-import { normalizeFullFundingContractState } from "@/lib/services/full-funding-contract-state";
+import { getCurrentUser } from "@/lib/auth/request-context";
+import { WorkspaceTabs } from "./workspace-tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +48,7 @@ type ServiceOrderRow = {
     student_id: string;
     company_id: string;
     amount: number | null;
+    amount_minor?: number | null;
     created_at: string;
     package_id: string | null;
     package: RelationValue<WorkspacePackage>;
@@ -104,8 +101,7 @@ export default async function RealizationWorkspace({
     const { id: applicationId } = await params;
     const supabase = await createClient();
 
-    const { data: userRaw } = await supabase.auth.getUser();
-    const user = userRaw.user;
+    const user = await getCurrentUser();
     if (!user) redirect("/auth");
 
     // Unified Fetch (App or Service Order)
@@ -153,7 +149,7 @@ export default async function RealizationWorkspace({
                 student_id: serviceOrderRow.student_id,
                 offer_id: null,
                 agreed_stawka: serviceOrderRow.amount,
-                agreed_stawka_minor: (serviceOrderRow as any).amount_minor || (serviceOrderRow.amount != null ? Math.round(serviceOrderRow.amount * 100) : null),
+                agreed_stawka_minor: serviceOrderRow.amount_minor ?? (serviceOrderRow.amount != null ? Math.round(serviceOrderRow.amount * 100) : null),
                 offers: {
                     id: null,
                     tytul: so.package?.title || "Zlecenie Usługi",
@@ -195,28 +191,7 @@ export default async function RealizationWorkspace({
     const isCompany = user.id === companyId;
 
     // Fetch company name for the profile link (student view only)
-    let companyName: string | null = null;
-    if (isStudent && companyId) {
-        const { data: companyProfile } = await supabase
-            .from("company_profiles")
-            .select("nazwa")
-            .eq("user_id", companyId)
-            .maybeSingle();
-        companyName = (companyProfile as { nazwa: string | null } | null)?.nazwa ?? null;
-    }
-
-    // Fetch student-only instructions (locked_content) from service_package — only for platform services
-    let studentInstructions: string | null = null;
     const servicePackageId = offer?.service_package_id ?? appRow.package_id ?? null;
-    if (isStudent && servicePackageId) {
-        const { data: pkgData } = await supabase
-            .from("service_packages")
-            .select("locked_content")
-            .eq("id", servicePackageId)
-            .maybeSingle();
-        const pkg = pkgData as { locked_content: string | null } | null;
-        studentInstructions = pkg?.locked_content ?? null;
-    }
 
     if (!isStudent && !isCompany) {
         return <div className="p-12 text-center text-red-500">Brak uprawnień do tego zlecenia (ID użytkownika nie pasuje).</div>;
@@ -229,104 +204,58 @@ export default async function RealizationWorkspace({
     const filterColumn = isServiceOrder ? "service_order_id" : "application_id";
 
     // 1. Deliverables (Student Work)
-    const { data: deliverablesData } = await supabase
-        .from("deliverables")
-        .select("*")
-        .eq(filterColumn, applicationId) // applicationId variable holds the ID
-        .order("created_at", { ascending: false });
-    const deliverables = deliverablesData ?? [];
+    const conversationPromise = (async (): Promise<ConversationMatch | null> => {
+        if (!isServiceOrder) {
+            const { data } = await supabase
+                .from("conversations")
+                .select("id")
+                .eq("application_id", applicationId)
+                .maybeSingle();
+            return data as ConversationMatch | null;
+        }
 
-    // 2. Reviews
-    const { data: reviewsData } = await supabase
-        .from("reviews")
-        .select("*")
-        .eq(filterColumn, applicationId);
-    const reviews = (reviewsData ?? []) as ReviewRow[];
-
-    // 3. Resources (Company Files)
-    const { data: resourcesData } = await supabase
-        .from("project_resources")
-        .select("*")
-        .eq(filterColumn, applicationId)
-        .order("created_at", { ascending: false });
-    const resources = resourcesData ?? [];
-
-    // 4. Secrets
-    const { data: secretsData } = await supabase
-        .from("project_secrets")
-        .select("*")
-        .eq(filterColumn, applicationId)
-        .order("created_at", { ascending: false });
-    const secrets = secretsData ?? [];
-
-    // 5. Conversation ID for Chat
-    // Chat might not support service_order_id yet. 
-    // We try to fetch by application_id if not service order, otherwise we might skip or need schema update.
-    // For now, we try dynamic column, assuming Conversation schema supports it (or will support it).
-    // If not, it will return error or empty.
-    let conversation: ConversationMatch | null = null;
-    if (!isServiceOrder) {
-        const { data: convData } = await supabase
-            .from("conversations")
-            .select("id")
-            .eq("application_id", applicationId)
-            .maybeSingle();
-        conversation = convData as ConversationMatch | null;
-    } else if (servicePackageId && studentId && companyId) {
-        conversation = await findConversationForServiceOrder(supabase, {
+        if (!servicePackageId || !companyId) return null;
+        return findConversationForServiceOrder(supabase, {
             serviceOrderId: applicationId,
             companyId,
             studentId,
             packageId: servicePackageId,
         });
-    }
-    // 6. [Realization Guard] Contract & Milestones
-    // Try by Application ID first, then Service Order ID
-    let { data: contract } = await supabase
-        .from("contracts")
-        .select("*, milestones(*)")
-        .order("idx", { foreignTable: "milestones", ascending: true })
-        .or(`application_id.eq.${applicationId},service_order_id.eq.${applicationId}`)
-        .maybeSingle();
+    })();
 
-    if (contract?.id) {
-        const healed = await normalizeFullFundingContractState(contract.id);
-        if (healed) {
-            const { data: refreshedContract } = await supabase
-                .from("contracts")
-                .select("*, milestones(*)")
-                .order("idx", { foreignTable: "milestones", ascending: true })
-                .eq("id", contract.id)
-                .maybeSingle();
+    const [companyResult, packageResult, deliverablesResult, reviewsResult, resourcesResult, secretsResult, conversation, contractResult] = await Promise.all([
+        isStudent && companyId
+            ? supabase.from("company_profiles").select("nazwa").eq("user_id", companyId).maybeSingle()
+            : Promise.resolve({ data: null }),
+        isStudent && servicePackageId
+            ? supabase.from("service_packages").select("locked_content").eq("id", servicePackageId).maybeSingle()
+            : Promise.resolve({ data: null }),
+        supabase.from("deliverables").select("*").eq(filterColumn, applicationId).order("created_at", { ascending: false }),
+        supabase.from("reviews").select("*").eq(filterColumn, applicationId),
+        supabase.from("project_resources").select("*").eq(filterColumn, applicationId).order("created_at", { ascending: false }),
+        supabase.from("project_secrets").select("*").eq(filterColumn, applicationId).order("created_at", { ascending: false }),
+        conversationPromise,
+        supabase
+            .from("contracts")
+            .select("*, milestones(*)")
+            .order("idx", { foreignTable: "milestones", ascending: true })
+            .or(`application_id.eq.${applicationId},service_order_id.eq.${applicationId}`)
+            .maybeSingle(),
+    ]);
 
-            if (refreshedContract) {
-                contract = refreshedContract;
-            }
-        }
-    }
+    const companyName = (companyResult.data as { nazwa: string | null } | null)?.nazwa ?? null;
+    const studentInstructions = (packageResult.data as { locked_content: string | null } | null)?.locked_content ?? null;
+    const deliverables = deliverablesResult.data ?? [];
+    const reviews = (reviewsResult.data ?? []) as ReviewRow[];
+    const resources = resourcesResult.data ?? [];
+    const secrets = secretsResult.data ?? [];
+    const contract = contractResult.data;
 
-    // [AUTO-HEAL] If contract is missing for a valid Service Order, try to generate it now.
-    // This handles cases where the initial status update didn't trigger the RPC or SQL patch wasn't run.
-    if (!contract && isServiceOrder && appRow.status !== 'rejected') {
-        const { data: newContractId, error: rpcError } = await supabase.rpc('ensure_contract_for_service_order', {
-            p_service_order_id: applicationId
-        });
-
-        if (newContractId && !rpcError) {
-            // Re-fetch contract immediately
-            const { data: refreshedContract } = await supabase
-                .from("contracts")
-                .select("*, milestones(*)")
-                .eq("service_order_id", applicationId)
-                .maybeSingle();
-
-            if (refreshedContract) {
-                contract = refreshedContract;
-            }
-        }
-    }
-
-
+    // 5. Conversation ID for Chat
+    // Chat might not support service_order_id yet.
+    // We try to fetch by application_id if not service order, otherwise we might skip or need schema update.
+    // For now, we try dynamic column, assuming Conversation schema supports it (or will support it).
+    // If not, it will return error or empty.
     // 7. Contract Documents (PDF umowy)
     let contractDocuments: ContractDocumentRow[] = [];
     if (contract?.id) {
@@ -453,75 +382,30 @@ export default async function RealizationWorkspace({
 
             {/* MAIN CONTENT AREA */}
             <div className="container mx-auto max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 -mt-10 relative z-20 pb-20">
-                <Tabs defaultValue="status" className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/90 backdrop-blur-xl p-4 rounded-[2rem] border border-slate-200 shadow-2xl shadow-slate-200/40">
-                        <TabsList className="bg-slate-100/50 p-1.5 h-auto flex flex-wrap md:inline-flex w-full md:w-auto rounded-2xl gap-1.5 border-none">
-                            <TabsTrigger value="status" className="flex-1 md:flex-none py-2 md:py-3 px-3 md:px-8 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-wider md:tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
-                                <Clock className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5" /> Status
-                            </TabsTrigger>
-                            <TabsTrigger value="files" className="flex-1 md:flex-none py-2 md:py-3 px-3 md:px-8 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-wider md:tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
-                                <FileText className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5" /> Pliki
-                            </TabsTrigger>
-                            <TabsTrigger value="secrets" className="flex-1 md:flex-none py-2 md:py-3 px-3 md:px-8 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-wider md:tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
-                                <Lock className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5" /> Dostępy
-                            </TabsTrigger>
-                            <TabsTrigger value="chat" className="flex-1 md:flex-none py-2 md:py-3 px-3 md:px-8 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-wider md:tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-lg shadow-slate-300">
-                                <MessageSquare className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5" /> Wiadomości
-                            </TabsTrigger>
-                        </TabsList>
-
-                        <div className="px-6 py-2 border-l border-slate-100 hidden lg:block">
-                            <div className="flex items-center gap-3">
-                                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Sesja aktywna</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="min-h-[400px]">
-                        <TabsContent value="status" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-                            <StatusTab
-                                status={status}
-                                applicationStatus={appRow.status}
-                                isStudent={isStudent}
-                                isCompany={isCompany}
-                                applicationId={applicationId}
-                                isServiceOrder={isServiceOrder}
-                                currentDeliv={currentDeliv}
-                                deliverables={deliverables ?? []}
-                                myReview={myReview}
-                                theirReview={theirReview}
-                                contract={contract}
-                                totalAmount={Number(agreedAmount || 0)}
-                                enableNegotiation={!isServiceOrder && !offer?.is_platform_service && offer?.typ !== 'job_offer'}
-                                isPlatformService={offer?.is_platform_service ?? false}
-                                studentInstructions={studentInstructions}
-                                contractDocuments={contractDocuments}
-                            />
-                        </TabsContent>
-
-                        <TabsContent value="files" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-                            <FilesTab
-                                applicationId={applicationId}
-                                resources={resources ?? []}
-                                deliverables={deliverables ?? []}
-                                isCompany={isCompany}
-                            />
-                        </TabsContent>
-
-                        <TabsContent value="secrets" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-                            <SecretsTab
-                                applicationId={applicationId}
-                                secrets={secrets ?? []}
-                                isCompany={isCompany}
-                            />
-                        </TabsContent>
-
-                        <TabsContent value="chat" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-                            <ChatTab conversationId={conversation?.id} />
-                        </TabsContent>
-                    </div>
-                </Tabs>
+                <WorkspaceTabs
+                    statusProps={{
+                        status,
+                        applicationStatus: appRow.status,
+                        isStudent,
+                        isCompany,
+                        applicationId,
+                        isServiceOrder,
+                        currentDeliv,
+                        deliverables,
+                        myReview,
+                        theirReview,
+                        contract,
+                        totalAmount: Number(agreedAmount || 0),
+                        enableNegotiation: !isServiceOrder && !offer?.is_platform_service && offer?.typ !== "job_offer",
+                        isPlatformService: offer?.is_platform_service ?? false,
+                        studentInstructions,
+                        contractDocuments,
+                        resources,
+                    }}
+                    filesProps={{ applicationId, resources, deliverables, isCompany }}
+                    secretsProps={{ applicationId, secrets, isCompany }}
+                    conversationId={conversation?.id}
+                />
             </div>
         </main>
     );

@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { PageContainer } from "@/components/ui/page-container";
 import { ApplicationList, SavedList } from "./ApplicationList";
+import { getRequestContext } from "@/lib/auth/request-context";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,7 @@ function resolveApplicationStage(
   if (status === "in_progress") return "in_progress";
 
   if (status === "accepted") {
-    if (deliverableStatus === "approved" || deliverableStatus === "completed") {
+    if (["accepted", "approved", "released", "completed"].includes(String(deliverableStatus))) {
       return "done";
     }
 
@@ -112,29 +113,31 @@ function resolveApplicationStage(
 export default async function StudentApplicationsPage() {
   const supabase = await createClient();
 
-  const { data: userData } = await supabase.auth.getUser();
-  const user = userData.user;
+  const { user, role } = await getRequestContext();
   if (!user) redirect("/auth");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (profile?.role !== "student") redirect("/app");
+  if (role !== "student") redirect("/app");
 
-  const { data: rows, error } = await supabase
-    .from("applications")
-    .select(`
-      id, status, message_to_company, cancel_reason, created_at, offer_id,
-      proposed_stawka, counter_stawka, agreed_stawka, agreed_stawka_minor,
-      offers (id, tytul, typ, stawka, status, is_platform_service)
-    `)
-    .eq("student_id", user.id)
-    .order("created_at", { ascending: false });
+  const [applicationsResult, savedResult] = await Promise.all([
+    supabase
+      .from("applications")
+      .select(`
+        id, status, message_to_company, cancel_reason, created_at, offer_id,
+        proposed_stawka, counter_stawka, agreed_stawka, agreed_stawka_minor,
+        offers (id, tytul, typ, stawka, status, is_platform_service)
+      `)
+      .eq("student_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("saved_offers")
+      .select("created_at, offers(id, tytul, opis, typ, stawka, status, created_at)")
+      .eq("student_id", user.id)
+      .order("created_at", { ascending: false }),
+  ]);
+  const { data: rows, error } = applicationsResult;
 
   if (error) {
-    return <div className="p-8 text-red-500">Blad pobierania danych: {error.message}</div>;
+    return <div className="p-8 text-red-500">Błąd pobierania danych: {error.message}</div>;
   }
 
   const applicationRows = (rows ?? []) as ApplicationRow[];
@@ -172,11 +175,7 @@ export default async function StudentApplicationsPage() {
     };
   });
 
-  const { data: savedRows } = await supabase
-    .from("saved_offers")
-    .select("created_at, offers(id, tytul, opis, typ, stawka, status, created_at)")
-    .eq("student_id", user.id)
-    .order("created_at", { ascending: false });
+  const savedRows = savedResult.data;
 
   const savedOffers = ((savedRows ?? []) as SavedOfferRow[])
     .map((row) => ({
@@ -212,7 +211,7 @@ export default async function StudentApplicationsPage() {
       <PremiumPageHeader
         badge="Panel Studenta"
         title="Moje Aplikacje"
-        description="Sledz swoje zgloszenia, zarzadzaj realizacjami i przegladaj zapisane okazje."
+        description="Sledz swoje zgłoszenia, zarzadzaj realizacjami i przegladaj zapisane okazje."
         icon={
           <FileText className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />
         }
@@ -221,10 +220,10 @@ export default async function StudentApplicationsPage() {
       <PageContainer className="space-y-8">
         <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 md:w-auto h-auto p-1.5 bg-slate-100/80 backdrop-blur-sm rounded-2xl border border-slate-200/50 shadow-inner">
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1.5 rounded-2xl border border-slate-200/50 bg-slate-100/80 shadow-inner backdrop-blur-sm sm:grid-cols-3 md:w-auto md:grid-cols-5 md:gap-0">
               <TabsTrigger
                 value="action"
-                className="rounded-xl py-3 px-6 data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-indigo-600 font-bold transition-all duration-300"
+                className="rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg sm:px-5 sm:py-3"
               >
                 Akcja{" "}
                 {doAkcji.length > 0 ? (
@@ -238,7 +237,7 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="waiting"
-                className="rounded-xl py-3 px-6 data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-indigo-600 font-bold transition-all duration-300"
+                className="rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg sm:px-5 sm:py-3"
               >
                 Czeka na firme{" "}
                 <span className="ml-2 text-slate-400 font-medium tracking-tighter">
@@ -247,7 +246,7 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="review"
-                className="rounded-xl py-3 px-6 data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-indigo-600 font-bold transition-all duration-300"
+                className="rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg sm:px-5 sm:py-3"
               >
                 Do oceny{" "}
                 <span className="ml-2 text-slate-400 font-medium tracking-tighter">
@@ -256,7 +255,7 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="saved"
-                className="rounded-xl py-3 px-6 data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-indigo-600 font-bold transition-all duration-300"
+                className="rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg sm:px-5 sm:py-3"
               >
                 Zapisane{" "}
                 {savedOffers.length > 0 ? (
@@ -270,7 +269,7 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="archive"
-                className="rounded-xl py-3 px-6 data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-indigo-600 font-bold transition-all duration-300"
+                className="rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg sm:px-5 sm:py-3"
               >
                 Archiwum
               </TabsTrigger>
@@ -302,7 +301,7 @@ export default async function StudentApplicationsPage() {
           </TabsContent>
           <TabsContent value="review" className="space-y-4">
             {czekaNaOcene.length === 0 ? (
-              <EmptyState label="Brak zakonczonych zlecen czekajacych na ocene." />
+              <EmptyState label="Brak zakonczonych zlecen czekajacych na ocenę." />
             ) : (
               <ApplicationList items={czekaNaOcene} />
             )}

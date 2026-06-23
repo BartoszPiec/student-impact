@@ -1,13 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getRequestContext } from "@/lib/auth/request-context";
 import { cn } from "@/lib/utils";
 import { isActiveSystemServicePackage } from "@/lib/services/system-services";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { PageContainer } from "@/components/ui/page-container";
 import {
   CheckCircle2,
-  User,
   Sparkles,
   ArrowRight,
   Star,
@@ -15,7 +15,6 @@ import {
   Scale,
   PenTool,
   BarChart3,
-  Globe,
   Languages,
   Cpu,
   Megaphone,
@@ -23,9 +22,7 @@ import {
   Search,
   TrendingUp,
   Shield,
-  Zap,
   Clock,
-  Target,
   Rocket,
   Code,
   Users,
@@ -35,6 +32,28 @@ import {
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+
+type ServicePackageRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  price: number | null;
+  delivery_time_days: number | null;
+  student_id: string | null;
+  type: string | null;
+  category: string | null;
+  created_at: string;
+  student: { user_id: string; public_name: string | null } | { user_id: string; public_name: string | null }[] | null;
+};
+
+type StudentMetrics = {
+  score: number;
+  avgRating: number;
+  completedProjects: number;
+  tags: string[];
+};
+
+type RankedServicePackage = ServicePackageRow & StudentMetrics;
 
 // ── Strip Markdown helper ────────────────────────────────────
 function stripMarkdown(text: string): string {
@@ -160,6 +179,9 @@ const categories = [
 export default async function CompanyPackagesPage(props: { searchParams: Promise<{ category?: string; success?: string; type?: string; search?: string; sort?: string }> }) {
   const searchParams = await props.searchParams;
   const supabase = await createClient();
+  const { user, role } = await getRequestContext();
+  if (!user) redirect("/auth");
+  if (role !== "company") redirect("/app");
 
   /* 1. Fetch ALL Packages from service_packages */
   const { data: servicePackages, error: spError } = await supabase
@@ -175,28 +197,43 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
     .order("created_at", { ascending: false });
 
   if (spError) console.error("Error fetching packages:", spError);
+  const packages = (servicePackages ?? []) as ServicePackageRow[];
 
   /* 2. Fetch Ranking Data (Reviews & Completed Projects) */
-  const studentIds = Array.from(new Set(servicePackages?.filter(p => p.student_id).map(p => p.student_id) || []));
+  const studentIds = Array.from(new Set(packages.map((pkg) => pkg.student_id).filter((id): id is string => Boolean(id))));
   
-  const { data: allReviews } = await supabase
-    .from("reviews")
-    .select("rating, reviewee_id")
-    .in("reviewee_id", studentIds);
+  const [reviewsResult, applicationsResult] = await Promise.all([
+    studentIds.length > 0
+      ? supabase.from("reviews").select("rating, reviewee_id").in("reviewee_id", studentIds)
+      : Promise.resolve({ data: [] }),
+    studentIds.length > 0
+      ? supabase.from("applications").select("student_id").in("student_id", studentIds).eq("status", "completed")
+      : Promise.resolve({ data: [] }),
+  ]);
+  const allReviews = reviewsResult.data ?? [];
+  const allApplications = applicationsResult.data ?? [];
 
-  const { data: allApplications } = await supabase
-    .from("applications")
-    .select("student_id, status")
-    .in("student_id", studentIds)
-    .eq("status", "completed");
+  const ratingsByStudent = new Map<string, { sum: number; count: number }>();
+  for (const review of allReviews) {
+    if (!review.reviewee_id) continue;
+    const current = ratingsByStudent.get(review.reviewee_id) ?? { sum: 0, count: 0 };
+    current.sum += Number(review.rating) || 0;
+    current.count += 1;
+    ratingsByStudent.set(review.reviewee_id, current);
+  }
+
+  const completedByStudent = new Map<string, number>();
+  for (const application of allApplications) {
+    if (!application.student_id) continue;
+    completedByStudent.set(application.student_id, (completedByStudent.get(application.student_id) ?? 0) + 1);
+  }
 
   /* 3. Helper for Ranking & Tags */
-  const getStudentMetrics = (studentId: string) => {
-    const studentReviews = allReviews?.filter(r => r.reviewee_id === studentId) || [];
-    const completedProjects = allApplications?.filter(a => a.student_id === studentId).length || 0;
-    const avgRating = studentReviews.length > 0 
-      ? studentReviews.reduce((acc, curr) => acc + curr.rating, 0) / studentReviews.length 
-      : 0;
+  const getStudentMetrics = (studentId: string | null): StudentMetrics => {
+    if (!studentId) return { score: 0, avgRating: 0, completedProjects: 0, tags: [] };
+    const ratings = ratingsByStudent.get(studentId);
+    const completedProjects = completedByStudent.get(studentId) ?? 0;
+    const avgRating = ratings?.count ? ratings.sum / ratings.count : 0;
     
     // Score Formula: Completed Projects * 2 + Avg Rating
     const score = (completedProjects * 2) + avgRating;
@@ -214,7 +251,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
   const searchQuery = (searchParams?.search || "").toLowerCase();
   const sortOrder = searchParams?.sort || "score"; // 'score', 'price_asc', 'price_desc', 'newest'
 
-  const filterByAll = (p: any) => {
+  const filterByAll = (p: ServicePackageRow) => {
     // Category Filter
     if (activeCategory !== "all") {
       const cat = (p.category || "").toLowerCase();
@@ -234,24 +271,19 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
     return true;
   };
 
-  let platformServices = servicePackages?.filter((p: any) =>
+  let platformServices = packages.filter((p) =>
     isActiveSystemServicePackage(p)
     && filterByAll(p),
-  ) || [];
-  let studentServices = servicePackages?.filter((p: any) => (!p.type || p.type === 'student_gig') && filterByAll(p)) || [];
-
-  // Enrich Student Services with Ranking & Tags
-  studentServices = studentServices.map((p: any) => {
-    const metrics = getStudentMetrics(p.student_id);
-    const isNew = (new Date().getTime() - new Date(p.created_at).getTime()) < (7 * 24 * 60 * 60 * 1000);
-    const finalTags = [...metrics.tags];
-    if (isNew) finalTags.push("Nowość");
-    
-    return { ...p, ...metrics, tags: finalTags };
-  });
+  );
+  let studentServices: RankedServicePackage[] = packages
+    .filter((p) => (!p.type || p.type === 'student_gig') && filterByAll(p))
+    .map((p) => {
+      const metrics = getStudentMetrics(p.student_id);
+      return { ...p, ...metrics };
+    });
 
   // Apply Sorting
-  const sortBy = (data: any[], order: string) => {
+  const sortBy = <T extends ServicePackageRow & Partial<StudentMetrics>>(data: T[], order: string): T[] => {
     return [...data].sort((a, b) => {
       if (order === 'price_asc') return Number(a.price) - Number(b.price);
       if (order === 'price_desc') return Number(b.price) - Number(a.price);
@@ -557,7 +589,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
                         <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-black uppercase text-[10px] tracking-widest px-2 shadow-sm">Standard Pro</Badge>
                       </div>
                       <p className="text-slate-600 leading-relaxed max-w-4xl font-medium text-lg">
-                        Usługi systemowe to nasz "złoty standard". Proces jest ustandaryzowany, cena stała i nienegocjowalna,
+                        Usługi systemowe to nasz &quot;złoty standard&quot;. Proces jest ustandaryzowany, cena stała i nienegocjowalna,
                         a wykonawcy weryfikowani. <span className="text-indigo-600 font-bold">Ty zamawiasz efekt — my dbamy o resztę.</span>
                       </p>
                     </div>
@@ -567,7 +599,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
 
                 {/* Services Grid (Revamped Cards) */}
                 <div className="grid gap-8 md:grid-cols-2 2xl:grid-cols-3">
-                  {platformServices.map((pkg: any) => {
+                  {platformServices.map((pkg) => {
                     const config = getCategoryConfig(pkg.category || pkg.title);
                     return (
                       <div
@@ -616,7 +648,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
                           </h3>
 
                           <p className="text-slate-500 text-base leading-relaxed mb-10 line-clamp-3 font-medium">
-                            {stripMarkdown(pkg.description)}
+                            {stripMarkdown(pkg.description ?? "")}
                           </p>
 
                           <div className="mt-auto space-y-8">
@@ -700,7 +732,7 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
                 </div>
 
                 <div className="grid gap-6 sm:grid-cols-2 2xl:grid-cols-3">
-                  {studentServices.map((pkg: any) => (
+                  {studentServices.map((pkg) => (
                     <Link
                       key={pkg.id}
                       href={`/app/orders/create/${pkg.id}`}
@@ -730,10 +762,10 @@ export default async function CompanyPackagesPage(props: { searchParams: Promise
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-md">
-                              {pkg.student?.public_name?.[0]?.toUpperCase() || 'S'}
+                              {(Array.isArray(pkg.student) ? pkg.student[0] : pkg.student)?.public_name?.[0]?.toUpperCase() || 'S'}
                             </div>
                             <span className="text-xs font-bold text-slate-600 truncate max-w-[130px]">
-                              {pkg.student?.public_name || 'Student Impact'}
+                              {(Array.isArray(pkg.student) ? pkg.student[0] : pkg.student)?.public_name || 'Student Impact'}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border border-slate-100 rounded-full">

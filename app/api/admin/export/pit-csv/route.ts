@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { csvCell } from "@/lib/security/csv";
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
   const { data: withholdings, error } = await query;
   if (error) {
     console.error("[admin-export:pit-csv]", error);
-    return NextResponse.json({ error: "Nie udalo sie przygotowac eksportu." }, { status: 500 });
+    return NextResponse.json({ error: "Nie udało sie przygotowac eksportu." }, { status: 500 });
   }
   
   if (!withholdings || withholdings.length === 0) {
@@ -76,9 +77,13 @@ export async function GET(req: NextRequest) {
 
   const profileMap = new Map(studentProfiles?.map((s) => [s.user_id, s]) ?? []);
 
-  // Pobierz emaile z auth.users
-  const { data: { users: authUsers } } = await admin.auth.admin.listUsers();
-  const emailMap = new Map(authUsers?.map((u) => [u.id, u.email]) ?? []);
+  const emailEntries = await Promise.all(
+    studentIds.map(async (studentId) => {
+      const { data } = await admin.auth.admin.getUserById(studentId);
+      return [studentId, data.user?.email ?? null] as const;
+    }),
+  );
+  const emailMap = new Map(emailEntries);
 
   // Generuj CSV
   const BOM = "\uFEFF"; // UTF-8 BOM dla Excela
@@ -116,7 +121,7 @@ export async function GET(req: NextRequest) {
       pit,
       net,
       p.contract_id ?? "—",
-    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
+    ].map(csvCell).join(",");
   });
 
   const csv = BOM + [headers.join(","), ...rows].join("\n");

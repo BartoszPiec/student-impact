@@ -2,11 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import FinanceChart from "./FinanceChart";
 import {
-    Wallet, TrendingUp, Calendar, ArrowUpRight, Star,
-    CheckCircle2, Clock, DollarSign, Medal, Sparkles
+    Wallet, TrendingUp, ArrowUpRight,
+    CheckCircle2, Clock, Medal, Sparkles
 } from "lucide-react";
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { PageContainer } from "@/components/ui/page-container";
@@ -14,6 +13,34 @@ import { parseDetailedReviewComment } from "@/lib/reviews";
 import StudentDocumentsPanel from "./student-documents-panel";
 
 export const dynamic = "force-dynamic";
+
+type TitleRelation = { tytul?: string | null; title?: string | null };
+type ApplicationTitleRow = { contract_id: string | null; offers: TitleRelation | TitleRelation[] | null };
+type OrderTitleRow = { contract_id: string | null; packages: TitleRelation | TitleRelation[] | null };
+type MilestoneRow = { id: string; title: string; amount: number | string; status: string; due_at: string | null };
+type ContractRow = { id: string; status: string; created_at: string; milestones: MilestoneRow[] | null };
+type LegacyApplicationRow = {
+    id: string;
+    updated_at: string;
+    offers: { tytul: string | null; price_min: number | null; budget: number | null } | null;
+};
+type ReviewRow = { id: string; rating: number; comment: string | null };
+type HistoryItem = { id: string; title: string; amount: number; date: string; status: "paid" | "pending" };
+
+function firstRelation<T>(relation: T | T[] | null): T | null {
+    return Array.isArray(relation) ? relation[0] ?? null : relation;
+}
+
+function formatMoneyPLN(value: number | string | null | undefined) {
+    const numeric = Number(value ?? 0);
+    const safeValue = Number.isFinite(numeric) ? numeric : 0;
+    const rounded = Math.round((safeValue + Number.EPSILON) * 100) / 100;
+
+    return `${new Intl.NumberFormat("pl-PL", {
+        maximumFractionDigits: rounded % 1 === 0 ? 0 : 2,
+        minimumFractionDigits: 0,
+    }).format(rounded)} PLN`;
+}
 
 export default async function FinancesPage() {
     const supabase = await createClient();
@@ -34,30 +61,27 @@ export default async function FinancesPage() {
         .eq("student_id", user.id)
         .not("contract_id", "is", null);
 
-    const contractIds = [
-        ...(myApps?.map(a => a.contract_id) || []),
-        ...(myOrders?.map(o => o.contract_id) || [])
-    ];
-
     // Map contractId -> Title for display
     const titlesByContractId = new Map<string, string>();
-    myApps?.forEach((a: any) => {
-        if (a.contract_id) titlesByContractId.set(a.contract_id, a.offers?.tytul || "Zlecenie");
+    ((myApps || []) as unknown as ApplicationTitleRow[]).forEach((application) => {
+        const offer = firstRelation(application.offers);
+        if (application.contract_id) titlesByContractId.set(application.contract_id, offer?.tytul || "Zlecenie");
     });
-    myOrders?.forEach((o: any) => {
-        if (o.contract_id) titlesByContractId.set(o.contract_id, o.packages?.title || "Usługa");
+    ((myOrders || []) as unknown as OrderTitleRow[]).forEach((order) => {
+        const packageData = firstRelation(order.packages);
+        if (order.contract_id) titlesByContractId.set(order.contract_id, packageData?.title || "Usługa");
     });
 
     // 2. Fetch Contracts & Milestones directly by student_id
     // This allows picking up contracts that might have missing application/service_order links
-    const { data: contractsData, error: contractsError } = await supabase
+    const { data: contractsData } = await supabase
         .from("contracts")
         .select("id, status, created_at, milestones(id, title, amount, status, due_at)")
         .eq("student_id", user.id)
         .order("created_at", { ascending: false });
 
     // contractIds are still useful for other lookups if needed, but we use the direct data
-    const contracts = contractsData || [];
+    const contracts = (contractsData || []) as unknown as ContractRow[];
 
     // 3. Fetch High Ratings (Successes)
     const { data: reviews } = await supabase
@@ -99,11 +123,11 @@ export default async function FinancesPage() {
     };
 
     // History List
-    const historyItems: any[] = [];
+    const historyItems: HistoryItem[] = [];
 
     // Process Legacy Apps first
-    (legacyApps ?? []).forEach((app: any) => {
-        const amount = app.offers?.budget || app.offers?.price_min || 0;
+    ((legacyApps ?? []) as unknown as LegacyApplicationRow[]).forEach((app) => {
+        const amount = Number(app.offers?.budget || app.offers?.price_min || 0);
         if (amount > 0) {
             totalEarnings += amount;
             completedProjects++;
@@ -121,37 +145,38 @@ export default async function FinancesPage() {
         }
     });
 
-    (contracts ?? []).forEach((c: any) => {
+    contracts.forEach((c) => {
         const title = titlesByContractId.get(c.id) || "Realizacja";
         const isCompletedContract = c.status === 'completed';
 
         if (isCompletedContract) completedProjects++;
 
-        (c.milestones ?? []).forEach((m: any) => {
+        (c.milestones ?? []).forEach((m) => {
+            const amount = Number(m.amount || 0);
             const isPaid = m.status === 'released' || m.status === 'completed' || m.status === 'paid' || m.status === 'accepted';
             const isPending = m.status === 'funded' || m.status === 'delivered';
 
             if (isPaid) {
-                totalEarnings += m.amount;
+                totalEarnings += amount;
                 const dateRaw = m.due_at || c.created_at;
-                addEarnings(dateRaw, m.amount, 'paid');
+                addEarnings(dateRaw, amount, 'paid');
 
                 historyItems.push({
                     id: m.id,
                     title: `${title} - ${m.title}`,
-                    amount: m.amount,
+                    amount,
                     date: dateRaw,
                     status: 'paid'
                 });
             } else if (isPending) {
-                pendingEarnings += m.amount;
+                pendingEarnings += amount;
                 const dateRaw = m.due_at || c.created_at;
-                addEarnings(dateRaw, m.amount, 'pending');
+                addEarnings(dateRaw, amount, 'pending');
 
                 historyItems.push({
                     id: m.id,
                     title: `${title} - ${m.title}`,
-                    amount: m.amount,
+                    amount,
                     date: dateRaw,
                     status: 'pending'
                 });
@@ -170,8 +195,6 @@ export default async function FinancesPage() {
         chartData.push({ key, label, paid: data.paid, pending: data.pending, total: data.paid + data.pending });
     }
 
-    const maxChartValue = Math.max(...chartData.map(d => d.total), 100); // Avoid div by zero
-
     return (
         <main className="pb-20">
             <PremiumPageHeader
@@ -188,9 +211,9 @@ export default async function FinancesPage() {
                 {/* LEFT COL: STATS & CHART */}
                 <div className="lg:col-span-2 space-y-8">
                     {/* KEY METRICS */}
-                    <div className="grid sm:grid-cols-3 gap-6">
-                        <Card className="border-none shadow-xl shadow-emerald-500/5 bg-white rounded-[2rem] overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
-                            <CardContent className="p-6 relative">
+                    <div className="grid gap-4 sm:grid-cols-3 sm:gap-6">
+                        <Card className="border-none shadow-xl shadow-emerald-500/5 bg-white rounded-[1.75rem] sm:rounded-[2rem] overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+                            <CardContent className="relative p-5 sm:p-6">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-[2rem] -mr-4 -mt-4 transition-transform group-hover:scale-110" />
                                 <div className="relative z-10">
                                     <div className="flex justify-between items-start mb-4">
@@ -198,14 +221,16 @@ export default async function FinancesPage() {
                                             <TrendingUp className="w-6 h-6" />
                                         </div>
                                     </div>
-                                    <div className="text-3xl font-black text-slate-900 tracking-tight">{totalEarnings} <span className="text-sm font-bold text-slate-400">PLN</span></div>
+                                    <div className="max-w-full break-words text-[clamp(1.75rem,8vw,2.25rem)] font-black leading-none tracking-tight text-slate-900">
+                                        {formatMoneyPLN(totalEarnings)}
+                                    </div>
                                     <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-2">Wypłacone</div>
                                 </div>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-none shadow-xl shadow-amber-500/5 bg-white rounded-[2rem] overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
-                            <CardContent className="p-6 relative">
+                        <Card className="border-none shadow-xl shadow-amber-500/5 bg-white rounded-[1.75rem] sm:rounded-[2rem] overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+                            <CardContent className="relative p-5 sm:p-6">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-bl-[2rem] -mr-4 -mt-4 transition-transform group-hover:scale-110" />
                                 <div className="relative z-10">
                                     <div className="flex justify-between items-start mb-4">
@@ -213,14 +238,16 @@ export default async function FinancesPage() {
                                             <Clock className="w-6 h-6" />
                                         </div>
                                     </div>
-                                    <div className="text-3xl font-black text-slate-900 tracking-tight">{pendingEarnings} <span className="text-sm font-bold text-slate-400">PLN</span></div>
+                                    <div className="max-w-full break-words text-[clamp(1.75rem,8vw,2.25rem)] font-black leading-none tracking-tight text-slate-900">
+                                        {formatMoneyPLN(pendingEarnings)}
+                                    </div>
                                     <div className="text-[10px] font-black text-amber-600 uppercase tracking-widest mt-2">W toku</div>
                                 </div>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-none shadow-xl shadow-indigo-500/5 bg-white rounded-[2rem] overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
-                            <CardContent className="p-6 relative">
+                        <Card className="border-none shadow-xl shadow-indigo-500/5 bg-white rounded-[1.75rem] sm:rounded-[2rem] overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+                            <CardContent className="relative p-5 sm:p-6">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-bl-[2rem] -mr-4 -mt-4 transition-transform group-hover:scale-110" />
                                 <div className="relative z-10">
                                     <div className="flex justify-between items-start mb-4">
@@ -236,7 +263,7 @@ export default async function FinancesPage() {
                     </div>
 
                     {/* CHART SECTION (Client Component) */}
-                    <div className="bg-white rounded-[2.5rem] p-8 shadow-xl shadow-slate-200/50 border border-slate-100">
+                    <div className="overflow-hidden rounded-[1.75rem] border border-slate-100 bg-white p-4 shadow-xl shadow-slate-200/50 sm:rounded-[2.5rem] sm:p-8">
                         <FinanceChart data={chartData} />
                     </div>
 
@@ -252,24 +279,24 @@ export default async function FinancesPage() {
                         {historyItems.length > 0 ? (
                             <div className="space-y-3">
                                 {historyItems.slice(0, 5).map((item) => (
-                                    <div key={item.id} className="group bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all flex items-center justify-between">
-                                        <div className="flex items-center gap-5">
+                                    <div key={item.id} className="group flex flex-col gap-4 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm transition-all hover:border-indigo-100 hover:shadow-md sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex min-w-0 items-center gap-4 sm:gap-5">
                                             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${item.status === 'paid'
                                                 ? 'bg-emerald-100 text-emerald-600 group-hover:bg-emerald-500 group-hover:text-white'
                                                 : 'bg-amber-100 text-amber-600 group-hover:bg-amber-500 group-hover:text-white'
                                                 }`}>
                                                 {item.status === 'paid' ? <ArrowUpRight className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
                                             </div>
-                                            <div>
-                                                <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{item.title}</div>
+                                            <div className="min-w-0">
+                                                <div className="break-words font-bold text-slate-900 transition-colors group-hover:text-indigo-600">{item.title}</div>
                                                 <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">
                                                     {new Date(item.date).toLocaleDateString('pl-PL')}
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className={`text-lg font-black tabular-nums ${item.status === 'paid' ? 'text-emerald-600' : 'text-slate-300'
+                                        <div className={`shrink-0 text-lg font-black tabular-nums sm:text-right ${item.status === 'paid' ? 'text-emerald-600' : 'text-slate-300'
                                             }`}>
-                                            {item.status === 'paid' ? '+' : ''}{item.amount} PLN
+                                            {item.status === 'paid' ? '+' : ''}{formatMoneyPLN(item.amount)}
                                         </div>
                                     </div>
                                 ))}
@@ -304,12 +331,12 @@ export default async function FinancesPage() {
                         <CardContent className="relative z-10 space-y-4 pt-4">
                             {reviews && reviews.length > 0 ? (
                                 <div className="space-y-3">
-                                    {reviews.map((r: any) => (
+                                    {(reviews as ReviewRow[]).map((r) => (
                                         <div key={r.id} className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 hover:bg-white/20 transition-colors">
                                             <div className="flex text-yellow-300 mb-1 text-xs gap-0.5 shadow-sm">
                                                 {"★".repeat(r.rating)}
                                             </div>
-                                            <p className="text-sm font-medium italic text-indigo-50 line-clamp-2 leading-relaxed">"{parseDetailedReviewComment(r.comment).displayComment || "Bez dodatkowego komentarza."}"</p>
+                                            <p className="text-sm font-medium italic text-indigo-50 line-clamp-2 leading-relaxed">&ldquo;{parseDetailedReviewComment(r.comment).displayComment || "Bez dodatkowego komentarza."}&rdquo;</p>
                                         </div>
                                     ))}
                                 </div>

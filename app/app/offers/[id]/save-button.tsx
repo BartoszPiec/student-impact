@@ -12,6 +12,7 @@ export default function SaveButton({ offerId, isSaved }: { offerId: string; isSa
       variant={isSaved ? "secondary" : "outline"}
       disabled={pending}
       onClick={() => startTransition(async () => toggleSavedOffer(offerId))}
+      className="h-12 w-full rounded-2xl px-6 font-bold sm:w-auto"
     >
       {pending ? "..." : isSaved ? "Usuń z zapisanych" : "Zapisz ofertę"}
     </Button>

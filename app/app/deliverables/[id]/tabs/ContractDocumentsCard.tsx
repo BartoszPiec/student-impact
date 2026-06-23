@@ -122,9 +122,9 @@ export function ContractDocumentsCard({
     setIsAccepting(true);
     try {
       await reopenMilestoneNegotiationAction(contractId, applicationId);
-      toast.success("Wrocono do ustalania etapow.");
+      toast.success("Wrocono do ustalania etapów.");
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Nie udalo sie cofnac etapow");
+      toast.error(err instanceof Error ? err.message : "Nie udało sie cofnac etapów");
     } finally {
       setIsAccepting(false);
     }
@@ -170,7 +170,7 @@ export function ContractDocumentsCard({
                 disabled={isAccepting}
                 className="mt-3 rounded-xl border-slate-200"
               >
-                Wroc do poprawy etapow
+                Wroc do poprawy etapów
               </Button>
             ) : null}
           </div>
@@ -201,7 +201,7 @@ export function ContractDocumentsCard({
               {/* Contract A — for Company */}
               {isCompany && contractA && (
                 <DocumentRow
-                  label="Umowa o swiadczenie uslugi"
+                  label="Umowa o swiadczenie usługi"
                   sublabel="Firma - Student Impact"
                   doc={contractA}
                   accepted={!!companyAcceptedAt}
@@ -260,7 +260,7 @@ export function ContractDocumentsCard({
                   disabled={isAccepting}
                   className="w-full rounded-xl border-slate-200"
                 >
-                  Wroc do ustalania etapow
+                  Wroc do ustalania etapów
                 </Button>
               </div>
             ) : null}

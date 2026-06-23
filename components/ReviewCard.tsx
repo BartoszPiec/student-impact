@@ -49,7 +49,7 @@ function formatDate(ts?: string | null) {
     if (!ts) return "";
     try {
         return new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium" }).format(new Date(ts));
-    } catch (e) {
+    } catch {
         return "";
     }
 }
@@ -58,7 +58,6 @@ export function ReviewCard({
     rating,
     comment,
     createdAt,
-    reviewerId,
     reviewerName,
     reviewerLink
 }: ReviewCardProps) {
@@ -95,7 +94,7 @@ export function ReviewCard({
                 {parsedReview.displayComment ? (
                     <div className="relative">
                         <div className="text-sm text-slate-700 leading-relaxed italic">
-                            "{parsedReview.displayComment}"
+                            &ldquo;{parsedReview.displayComment}&rdquo;
                         </div>
                     </div>
                 ) : (

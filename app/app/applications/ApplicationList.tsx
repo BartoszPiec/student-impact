@@ -10,6 +10,7 @@ import {
   Clock,
   FileText,
   MessageSquare,
+  Star,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -148,6 +149,7 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
   const { offer, stage } = app;
   const isCountered = stage === "countered";
   const isInProgress = stage === "in_progress";
+  const isDone = stage === "done";
   const agreedMoney = app.agreed_stawka ?? fromMinorUnits(app.agreed_stawka_minor);
   const isJobOffer =
     offer?.typ === "job" || offer?.typ === "Praca" || offer?.typ === "praca";
@@ -174,7 +176,7 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
             )}
           />
 
-          <div className="flex flex-col flex-1 gap-0">
+          <div className="flex min-w-0 flex-1 flex-col gap-0">
             {/* Negotiation alert banner */}
             {isCountered && app.counter_stawka && (
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-6 py-3">
@@ -196,10 +198,10 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
               </div>
             )}
 
-            <div className="flex flex-col md:flex-row flex-1 p-6 justify-between gap-6 items-start md:items-center">
+            <div className="flex flex-1 flex-col items-start justify-between gap-5 p-5 sm:p-6 md:flex-row md:items-center">
               <div className="space-y-3 flex-1 w-full">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <h3 className="font-extrabold text-xl text-slate-900 leading-tight">
+                  <h3 className="break-words text-lg font-extrabold leading-tight text-slate-900 sm:text-xl">
                     {offer?.tytul ?? "Nieznana oferta"}
                   </h3>
                   <StatusBadge status={app.status} stage={stage} />
@@ -222,7 +224,7 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                 </div>
 
                 {app.message_to_company && (
-                  <div className="relative p-4 bg-slate-50/80 border border-slate-100 rounded-2xl text-sm italic text-slate-600 leading-relaxed max-w-2xl">
+                  <div className="relative max-w-2xl break-words rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-sm italic leading-relaxed text-slate-600">
                     <span className="font-bold text-slate-500 not-italic block text-[10px] uppercase tracking-widest mb-1">
                       Twoja notatka:
                     </span>
@@ -231,7 +233,7 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                 )}
 
                 {stage === "cancelled" && app.cancel_reason && (
-                  <div className="relative p-4 bg-red-50/70 border border-red-100 rounded-2xl text-sm text-red-700 leading-relaxed max-w-2xl">
+                  <div className="relative max-w-2xl break-words rounded-2xl border border-red-100 bg-red-50/70 p-4 text-sm leading-relaxed text-red-700">
                     <span className="font-bold text-red-600 not-italic block text-[10px] uppercase tracking-widest mb-1">
                       Powód anulowania:
                     </span>
@@ -240,12 +242,12 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                 )}
               </div>
 
-              <div className="flex flex-col md:items-end items-start gap-4">
+              <div className="flex w-full flex-col items-start gap-4 md:w-auto md:items-end">
                 <div className="flex flex-col md:items-end">
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">
                     Stawka / Budżet
                   </span>
-                  <div className="font-black text-2xl text-slate-900 flex flex-col md:items-end gap-0.5">
+                  <div className="flex flex-col gap-0.5 text-xl font-black text-slate-900 sm:text-2xl md:items-end">
                     {agreedMoney ? (
                       <span className="text-emerald-600">{formatMoney(agreedMoney)}</span>
                     ) : isCountered && app.counter_stawka ? (
@@ -326,6 +328,25 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                       </form>
                       <WithdrawApplicationButton applicationId={app.id} />
                     </div>
+                  ) : isDone ? (
+                    <>
+                      <Button
+                        asChild
+                        className="h-10 rounded-xl bg-slate-900 text-white px-5 font-bold hover:bg-indigo-600 transition-all duration-300"
+                      >
+                        <Link href={`/app/review/${app.id}`}>
+                          <Star className="mr-2 h-4 w-4" />
+                          Wystaw opinię
+                        </Link>
+                      </Button>
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="h-10 rounded-xl border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 transition-all px-6"
+                      >
+                        <Link href={`/app/deliverables/${app.id}`}>Szczegóły</Link>
+                      </Button>
+                    </>
                   ) : stage === "sent" ? (
                     <>
                       <Button
@@ -381,10 +402,10 @@ function SavedOfferCard({ offer }: { offer: OfferSummary | null }) {
             )}
           />
 
-          <div className="flex flex-col md:flex-row flex-1 p-6 justify-between gap-6 items-start md:items-center">
+          <div className="flex min-w-0 flex-1 flex-col items-start justify-between gap-5 p-5 sm:p-6 md:flex-row md:items-center">
             <div className="space-y-3 flex-1 w-full">
               <div className="flex items-center gap-3 flex-wrap">
-                <h3 className="font-extrabold text-xl text-slate-900 leading-tight">
+                <h3 className="break-words text-lg font-extrabold leading-tight text-slate-900 sm:text-xl">
                   {offer?.tytul ?? "Nieznana oferta"}
                 </h3>
                 <Badge className="bg-amber-50 text-amber-600 border-amber-100 rounded-full px-3 py-1 font-bold gap-1.5 shrink-0 shadow-sm shadow-amber-50">
@@ -405,7 +426,7 @@ function SavedOfferCard({ offer }: { offer: OfferSummary | null }) {
               ) : null}
             </div>
 
-            <div className="flex flex-col md:items-end items-start gap-4">
+            <div className="flex w-full flex-col items-start gap-4 md:w-auto md:items-end">
               <div className="flex flex-col md:items-end">
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">
                   Stawka
@@ -476,22 +497,22 @@ function ClientApplicationFilter({
   const displayed = filter === "all" ? items : filter === "micro" ? micro : standard;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-white/50 backdrop-blur-sm border border-slate-200 rounded-3xl shadow-sm">
-        <div className="flex items-center gap-3 ml-2">
+    <div className="space-y-6 animate-in fade-in duration-500 sm:space-y-8">
+      <div className="flex flex-col gap-4 rounded-[1.75rem] border border-slate-200 bg-white/50 p-3 shadow-sm backdrop-blur-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:rounded-3xl sm:p-4">
+        <div className="flex items-center gap-3 sm:ml-2">
           <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
           <span className="text-xs font-black uppercase text-slate-400 tracking-widest">
             Filtruj zestawienie
           </span>
         </div>
 
-        <div className="flex bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/50">
+        <div className="grid w-full grid-cols-3 gap-1.5 rounded-2xl border border-slate-200/50 bg-slate-100/80 p-1.5 sm:w-auto sm:flex">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setFilter("all")}
             className={cn(
-              "text-xs px-5 h-9 rounded-xl font-bold transition-all duration-300",
+              "h-9 justify-center rounded-xl px-2 text-[11px] font-bold transition-all duration-300 sm:px-5 sm:text-xs",
               filter === "all"
                 ? "bg-white text-indigo-700 shadow-md ring-1 ring-slate-200"
                 : "text-slate-500 hover:text-slate-700",
@@ -504,26 +525,28 @@ function ClientApplicationFilter({
             size="sm"
             onClick={() => setFilter("standard")}
             className={cn(
-              "text-xs px-5 h-9 rounded-xl font-bold gap-2 transition-all duration-300",
+              "h-9 justify-center gap-1.5 rounded-xl px-2 text-[11px] font-bold transition-all duration-300 sm:gap-2 sm:px-5 sm:text-xs",
               filter === "standard"
                 ? "bg-white text-indigo-700 shadow-md ring-1 ring-slate-200"
                 : "text-slate-500 hover:text-slate-700",
             )}
           >
-            <Briefcase className="w-3.5 h-3.5" /> Praca ({standard.length})
+            <Briefcase className="h-3.5 w-3.5" /> Praca ({standard.length})
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setFilter("micro")}
             className={cn(
-              "text-xs px-5 h-9 rounded-xl font-bold gap-2 transition-all duration-300",
+              "h-9 justify-center gap-1.5 rounded-xl px-2 text-[11px] font-bold transition-all duration-300 sm:gap-2 sm:px-5 sm:text-xs",
               filter === "micro"
                 ? "bg-white text-indigo-700 shadow-md ring-1 ring-slate-200"
                 : "text-slate-500 hover:text-slate-700",
             )}
           >
-            <Zap className="w-3.5 h-3.5" /> Mikrozlecenia ({micro.length})
+            <Zap className="h-3.5 w-3.5" />
+            <span className="sm:hidden">Mikro ({micro.length})</span>
+            <span className="hidden sm:inline">Mikrozlecenia ({micro.length})</span>
           </Button>
         </div>
       </div>
@@ -535,7 +558,7 @@ function ClientApplicationFilter({
           </div>
           <h4 className="text-lg font-bold text-slate-800 mb-2">Brak wynikow</h4>
           <p className="text-slate-400 text-sm max-w-xs mx-auto">
-            Sprobuj zmienic parametry filtrowania lub wrocic do widoku wszystkich
+            Spróbuj zmienić parametry filtrowania lub wrócić do widoku wszystkich
             aktywnosci.
           </p>
         </div>

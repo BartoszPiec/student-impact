@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { JobBoardView } from "./job-board-view";
 import type { JobOffer } from "./job-card";
 import { PageContainer } from "@/components/ui/page-container";
+import { getRequestContext } from "@/lib/auth/request-context";
 
 export const dynamic = "force-dynamic";
 const JOBS_PAGE_SIZE = 24;
@@ -24,16 +25,6 @@ type OfferQueryRow = {
   salary_range_min: number | null;
   salary_range_max: number | null;
   obligations?: string[] | null;
-  company_profiles:
-    | {
-        nazwa?: string | null;
-        logo_url?: string | null;
-      }
-    | {
-        nazwa?: string | null;
-        logo_url?: string | null;
-      }[]
-    | null;
 };
 
 type UserApplicationRow = {
@@ -43,16 +34,6 @@ type UserApplicationRow = {
 type LockedApplicationRow = {
   offer_id: string | null;
 };
-
-function unwrapCompanyProfile(
-  relation: OfferQueryRow["company_profiles"],
-): { nazwa?: string | null; logo_url?: string | null } | null {
-  if (Array.isArray(relation)) {
-    return relation[0] ?? null;
-  }
-
-  return relation ?? null;
-}
 
 export default async function JobsPage({
   searchParams,
@@ -66,62 +47,73 @@ export default async function JobsPage({
   const currentPage = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
 
   const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) redirect("/auth");
+  const { user, role } = await getRequestContext();
+  if (!user) redirect("/auth");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", userData.user.id)
-    .single();
-
-  if (profile?.role === "company") {
+  if (role === "company") {
     redirect("/app/company/packages");
   }
 
-  const { count: totalOffersCount } = await supabase
-    .from("offers")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "published");
+  const pageStart = (currentPage - 1) * JOBS_PAGE_SIZE;
+  const pageEnd = pageStart + JOBS_PAGE_SIZE - 1;
 
-  const fetchLimit = currentPage * JOBS_PAGE_SIZE;
+  const [offersCountResult, offersResult, userApplicationsResult] = await Promise.all([
+    supabase
+      .from("offers")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published"),
+    supabase
+      .from("offers")
+      .select(`
+        id, tytul, opis, typ, stawka, status, created_at, kategoria,
+        location, contract_type, technologies, is_remote, company_id, is_platform_service,
+        salary_range_min, salary_range_max, obligations
+      `)
+      .eq("status", "published")
+      .order("created_at", { ascending: false })
+      .range(pageStart, pageEnd),
+    supabase
+      .from("applications")
+      .select("offer_id")
+      .eq("student_id", user.id),
+  ]);
 
-  const { data: offersData, error } = await supabase
-    .from("offers")
-    .select(`
-      id, tytul, opis, typ, stawka, status, created_at, kategoria,
-      location, contract_type, technologies, is_remote, company_id, is_platform_service,
-      salary_range_min, salary_range_max, obligations,
-      company_profiles ( nazwa, logo_url )
-    `)
-    .eq("status", "published")
-    .range(0, fetchLimit - 1)
-    .order("created_at", { ascending: false });
+  const totalOffersCount = offersCountResult.count;
+  const { data: offersData, error } = offersResult;
 
   if (error) {
     console.error("Error fetching job offers:", error);
   }
 
   const offerRows = (offersData || []) as OfferQueryRow[];
+  const companyIds = Array.from(new Set(offerRows.map((offer) => offer.company_id).filter((id): id is string => Boolean(id))));
   const offerIds = offerRows.map((offer) => offer.id);
+  const [companyProfilesResult, lockedApplicationsResult] = await Promise.all([
+    companyIds.length > 0
+      ? supabase
+        .from("company_public_profiles")
+        .select("user_id, nazwa, logo_url")
+        .in("user_id", companyIds)
+      : Promise.resolve({ data: [] }),
+    offerIds.length > 0
+      ? supabase
+        .from("applications")
+        .select("offer_id")
+        .in("offer_id", offerIds)
+        .in("status", ["accepted", "in_progress", "completed"])
+      : Promise.resolve({ data: [] }),
+  ]);
+  const companyProfiles = companyProfilesResult.data;
+  const companyProfileMap = new Map(
+    ((companyProfiles ?? []) as Array<{ user_id: string; nazwa?: string | null; logo_url?: string | null }>)
+      .map((profile) => [profile.user_id, profile]),
+  );
   const lockedOfferIds = new Set<string>();
+  ((lockedApplicationsResult.data || []) as LockedApplicationRow[]).forEach((application) => {
+    if (application.offer_id) lockedOfferIds.add(application.offer_id);
+  });
 
-  if (offerIds.length > 0) {
-    const { data: lockedApplications } = await supabase
-      .from("applications")
-      .select("offer_id")
-      .in("offer_id", offerIds)
-      .in("status", ["accepted", "in_progress", "completed"]);
-
-    ((lockedApplications || []) as LockedApplicationRow[]).forEach((application) => {
-      if (application.offer_id) lockedOfferIds.add(application.offer_id);
-    });
-  }
-
-  const { data: userApps } = await supabase
-    .from("applications")
-    .select("offer_id")
-    .eq("student_id", userData.user.id);
+  const userApps = userApplicationsResult.data;
 
   const appliedOfferIds = new Set(
     ((userApps || []) as UserApplicationRow[])
@@ -140,7 +132,7 @@ export default async function JobsPage({
       : Math.max(visibleOfferRows.length, totalOffersCount - lockedOfferIds.size);
 
   const offers: JobOffer[] = visibleOfferRows.map((offer) => {
-    const companyProfile = unwrapCompanyProfile(offer.company_profiles);
+    const companyProfile = offer.company_id ? companyProfileMap.get(offer.company_id) : null;
 
     return {
       id: offer.id,

@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
       .select("id");
 
     if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      console.error("[cron:cleanup-expired-sessions] update error:", error.message);
+      return NextResponse.json({ ok: false, error: "Nie udało sie wykonac zadania cyklicznego." }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    console.error("[cron:cleanup-expired-sessions] unexpected error:", message);
+    return NextResponse.json({ ok: false, error: "Nie udało sie wykonac zadania cyklicznego." }, { status: 500 });
   }
 }

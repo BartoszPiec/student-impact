@@ -183,7 +183,7 @@ export async function generateCompanyInvoice(
             .maybeSingle()
         ).data;
 
-    const offerTitle = (contract.applications as { offers?: { tytul?: string } } | null)?.offers?.tytul || "Usluga platformowa";
+    const offerTitle = (contract.applications as { offers?: { tytul?: string } } | null)?.offers?.tytul || "Usługa platformowa";
     const amountNet = amountGross - platformFee;
     const tempStoragePath = `contracts/${contractId}/invoice-drafts/company-${randomUUID()}.pdf`;
 
@@ -281,7 +281,7 @@ export async function generateStudentInvoice(
 
     if (existingInvoicesError) {
       console.error("[generate-invoice] Existing student invoice guard error:", existingInvoicesError);
-      throw new Error("Nie udalo sie sprawdzic istniejacego rachunku studenta.");
+      throw new Error("Nie udało sie sprawdzic istniejacego rachunku studenta.");
     }
 
     const existingInvoice = existingInvoices?.[0];
@@ -295,7 +295,7 @@ export async function generateStudentInvoice(
 
       if (existingDocumentError) {
         console.error("[generate-invoice] Existing contract_document sync error:", existingDocumentError);
-        throw new Error("Nie udalo sie zsynchronizowac dokumentu rachunku.");
+        throw new Error("Nie udało sie zsynchronizowac dokumentu rachunku.");
       }
 
       if (!existingDocumentRows?.length) {

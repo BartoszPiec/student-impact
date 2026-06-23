@@ -29,6 +29,7 @@ import {
 import { findConversationForServiceOrder } from "@/lib/services/service-order-conversations";
 import { isQuoteSnapshot, isRequestSnapshot } from "@/lib/services/service-order-snapshots";
 import { createClient } from "@/lib/supabase/server";
+import { getRequestContext } from "@/lib/auth/request-context";
 
 import CompanyOrderDetailActions from "./company-order-detail-actions";
 import { getCompanyOrderStatusMeta } from "../company-order-status";
@@ -244,13 +245,12 @@ export default async function CompanyOrderDetailPage(props: Props) {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, role } = await getRequestContext();
 
   if (!user) {
     redirect("/auth");
   }
+  if (role !== "company") redirect("/app");
 
   const { data: order, error } = await supabase
     .from("service_orders")
@@ -297,22 +297,23 @@ export default async function CompanyOrderDetailPage(props: Props) {
   const isPendingStudentConfirmation =
     hasStudentAssigned && ["pending_student_confirmation", "pending_confirmation"].includes(order.status);
 
-  const { data: student } = hasStudentAssigned
-    ? await supabase.from("student_profiles").select("*").eq("user_id", order.student_id).maybeSingle()
-    : { data: null };
-
-  const conv = hasStudentAssigned
-    ? await findConversationForServiceOrder(supabase, {
-        serviceOrderId: order.id,
-        companyId: user.id,
-        studentId: order.student_id,
-        packageId,
-      })
-    : null;
-
-  const availableStudents = isPendingSelection
-    ? await fetchAvailableLogoStudents(supabase, { maxActiveOrders: 1 })
-    : [];
+  const [studentResult, conv, availableStudents] = await Promise.all([
+    hasStudentAssigned
+      ? supabase.from("student_profiles").select("public_name, miasto, uczelnia, bio").eq("user_id", order.student_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    hasStudentAssigned
+      ? findConversationForServiceOrder(supabase, {
+          serviceOrderId: order.id,
+          companyId: user.id,
+          studentId: order.student_id,
+          packageId,
+        })
+      : Promise.resolve(null),
+    isPendingSelection
+      ? fetchAvailableLogoStudents(supabase, { maxActiveOrders: 1 })
+      : Promise.resolve([]),
+  ]);
+  const student = studentResult.data;
 
   const chatLink = conv ? `/app/chat/${conv.id}` : "/app/chat";
   const statusInfo = getCompanyOrderStatusMeta(order.status);
@@ -733,7 +734,7 @@ export default async function CompanyOrderDetailPage(props: Props) {
                   <h3 className="text-base font-black text-slate-900">Prywatny entry point</h3>
                 </div>
                 <p className="text-sm font-medium leading-relaxed text-slate-500">
-                  To zamówienie zostało zainicjowane przez studenta jako prywatna propozycja współpracy. Po akceptacji
+                  To zamówienie zostało zainicjowane przez studenta jako prywatną propozycja współpracy. Po akceptacji
                   przejdzie do tego samego flow kontraktu, escrow i realizacji co standardowe zamówienia usług.
                 </p>
               </div>

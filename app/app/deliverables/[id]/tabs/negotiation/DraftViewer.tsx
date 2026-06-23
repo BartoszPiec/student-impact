@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Trash2, RotateCcw, AlertOctagon, CheckCircle2 } from "lucide-react";
+import { Trash2, RotateCcw, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { MilestoneItem, DraftRole } from "./types";
@@ -27,7 +26,7 @@ interface Props {
     acceptedDiffs?: Set<string>;
 }
 
-export function DraftViewer({ applicationId, contractId, milestones, diffBase, isStudent, isCompany, onRefresh, onRestore, onConfirm, onRevert, onDelete, onAccept, acceptedDiffs }: Props) {
+export function DraftViewer({ applicationId, contractId, milestones, diffBase, isCompany, onRefresh, onRestore, onConfirm, onRevert, onDelete, onAccept, acceptedDiffs }: Props) {
     const [loading, setLoading] = useState(false);
     const supabase = createClient();
 
@@ -84,7 +83,7 @@ export function DraftViewer({ applicationId, contractId, milestones, diffBase, i
             onRefresh();
         } catch (e: unknown) {
             console.error("Draft approval failed:", e);
-            toast.error("Nie udalo sie zatwierdzic warunkow. Sprobuj ponownie.");
+            toast.error("Nie udało sie zatwierdzic warunków. Spróbuj ponownie.");
         } finally {
             setLoading(false);
         }
@@ -97,7 +96,8 @@ export function DraftViewer({ applicationId, contractId, milestones, diffBase, i
             if (error) throw error;
             toast.success("Otwarto tryb edycji");
             onRefresh();
-        } catch (e: any) {
+        } catch (caught: unknown) {
+            const e = caught instanceof Error ? caught : new Error("Nieznany błąd");
             toast.error("Błąd: " + e.message);
         } finally {
             setLoading(false);
@@ -111,7 +111,7 @@ export function DraftViewer({ applicationId, contractId, milestones, diffBase, i
             </h3>
 
             <div className="space-y-4">
-                {mergedList.map((item, idx) => {
+                {mergedList.map((item) => {
                     const { type, current, base } = item;
 
                     if (type === 'DELETED') {

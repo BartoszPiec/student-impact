@@ -13,6 +13,26 @@ export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
 const getStr = (sp: SP, key: string) => (typeof sp[key] === "string" ? (sp[key] as string) : "");
 
+type SavedOffer = {
+  id: string;
+  tytul: string;
+  opis: string | null;
+  typ: string;
+  czas: string | null;
+  wymagania: string | null;
+  stawka: number | null;
+  status: string;
+  created_at: string;
+  is_platform_service: boolean | null;
+};
+
+type SavedOfferRow = {
+  created_at: string;
+  offers: SavedOffer | SavedOffer[] | null;
+};
+
+type SavedItem = { saved_at: string; offer: SavedOffer };
+
 export default async function SavedOffersPage({
   searchParams,
 }: {
@@ -46,12 +66,12 @@ export default async function SavedOffersPage({
     .order("created_at", { ascending: false });
 
   // Normalizacja + filtracja po status
-  let items = (rows ?? [])
-    .map((r: any) => {
+  let items = ((rows ?? []) as unknown as SavedOfferRow[])
+    .map((r) => {
       const offer = Array.isArray(r.offers) ? r.offers[0] : r.offers;
       return { saved_at: r.created_at, offer };
     })
-    .filter((x) => x.offer && x.offer.status === "published");
+    .filter((item): item is SavedItem => item.offer?.status === "published");
 
   const lockedOfferIds = new Set<string>();
   const offerIds = items.map((item) => item.offer.id).filter(Boolean);
@@ -63,7 +83,7 @@ export default async function SavedOffersPage({
       .in("offer_id", offerIds)
       .in("status", ["accepted", "in_progress", "completed"]);
 
-    (lockedApplications ?? []).forEach((application: any) => {
+    (lockedApplications ?? []).forEach((application) => {
       if (application?.offer_id) lockedOfferIds.add(application.offer_id);
     });
   }
@@ -156,13 +176,13 @@ export default async function SavedOffersPage({
 
       {error && (
         <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
-          Nie udalo sie pobrac zapisanych ofert. Odswiez strone albo wroc za chwile.
+          Nie udało sie pobrać zapisanych ofert. Odśwież stronę albo wróć za chwile.
         </div>
       )}
 
       {/* LISTA */}
       <div className="grid gap-4 md:grid-cols-2">
-        {items.map(({ offer }: any) => {
+        {items.map(({ offer }) => {
           const removeAction = removeSavedOffer.bind(null, offer.id);
 
           return (

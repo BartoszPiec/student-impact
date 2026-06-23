@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-function formatDate(iso?: string) {
+function formatDate(iso?: string | null) {
     if (!iso) return "";
     return new Date(iso).toLocaleDateString("pl-PL", {
         year: "numeric",
@@ -18,7 +18,18 @@ export function OfferCard({
     offer,
     applicationStatus
 }: {
-    offer: any;
+    offer: {
+        id: string;
+        tytul: string;
+        opis?: string | null;
+        typ?: string | null;
+        created_at?: string | null;
+        czas?: string | null;
+        is_platform_service?: boolean | null;
+        stawka?: number | null;
+        salary_range_min?: number | null;
+        salary_range_max?: number | null;
+    };
     applicationStatus?: { status: string; created_at: string | null } | null
 }) {
     return (

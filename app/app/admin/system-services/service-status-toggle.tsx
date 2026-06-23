@@ -19,10 +19,10 @@ export function ServiceStatusToggle({ serviceId, currentStatus }: ServiceStatusT
     startTransition(async () => {
       const result = await updateSystemServiceStatus(serviceId, nextStatus);
       if (result?.error) {
-        toast.error(`Nie udalo sie zapisac statusu: ${result.error}`);
+        toast.error(`Nie udało sie zapisać statusu: ${result.error}`);
         return;
       }
-      toast.success(isActive ? "Usluga zostala zarchiwizowana." : "Usluga zostala przywrocona.");
+      toast.success(isActive ? "Usługa została zarchiwizowana." : "Usługa została przywrócona.");
     });
   };
 

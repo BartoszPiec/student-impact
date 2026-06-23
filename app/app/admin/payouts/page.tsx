@@ -86,7 +86,7 @@ export default function AdminPayoutsPage() {
       const data = await getPayouts(statusFilter);
       setPayouts(Array.isArray(data) ? (data as PayoutRow[]) : []);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Blad ladowania wyplat";
+      const message = error instanceof Error ? error.message : "Błąd ładowania wypłat";
       toast.error(message);
     } finally {
       setLoading(false);
@@ -146,7 +146,7 @@ export default function AdminPayoutsPage() {
         toast.success("Oznaczono jako przetwarzane.");
         await loadPayouts(filter);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Blad aktualizacji statusu.";
+        const message = error instanceof Error ? error.message : "Błąd aktualizacji statusu.";
         toast.error(message);
       } finally {
         setActionId(null);
@@ -155,7 +155,7 @@ export default function AdminPayoutsPage() {
   };
 
   const handleMarkPaid = (payoutId: string) => {
-    if (!confirm("Potwierdzasz, ze srodki zostaly przelane do studenta?")) return;
+    if (!confirm("Potwierdzasz, ze srodki zostały przelane do studenta?")) return;
 
     setActionId(payoutId);
     startTransition(async () => {
@@ -164,7 +164,7 @@ export default function AdminPayoutsPage() {
         toast.success("Oznaczono jako wyplacone.");
         await loadPayouts(filter);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Blad zatwierdzenia wyplaty.";
+        const message = error instanceof Error ? error.message : "Błąd zatwierdzenia wypłaty.";
         toast.error(message);
       } finally {
         setActionId(null);
@@ -199,8 +199,8 @@ export default function AdminPayoutsPage() {
               Wyplaty
             </h1>
             <p className="max-w-2xl font-medium leading-relaxed text-slate-400">
-              Operacyjny panel wyplat dla studentow. Pozwala szybko wyszukiwac rekordy,
-              filtrowac statusy i zamykac payout flow bez zmiany schemy.
+              Operacyjny panel wypłat dla studentow. Pozwala szybko wyszukiwać rekordy,
+              filtrowac statusy i zamykać payout flow bez zmiany schemy.
             </p>
           </div>
 
@@ -211,7 +211,7 @@ export default function AdminPayoutsPage() {
             className="gap-2 border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Odswiez
+            Odśwież
           </Button>
         </div>
       </div>
@@ -335,7 +335,7 @@ export default function AdminPayoutsPage() {
                   <td colSpan={8} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-                      <p className="font-bold text-slate-500">Ladowanie wyplat...</p>
+                      <p className="font-bold text-slate-500">Ładowanie wypłat...</p>
                     </div>
                   </td>
                 </tr>
@@ -348,8 +348,8 @@ export default function AdminPayoutsPage() {
                       </div>
                       <p className="font-bold text-slate-500">
                         {search
-                          ? "Brak wyplat pasujacych do wyszukiwania."
-                          : "Brak wyplat do wyswietlenia."}
+                          ? "Brak wypłat pasujacych do wyszukiwania."
+                          : "Brak wypłat do wyświetlenia."}
                       </p>
                     </div>
                   </td>

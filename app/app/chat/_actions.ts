@@ -9,6 +9,52 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { buildRateLimitKey, enforceRateLimit } from "@/lib/rate-limit";
 import { ensureConversationForApplication } from "@/lib/services/service-order-conversations";
 import { rejectCompetingApplicationsForOffer } from "@/lib/services/application-chat-closure";
+import { assertCanAccessStorageRef, assertUploadedObjectExists } from "@/lib/security/storage";
+
+export type PaginatedChatMessage = {
+  id: string;
+  sender_id: string;
+  content: string | null;
+  created_at: string;
+  read_at: string | null;
+  attachment_url: string | null;
+  attachment_type: string | null;
+  flagged_by: string[] | null;
+  event: string | null;
+  payload: Record<string, unknown> | null;
+};
+
+export async function getOlderMessages(
+  conversationId: string,
+  beforeCreatedAt: string,
+  pageSize = 100,
+): Promise<PaginatedChatMessage[]> {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData.user;
+  if (!user) throw new Error("Musisz być zalogowany, aby pobrać wiadomości.");
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .or(`student_id.eq.${user.id},company_id.eq.${user.id}`)
+    .maybeSingle();
+
+  if (!conversation) throw new Error("Nie masz dostępu do tej rozmowy.");
+
+  const safePageSize = Math.min(Math.max(pageSize, 1), 100);
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id, sender_id, content, created_at, read_at, flagged_by, attachment_url, attachment_type, event, payload")
+    .eq("conversation_id", conversationId)
+    .lt("created_at", beforeCreatedAt)
+    .order("created_at", { ascending: false })
+    .limit(safePageSize);
+
+  if (error) throw new Error("Nie udało się pobrać starszych wiadomości.");
+  return ((data ?? []) as PaginatedChatMessage[]).reverse();
+}
 
 // --- EXISTING FUNCTIONS (KEPT FOR ROUTING/INIT) ---
 
@@ -163,7 +209,7 @@ export async function openChatForOfferInquiry(offerId: string) {
     .maybeSingle();
 
   if (profileError || profile?.role !== "student") {
-    throw new Error("Tylko konto studenta moze rozpoczac rozmowe o ofercie.");
+    throw new Error("Tylko konto studenta może rozpoczac rozmowe o ofercie.");
   }
 
   const { data: offer } = await supabase
@@ -216,7 +262,7 @@ export async function markMessagesAsRead(conversationId: string) {
     .is("read_at", null);
 
   if (error) {
-    throw new Error("Nie udalo sie oznaczyc wiadomosci jako przeczytanych.");
+    throw new Error("Nie udało się oznaczyć wiadomości jako przeczytanych.");
   }
 
   revalidatePath("/app/chat");
@@ -244,7 +290,7 @@ export async function markConversationAsUnread(conversationId: string) {
     .eq("id", lastIncoming.id);
 
   if (error) {
-    throw new Error("Nie udalo sie oznaczyc rozmowy jako nieprzeczytanej.");
+    throw new Error("Nie udało się oznaczyć rozmowy jako nieprzeczytanej.");
   }
 
   revalidatePath("/app/chat");
@@ -280,7 +326,7 @@ export async function toggleMessageFlag(conversationId: string, messageId: strin
     .eq("conversation_id", conversationId);
 
   if (error) {
-    throw new Error("Nie udalo sie zaktualizowac flagi wiadomosci.");
+    throw new Error("Nie udało się zaktualizować flagi wiadomości.");
   }
 
   revalidatePath(`/app/chat/${conversationId}`);
@@ -416,7 +462,7 @@ async function assertCanSendMessage(
   }).length;
 
   if (blockingStudentMessagesCount > 0) {
-    throw new Error("Poczekaj na odpowiedz firmy, zanim wyslesz kolejna wiadomosc.");
+    throw new Error("Poczekaj na odpowiedź firmy, zanim wyślesz kolejną wiadomość.");
   }
 }
 
@@ -428,7 +474,7 @@ async function enforceMessageRateLimit(userId: string, action: string, conversat
   const rateKey = buildRateLimitKey(["chat", action, userId, ip, conversationId]);
   const rateLimitResult = await enforceRateLimit("message", rateKey);
   if (!rateLimitResult.success) {
-    throw new Error("Zbyt wiele wiadomosci. Sprobuj ponownie za chwile.");
+    throw new Error("Zbyt wiele wiadomości. Spróbuj ponownie za chwilę.");
   }
 }
 
@@ -462,11 +508,11 @@ export async function sendFileMessage(conversationId: string, fileName: string, 
   await enforceMessageRateLimit(user.id, "file", conversationId);
   await assertCanSendMessage(supabase, user.id, conv);
 
-  // Walidacja URL pliku — musi być ścieżką Supabase Storage (relatywna) lub https://
-  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const isValidFileUrl = fileUrl.startsWith(SUPABASE_URL) || fileUrl.startsWith("/") || (!fileUrl.startsWith("javascript:") && !fileUrl.startsWith("data:") && fileUrl.startsWith("https://"));
-  if (!isValidFileUrl) throw new Error("Nieprawidłowy URL pliku");
-
+  const storageRef = await assertCanAccessStorageRef(user.id, fileUrl);
+  if (storageRef.bucket !== "chat-attachments") {
+    throw new Error("Nieprawidłowy bucket załącznika.");
+  }
+  await assertUploadedObjectExists(storageRef);
   // Walidacja nazwy pliku
   if (!fileName || fileName.length > 255) throw new Error("Nieprawidłowa nazwa pliku");
   if (fileType && fileType.length > 100) throw new Error("Nieprawidłowy typ pliku");
@@ -476,10 +522,10 @@ export async function sendFileMessage(conversationId: string, fileName: string, 
     conversation_id: conversationId,
     sender_id: user.id,
     content: fileName,
-    attachment_url: fileUrl,
+    attachment_url: storageRef.ref,
     attachment_type: fileType,
     event: "file.sent",
-    payload: { name: fileName, url: fileUrl, type: fileType }
+    payload: { name: fileName, url: storageRef.ref, type: fileType }
   });
 
   const targetUserId = user.id === conv.company_id ? conv.student_id : conv.company_id;

@@ -120,7 +120,7 @@ export default function NotificationsBell({ unread }: { unread: number }) {
 
         <div className="max-h-[300px] overflow-y-auto py-1">
           {loading ? (
-            <div className="p-2 space-y-1" aria-label="Ladowanie powiadomien">
+            <div className="p-2 space-y-1" aria-label="Ładowanie powiadomien">
               {[1, 2, 3].map((item) => (
                 <div key={item} className="flex gap-3 items-start px-4 py-3 animate-pulse">
                   <div className="h-7 w-7 rounded-full bg-slate-100 shrink-0" />

@@ -149,8 +149,8 @@ function orderToOffer(order: ServiceOrderRow): CompanyOffer {
   return {
     id: order.id,
     itemType: "service_order",
-    itemLabel: "Usluga",
-    tytul: pkg?.title || "Zamowienie uslugi",
+    itemLabel: "Usługa",
+    tytul: pkg?.title || "Zamowienie usługi",
     typ: "service_order",
     stawka: order.amount,
     status: order.status,
@@ -262,7 +262,7 @@ export default function CompanyOrdersClient({ initialOrders, studentData }: Comp
       <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-2xl font-black tracking-tight text-slate-950">Moje zamowienia uslug</h2>
+            <h2 className="text-2xl font-black tracking-tight text-slate-950">Moje zamowienia usług</h2>
             <p className="mt-1 text-sm font-medium text-slate-500">
               {actionItems.length > 0
                 ? `${actionItems.length} pozycji czeka teraz na reakcje firmy.`
@@ -369,12 +369,12 @@ export default function CompanyOrdersClient({ initialOrders, studentData }: Comp
         <div className="space-y-8">
           <Section
             title="Wymaga reakcji firmy"
-            description="Wyceny, wybor wykonawcy i etapy, w ktorych decyzja jest teraz po Twojej stronie."
+            description="Wyceny, wybor wykonawcy i etapy, w których decyzja jest teraz po Twojej stronie."
             items={actionItems}
           />
           <Section
             title="W toku"
-            description="Zamowienia po uzgodnieniach, ktore nie wymagaja teraz bezposredniej reakcji firmy."
+            description="Zamowienia po uzgodnieniach, które nie wymagaja teraz bezpośredniej reakcji firmy."
             items={inProgressItems}
           />
           {closedItems.length > 0 ? (

@@ -61,11 +61,11 @@ function OfferCommissionEditor({
       );
 
       if (result?.error) {
-        toast.error(`Blad zapisu prowizji: ${result.error}`);
+        toast.error(`Błąd zapisu prowizji: ${result.error}`);
         return;
       }
 
-      toast.success("Prowizja oferty zostala zaktualizowana.");
+      toast.success("Prowizja oferty została zaktualizowana.");
     });
   };
 
@@ -109,24 +109,24 @@ export function AdminOffersTable({ offers }: AdminOffersTableProps) {
     startTransition(async () => {
       const result = await deleteOfferAction(id);
       if (result.error) {
-        toast.error(`Blad usuwania: ${result.error}`);
+        toast.error(`Błąd usuwania: ${result.error}`);
       } else {
-        toast.success("Oferta zostala usunieta.");
+        toast.success("Oferta została usunięta.");
       }
     });
   };
 
   const handleClose = (id: string) => {
-    if (!confirm("Czy na pewno chcesz zamknac te oferte?")) {
+    if (!confirm("Czy na pewno chcesz zamknąć te oferte?")) {
       return;
     }
 
     startTransition(async () => {
       const result = await closeOfferAction(id);
       if (result.error) {
-        toast.error(`Blad zamykania: ${result.error}`);
+        toast.error(`Błąd zamykania: ${result.error}`);
       } else {
-        toast.success("Oferta zostala zamknieta.");
+        toast.success("Oferta została zamknięta.");
       }
     });
   };

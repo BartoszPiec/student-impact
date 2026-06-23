@@ -8,6 +8,7 @@ import {
     parseCommissionRateInput,
     resolveCommissionRate,
 } from "@/lib/commission";
+import { assertCanAccessStorageRef, assertUploadedObjectExists } from "@/lib/security/storage";
 
 type JsonObject = Record<string, unknown>;
 
@@ -37,7 +38,7 @@ function normalizeVariantsFromForm(formData: FormData): JsonObject[] | null {
     try {
         parsed = JSON.parse(raw);
     } catch {
-        throw new Error("Nieprawidlowy format wariantow.");
+        throw new Error("Nieprawidlowy format wariantów.");
     }
 
     if (!Array.isArray(parsed)) {
@@ -98,7 +99,7 @@ function resolvePriceBounds(variants: JsonObject[] | null, fallbackPrice: number
         .filter((price) => Number.isFinite(price) && price > 0);
 
     if (prices.length === 0) {
-        throw new Error("Nie udalo sie odczytac cen wariantow.");
+        throw new Error("Nie udało sie odczytać cen wariantów.");
     }
 
     const minPrice = Math.min(...prices);
@@ -110,8 +111,28 @@ function resolvePriceBounds(variants: JsonObject[] | null, fallbackPrice: number
     };
 }
 
+async function validateLockedContentFiles(value: string | null, userId: string) {
+    if (!value) return;
+
+    const uploadedFilePrefix = "[ZALACZONY PLIK]:";
+    const lines = value
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+    for (const line of lines) {
+        if (!line.startsWith(uploadedFilePrefix)) continue;
+
+        const ref = await assertCanAccessStorageRef(userId, line.slice(uploadedFilePrefix.length).trim());
+        if (ref.bucket !== "offer_attachments") {
+            throw new Error("Zalaczony plik ma nieprawidlowy bucket.");
+        }
+        await assertUploadedObjectExists(ref);
+    }
+}
+
 export async function createSystemService(formData: FormData) {
-    const { supabase } = await requireAdmin();
+    const { supabase, user } = await requireAdmin();
 
     const title = String(formData.get("tytul") ?? "").trim();
     const description = String(formData.get("opis") ?? "").trim();
@@ -127,11 +148,12 @@ export async function createSystemService(formData: FormData) {
         isPlatformService: true,
     });
 
-    if (!title || !description) throw new Error("Tytul i opis sa wymagane");
+    if (!title || !description) throw new Error("Tytul i opis są wymagane");
     if (title.length > 200) throw new Error("Tytul jest za dlugi (max 200 znakow)");
     if (description.length > 5000) throw new Error("Opis jest za dlugi (max 5000 znakow)");
-    if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidlowa cena");
-    if (price === null) throw new Error("Podaj cene uslugi lub ceny wariantow.");
+    if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidłowa cena");
+    if (price === null) throw new Error("Podaj cene usługi lub ceny wariantów.");
+    await validateLockedContentFiles(locked_content, user.id);
 
     const { error } = await supabase.from("service_packages").insert({
         title,
@@ -156,7 +178,7 @@ export async function createSystemService(formData: FormData) {
 }
 
 export async function updateSystemService(offerId: string, formData: FormData) {
-    const { supabase } = await requireAdmin();
+    const { supabase, user } = await requireAdmin();
 
     const title = String(formData.get("tytul") ?? "").trim();
     const description = String(formData.get("opis") ?? "").trim();
@@ -168,11 +190,12 @@ export async function updateSystemService(offerId: string, formData: FormData) {
     const locked_content = String(formData.get("obligations") ?? "").trim() || null;
     const explicitCommissionRate = parseCommissionRateInput(formData.get("commission_rate"));
 
-    if (!title || !description) throw new Error("Tytul i opis sa wymagane");
+    if (!title || !description) throw new Error("Tytul i opis są wymagane");
     if (title.length > 200) throw new Error("Tytul jest za dlugi (max 200 znakow)");
     if (description.length > 5000) throw new Error("Opis jest za dlugi (max 5000 znakow)");
-    if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidlowa cena");
-    if (price === null) throw new Error("Podaj cene uslugi lub ceny wariantow.");
+    if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidłowa cena");
+    if (price === null) throw new Error("Podaj cene usługi lub ceny wariantów.");
+    await validateLockedContentFiles(locked_content, user.id);
 
     const updatePayload: JsonObject = {
         title,

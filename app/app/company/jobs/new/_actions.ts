@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { parseCommissionRateInput, resolveCommissionRate } from "@/lib/commission";
+import { assertCanAccessStorageRef, assertUploadedObjectExists } from "@/lib/security/storage";
 
 const ALLOWED_OFFER_TYPES = new Set(["micro", "job"]);
 const ALLOWED_REALIZATION_MODES = new Set(["student_defined", "company_defined"]);
@@ -52,16 +53,7 @@ type CompanyMilestoneTemplate = {
   acceptance_criteria: string;
 };
 
-function isValidHttpsUrl(value: string) {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function validateOfferMaterials(value: string | null) {
+async function validateOfferMaterials(value: string | null, userId: string) {
   if (!value) return;
 
   const uploadedFilePrefix = "[ZALACZONY PLIK]:";
@@ -73,16 +65,18 @@ function validateOfferMaterials(value: string | null) {
   for (const line of lines) {
     if (line.startsWith(uploadedFilePrefix)) {
       const uploadedFileUrl = line.slice(uploadedFilePrefix.length).trim();
-      if (!isValidHttpsUrl(uploadedFileUrl)) {
-        throw new Error("Link do zalaczonego pliku musi byc poprawnym adresem https://.");
+      const ref = await assertCanAccessStorageRef(userId, uploadedFileUrl);
+      if (ref.bucket !== "offer_attachments") {
+        throw new Error("Zalaczony plik oferty ma nieprawidlowy bucket.");
       }
+      await assertUploadedObjectExists(ref);
       continue;
     }
 
     // Walidacja URL linku do materiałów wyłączona — akceptujemy dowolny tekst
     // if (/^(https?:\/\/|www\.)/i.test(line)) {
     //   if (!line.startsWith("https://") || !isValidHttpsUrl(line)) {
-    //     throw new Error("Link do materialow musi zaczynac sie od https:// i prowadzic do poprawnego adresu.");
+    //     throw new Error("Link do materiałów musi zaczynac sie od https:// i prowadzic do poprawnego adresu.");
     //   }
     // }
   }
@@ -95,7 +89,7 @@ function parseCompanyMilestones(rawValue: FormDataEntryValue | null): CompanyMil
   try {
     parsed = JSON.parse(rawValue);
   } catch {
-    throw new Error("Nie udalo sie odczytac etapow realizacji.");
+    throw new Error("Nie udało sie odczytać etapów realizacji.");
   }
 
   if (!Array.isArray(parsed)) {
@@ -103,7 +97,7 @@ function parseCompanyMilestones(rawValue: FormDataEntryValue | null): CompanyMil
   }
 
   if (parsed.length > 12) {
-    throw new Error("Mozesz zapisac maksymalnie 12 etapow realizacji.");
+    throw new Error("Mozesz zapisać maksymalnie 12 etapów realizacji.");
   }
 
   return parsed.map((entry, index) => {
@@ -145,7 +139,7 @@ export async function createOffer(formData: FormData) {
     .maybeSingle();
 
   if (profileError || profile?.role !== "company") {
-    throw new Error("Tylko konto firmowe moze dodawac zadania.");
+    throw new Error("Tylko konto firmowe może dodawac zadania.");
   }
 
   const tytul = String(formData.get("tytul") ?? "").trim();
@@ -213,14 +207,14 @@ export async function createOffer(formData: FormData) {
   if (!tytul || !opis) throw new Error("Uzupelnij tytul i opis.");
   if (!cel_wspolpracy || !oczekiwany_rezultat || !kryteria_akceptacji || !osoba_prowadzaca) {
     throw new Error(
-      "Uzupelnij cel wspolpracy, oczekiwany rezultat, kryteria akceptacji i osobe prowadzaca.",
+      "Uzupelnij cel współpracy, oczekiwany rezultat, kryteria akceptacji i osobe prowadzaca.",
     );
   }
 
   if (!ALLOWED_OFFER_TYPES.has(typ)) throw new Error("Nieprawidlowy typ oferty.");
   if (!ALLOWED_CATEGORIES.has(kategoria)) throw new Error("Wybierz poprawna kategorie oferty.");
   if (contract_type && !ALLOWED_CONTRACT_TYPES.has(contract_type)) {
-    throw new Error("Wybierz poprawny model wspolpracy.");
+    throw new Error("Wybierz poprawny model współpracy.");
   }
   if (!tryb_pracy && typ === "job") {
     throw new Error("Wybierz tryb pracy.");
@@ -232,21 +226,21 @@ export async function createOffer(formData: FormData) {
   if (opis.length > 6000) throw new Error("Opis oferty jest za dlugi (max 6000 znakow).");
   if (czas && czas.length > 80) throw new Error("Pole czasu realizacji jest za dlugie (max 80 znakow).");
   if (cel_wspolpracy && cel_wspolpracy.length > 500) {
-    throw new Error("Cel wspolpracy jest za dlugi (max 500 znakow).");
+    throw new Error("Cel współpracy jest za dlugi (max 500 znakow).");
   }
   if (oczekiwany_rezultat && oczekiwany_rezultat.length > 500) {
     throw new Error("Oczekiwany rezultat jest za dlugi (max 500 znakow).");
   }
   if (kryteria_akceptacji && kryteria_akceptacji.length > 500) {
-    throw new Error("Kryteria akceptacji sa za dlugie (max 500 znakow).");
+    throw new Error("Kryteria akceptacji są za dlugie (max 500 znakow).");
   }
   if (osoba_prowadzaca && osoba_prowadzaca.length > 120) {
     throw new Error("Osoba prowadzaca jest za dluga (max 120 znakow).");
   }
-  if (wymagania && wymagania.length > 3000) throw new Error("Wymagania sa za dlugie (max 3000 znakow).");
+  if (wymagania && wymagania.length > 3000) throw new Error("Wymagania są za dlugie (max 3000 znakow).");
   if (benefits && benefits.length > 3000) throw new Error("Sekcja benefitow jest za dluga (max 3000 znakow).");
   if (obligations && obligations.length > 3000) {
-    throw new Error("Sekcja materialow i zasobow od firmy jest za dluga (max 3000 znakow).");
+    throw new Error("Sekcja materiałów i zasobow od firmy jest za dluga (max 3000 znakow).");
   }
   if (planowany_start && Number.isNaN(Date.parse(planowany_start))) {
     throw new Error("Planowany start musi byc poprawna data.");
@@ -273,7 +267,7 @@ export async function createOffer(formData: FormData) {
     throw new Error("Mozesz dodac maksymalnie 20 technologii.");
   }
   if (!ALLOWED_REALIZATION_MODES.has(realization_mode)) {
-    throw new Error("Wybierz poprawny sposob ustalania etapow realizacji.");
+    throw new Error("Wybierz poprawny sposob ustalania etapów realizacji.");
   }
   if (typ === "micro" && (!Number.isFinite(stawka) || stawka == null || stawka <= 0)) {
     throw new Error("Podaj poprawny budzet mikrozlecenia.");
@@ -283,17 +277,17 @@ export async function createOffer(formData: FormData) {
   }
   if (typ === "job") {
     if (salary_range_min != null && salary_range_min < 0) {
-      throw new Error("Minimalne wynagrodzenie nie moze byc ujemne.");
+      throw new Error("Minimalne wynagrodzenie nie może byc ujemne.");
     }
     if (salary_range_max != null && salary_range_max < 0) {
-      throw new Error("Maksymalne wynagrodzenie nie moze byc ujemne.");
+      throw new Error("Maksymalne wynagrodzenie nie może byc ujemne.");
     }
     if (salary_range_min != null && salary_range_max != null && salary_range_max < salary_range_min) {
-      throw new Error("Maksymalne wynagrodzenie nie moze byc nizsze od minimalnego.");
+      throw new Error("Maksymalne wynagrodzenie nie może byc nizsze od minimalnego.");
     }
   }
 
-  validateOfferMaterials(obligations);
+  await validateOfferMaterials(obligations, user.id);
 
   const { error } = await supabase.from("offers").insert({
     company_id: user.id,

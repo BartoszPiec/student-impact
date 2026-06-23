@@ -104,7 +104,7 @@ export default async function CustomizePackagePage(props: {
                         <div className="flex flex-wrap items-center gap-3 mb-6">
                             <Badge className="bg-white/10 backdrop-blur-md border border-white/10 text-white text-sm font-medium px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.05)]">
                                 <Zap className="w-4 h-4 mr-1.5 opacity-80" />
-                                {pkg.category || "Usluga systemowa"}
+                                {pkg.category || "Usługa systemowa"}
                             </Badge>
                         </div>
                         <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-white to-white/70 mb-6 leading-tight tracking-tight">

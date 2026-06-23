@@ -13,6 +13,8 @@ import { PageContainer } from "@/components/ui/page-container";
 import { ReviewBreakdown } from "@/components/reviews/ReviewBreakdown";
 import { parsePackageBriefDescription } from "@/lib/services/package-customization";
 import { parseDetailedReviewComment } from "@/lib/reviews";
+import { cache } from "react";
+import { getRequestContext } from "@/lib/auth/request-context";
 
 export const dynamic = "force-dynamic";
 
@@ -21,16 +23,13 @@ type DetailItem = {
   value: string;
 };
 
-type CompanyProfileRelation = {
+type CompanyPublicProfile = {
+  user_id?: string | null;
   nazwa?: string | null;
   logo_url?: string | null;
-} | Array<{
-  nazwa?: string | null;
-  logo_url?: string | null;
-}> | null;
+} | null;
 
 type OfferDetails = {
-  company_profiles?: CompanyProfileRelation;
   is_platform_service?: boolean | null;
   cel_wspolpracy?: string | null;
   oczekiwany_rezultat?: string | null;
@@ -62,10 +61,36 @@ type CompanyMilestoneTemplate = {
   acceptance_criteria: string;
 };
 
-function getCompanyName(companyProfiles: CompanyProfileRelation) {
-  const profile = Array.isArray(companyProfiles) ? companyProfiles[0] : companyProfiles;
+function getCompanyName(profile: CompanyPublicProfile) {
   return profile?.nazwa || "Firma";
 }
+
+const getOfferPageData = cache(async (id: string) => {
+  const supabase = await createClient();
+  const offerResult = await supabase
+    .from("offers")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!offerResult.data) {
+    return { offer: null, companyProfile: null, error: offerResult.error };
+  }
+
+  const companyResult = offerResult.data.company_id
+    ? await supabase
+      .from("company_public_profiles")
+      .select("user_id, nazwa, logo_url")
+      .eq("user_id", offerResult.data.company_id)
+      .maybeSingle()
+    : { data: null };
+
+  return {
+    offer: offerResult.data,
+    companyProfile: companyResult.data as CompanyPublicProfile,
+    error: offerResult.error,
+  };
+});
 
 function isMeaningfulText(value: unknown) {
   if (typeof value !== "string") return false;
@@ -270,12 +295,7 @@ export async function generateMetadata(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Metadata> {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: offer } = await supabase
-    .from("offers")
-    .select("tytul, opis, company_profiles(nazwa)")
-    .eq("id", id)
-    .maybeSingle();
+  const { offer, companyProfile } = await getOfferPageData(id);
  
   if (!offer) {
     return {
@@ -283,7 +303,7 @@ export async function generateMetadata(
     };
   }
 
-  const companyName = getCompanyName(offer.company_profiles as CompanyProfileRelation);
+  const companyName = getCompanyName(companyProfile);
   const desc = offer.opis ? offer.opis.substring(0, 160).trim() + (offer.opis.length > 160 ? "..." : "") : "Sprawdź tę ofertę na platformie Student2Work!";
  
   return {
@@ -313,31 +333,12 @@ export default async function OfferDetailsPage({
 
   if (!id || id === "undefined") redirect("/app");
 
-  // Fetch Offer
-  const { data: offer, error } = await supabase
-    .from("offers")
-    .select(
-      "*, company_profiles(nazwa, logo_url)"
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const { offer, companyProfile, error } = await getOfferPageData(id);
 
   if (error || !offer) redirect("/app");
   const offerRow = offer as OfferDetails;
 
-  // User Context
-  const { data: userData } = await supabase.auth.getUser();
-  const user = userData.user;
-
-  let role: string | null = null;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("user_id", user.id)
-      .single();
-    role = profile?.role ?? null;
-  }
+  const { user, role } = await getRequestContext();
 
   // Check if owner
   const isOwner = user && user.id === offer.company_id;
@@ -345,30 +346,27 @@ export default async function OfferDetailsPage({
   const backHref = isOwner ? "/app/company/offers" : role === "company" ? "/app/company/packages" : "/app/jobs";
   const backLabel = isOwner ? "Wróć do moich ofert" : role === "company" ? "Wróć do katalogu usług" : "Wróć do listy ofert";
 
-  // Check Saved Status
-  let isSaved = false;
-  if (user && role === "student") {
-    const { data: saved } = await supabase
-      .from("saved_offers")
-      .select("offer_id")
-      .eq("student_id", user.id)
-      .eq("offer_id", offer.id)
-      .maybeSingle();
-    isSaved = !!saved;
-  }
+  const [savedResult, applicationResult, lockedResult] = await Promise.all([
+    user && role === "student"
+      ? supabase.from("saved_offers").select("offer_id").eq("student_id", user.id).eq("offer_id", offer.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    user && role === "student"
+      ? supabase.from("applications").select("id, status").eq("offer_id", offer.id).eq("student_id", user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    !offerRow.is_platform_service || isOwner
+      ? supabase
+        .from("applications")
+        .select("id", { count: "exact", head: true })
+        .eq("offer_id", offer.id)
+        .in("status", ["accepted", "in_progress", "completed"])
+      : Promise.resolve({ count: 0 }),
+  ]);
 
-  // Check Application Status
-  let myApplication: { id: string; status: string } | null = null;
-  if (user && role === "student") {
-    const { data: app } = await supabase
-      .from("applications")
-      .select("id, status")
-      .eq("offer_id", offer.id)
-      .eq("student_id", user.id)
-      .maybeSingle();
-
-    if (app?.id) myApplication = { id: app.id, status: app.status ?? "sent" };
-  }
+  const isSaved = Boolean(savedResult.data);
+  const application = applicationResult.data;
+  const myApplication = application?.id
+    ? { id: application.id, status: application.status ?? "sent" }
+    : null;
 
   // Fetch Review if Completed
   let myReview: ReviewSummary | null = null;
@@ -383,31 +381,15 @@ export default async function OfferDetailsPage({
   }
   const parsedMyReview = myReview ? parseDetailedReviewComment(myReview.comment) : null;
 
-  let isLockedForNewApplications = false;
-  if (!offerRow.is_platform_service) {
-    const { count: lockedApplicationsCount } = await supabase
-      .from("applications")
-      .select("id", { count: "exact", head: true })
-      .eq("offer_id", offer.id)
-      .in("status", ["accepted", "in_progress", "completed"]);
-
-    isLockedForNewApplications = (lockedApplicationsCount ?? 0) > 0;
-  }
+  const lockedApplicationsCount = lockedResult.count ?? 0;
+  const isLockedForNewApplications = !offerRow.is_platform_service && lockedApplicationsCount > 0;
 
   const canStartNewApplication =
     (offer.status ?? "published") === "published" &&
     (offerRow.is_platform_service || !isLockedForNewApplications);
 
   // Check if offer is editable (not in progress)
-  let isEditable = isOwner && (offer.status ?? "published") === "published";
-  if (isEditable) {
-    const { count } = await supabase
-      .from("applications")
-      .select("*", { count: 'exact', head: true })
-      .eq("offer_id", offer.id)
-      .in("status", ["accepted", "in_progress", "completed"]);
-    if (count && count > 0) isEditable = false;
-  }
+  const isEditable = Boolean(isOwner) && (offer.status ?? "published") === "published" && lockedApplicationsCount === 0;
 
   const openChatAction = myApplication ? openChatForApplication.bind(null, myApplication.id) : null;
   const askQuestionAction = openChatForOfferInquiry.bind(null, offer.id);
@@ -424,7 +406,7 @@ export default async function OfferDetailsPage({
     salaryDisplay = "-";
   }
 
-  const companyName = getCompanyName(offer.company_profiles as CompanyProfileRelation);
+  const companyName = getCompanyName(companyProfile);
   const isJob = (offer.typ === "job" || offer.typ === "Praca" || offer.typ === "praca");
   const periodLabel = offer.salary_period === "hourly" ? "godz." : (isJob ? "mies." : "projekt");
 
@@ -465,7 +447,7 @@ export default async function OfferDetailsPage({
     : "from-violet-600 to-purple-700";
   const briefSections = [
     {
-      label: "Cel wspolpracy",
+      label: "Cel współpracy",
       value: offerRow.cel_wspolpracy,
       tone: "bg-blue-50 border-blue-100 text-blue-700",
     },
@@ -520,7 +502,7 @@ export default async function OfferDetailsPage({
   return (
     <main className="min-h-screen bg-slate-50/50 pb-20 font-sans">
       {/* ═══ PREMIUM DARK HERO ═══ */}
-      <div className="relative overflow-hidden bg-[#0a0f1c] pb-32 pt-16">
+      <div className="relative overflow-hidden bg-[#0a0f1c] pb-20 pt-10 sm:pb-32 sm:pt-16">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className={`absolute top-[-20%] left-[-10%] w-[50%] h-[80%] rounded-full opacity-20 blur-[120px] bg-gradient-to-br ${gradient}`} />
             <div className={`absolute bottom-[-20%] right-[-10%] w-[40%] h-[60%] rounded-full opacity-20 blur-[100px] bg-gradient-to-tl ${gradient}`} />
@@ -528,17 +510,17 @@ export default async function OfferDetailsPage({
         </div>
 
         <PageContainer className="relative z-10">
-          <Link href={backHref} className="inline-flex items-center text-sm font-medium text-slate-300 hover:text-white mb-10 transition-colors group bg-white/5 backdrop-blur-md px-5 py-2.5 rounded-full border border-white/10 hover:bg-white/10">
+          <Link href={backHref} className="group mb-6 inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 backdrop-blur-md transition-colors hover:bg-white/10 hover:text-white sm:mb-10 sm:px-5">
             <ArrowLeft className="h-4 w-4 mr-2 transition-transform group-hover:-translate-x-1" /> 
             {backLabel}
           </Link>
 
-          <div className="flex flex-col lg:flex-row items-start justify-between gap-10">
-            <div className="flex flex-col md:flex-row items-start gap-8 flex-1">
-              <div className="h-20 w-20 md:h-28 md:w-28 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 shadow-2xl backdrop-blur-xl group hover:scale-105 transition-transform duration-500">
+          <div className="flex flex-col items-start justify-between gap-8 lg:flex-row lg:gap-10">
+            <div className="flex flex-1 flex-col items-start gap-5 md:flex-row md:gap-8">
+              <div className="group flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl transition-transform duration-500 hover:scale-105 md:h-28 md:w-28">
                 <Building2 className={`h-10 w-10 ${isPlatformService ? 'text-amber-400' : 'text-indigo-400'} drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`} />
               </div>
-              <div className="space-y-4">
+              <div className="min-w-0 space-y-4">
                 <div className="flex flex-wrap items-center gap-3">
                   <Badge className="bg-white/10 backdrop-blur-md border border-white/10 text-white text-sm font-medium px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.05)]">
                     <Briefcase className="w-4 h-4 mr-1.5 opacity-80" />
@@ -551,7 +533,7 @@ export default async function OfferDetailsPage({
                     </Badge>
                   )}
                 </div>
-                <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-white to-white/70 tracking-tight leading-tight">
+                <h1 className="bg-gradient-to-br from-white to-white/70 bg-clip-text text-3xl font-extrabold leading-tight tracking-tight text-transparent sm:text-4xl md:text-5xl lg:text-6xl">
                   {offer.tytul}
                 </h1>
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-slate-300 font-medium text-sm md:text-base mt-4">
@@ -573,15 +555,15 @@ export default async function OfferDetailsPage({
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-4 relative z-20 mt-4 lg:mt-0">
+            <div className="relative z-20 mt-2 flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4 lg:mt-0 lg:w-auto">
               {isEditable && (
-                <Button asChild variant="outline" className="rounded-2xl border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold h-12 px-6">
+                <Button asChild variant="outline" className="h-12 w-full rounded-2xl border-white/10 bg-white/5 px-6 font-bold text-white hover:bg-white/10 sm:w-auto">
                   <Link href={`/app/company/offers/${offer.id}/edit`}>Edytuj ofertę</Link>
                 </Button>
               )}
               {role === "student" && !isOwner && !myApplication && (
-                <form action={askQuestionAction}>
-                  <Button variant="secondary" className="h-12 px-6 rounded-2xl bg-white text-slate-900 hover:bg-slate-100 font-bold shadow-xl">
+                <form action={askQuestionAction} className="w-full sm:w-auto">
+                  <Button variant="secondary" className="h-12 w-full rounded-2xl bg-white px-6 font-bold text-slate-900 shadow-xl hover:bg-slate-100 sm:w-auto">
                     <HelpCircle className="mr-2 h-4 w-4 text-indigo-500" /> Dopytaj o ofertę
                   </Button>
                 </form>
@@ -595,13 +577,13 @@ export default async function OfferDetailsPage({
       </div>
 
       {/* ═══ MAIN CONTENT GRID ═══ */}
-      <PageContainer className="-mt-16 relative z-20">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+      <PageContainer className="relative z-20 -mt-10 sm:-mt-16">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-10">
 
-          <div className="lg:col-span-8 space-y-8">
+          <div className="space-y-6 sm:space-y-8 lg:col-span-8">
             {/* Description - General */}
-            <section className="bg-white rounded-[2rem] p-8 md:p-12 shadow-xl shadow-slate-200/50 border border-slate-100">
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
+            <section className="rounded-[2rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/50 sm:p-8 md:p-12">
+              <h3 className="mb-5 flex items-center gap-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400 sm:mb-8 sm:text-sm sm:tracking-[0.2em]">
                 <span className="w-8 h-1 bg-indigo-500 rounded-full"></span>
                 Opis oferty
               </h3>
@@ -609,15 +591,15 @@ export default async function OfferDetailsPage({
             </section>
 
             {briefSections.length > 0 && (
-              <section className="bg-white/80 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
+              <section className="rounded-[2rem] border border-white bg-white/80 p-5 shadow-xl shadow-slate-200/20 backdrop-blur-xl sm:p-8 md:p-12">
+                <h3 className="mb-6 flex items-center gap-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400 sm:mb-10 sm:text-sm sm:tracking-[0.2em]">
                   <span className="w-8 h-1 bg-blue-500 rounded-full"></span>
-                  Brief wspolpracy
+                  Brief współpracy
                 </h3>
 
                 <div className="grid gap-6">
                   {briefSections.map((section) => (
-                    <div key={section.label} className="rounded-[1.75rem] border border-slate-100 bg-white p-6 shadow-sm">
+                    <div key={section.label} className="rounded-[1.75rem] border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
                       <div className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${section.tone}`}>
                         {section.label}
                       </div>
@@ -631,7 +613,7 @@ export default async function OfferDetailsPage({
                 {(collaborationMeta.length > 0 || formalSignals.length > 0) && (
                   <div className="mt-8 grid gap-6 md:grid-cols-2">
                     {collaborationMeta.length > 0 && (
-                      <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-6">
+                      <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-5 sm:p-6">
                         <p className="mb-4 text-xs font-black uppercase tracking-widest text-slate-400">Ustalenia operacyjne</p>
                         <div className="grid gap-3">
                           {collaborationMeta.map((item) => (
@@ -645,7 +627,7 @@ export default async function OfferDetailsPage({
                     )}
 
                     {formalSignals.length > 0 && (
-                      <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-6">
+                      <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-5 sm:p-6">
                         <p className="mb-4 text-xs font-black uppercase tracking-widest text-slate-400">Sygaly formalne</p>
                         <div className="flex flex-wrap gap-3">
                           {formalSignals.map((signal) => (
@@ -666,8 +648,8 @@ export default async function OfferDetailsPage({
 
             {/* Custom Details for System Offers */}
             {companyRequestDetails.length > 0 && (
-              <section className="bg-white rounded-[2rem] p-8 md:p-12 border border-slate-100 shadow-xl shadow-slate-200/30">
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
+              <section className="rounded-[2rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/30 sm:p-8 md:p-12">
+                <h3 className="mb-6 flex items-center gap-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400 sm:mb-10 sm:text-sm sm:tracking-[0.2em]">
                   <span className="w-8 h-1 bg-purple-500 rounded-full"></span>
                   Informacje przesłane przez firmę
                 </h3>
@@ -676,9 +658,9 @@ export default async function OfferDetailsPage({
                     To są odpowiedzi firmy z formularza zamówienia. Traktuj je jako kontekst do realizacji, oddzielony od ogólnego opisu pakietu.
                   </p>
                 </div>
-                <div className="grid sm:grid-cols-2 gap-5">
+                <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
                   {companyRequestDetails.map((detail) => (
-                    <div key={detail.label} className="bg-slate-50/80 p-6 rounded-3xl border border-slate-100 hover:border-purple-200 transition-colors group">
+                    <div key={detail.label} className="group rounded-3xl border border-slate-100 bg-slate-50/80 p-5 transition-colors hover:border-purple-200 sm:p-6">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 group-hover:text-purple-500 transition-colors">
                         {detail.label}
                       </p>
@@ -690,8 +672,8 @@ export default async function OfferDetailsPage({
             )}
 
             {briefSections.length === 0 && (collaborationMeta.length > 0 || formalSignals.length > 0) && (
-              <section className="bg-white/80 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
+              <section className="rounded-[2rem] border border-white bg-white/80 p-5 shadow-xl shadow-slate-200/20 backdrop-blur-xl sm:p-8 md:p-12">
+                <h3 className="mb-5 flex items-center gap-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400 sm:mb-8 sm:text-sm sm:tracking-[0.2em]">
                   <span className="w-8 h-1 bg-blue-500 rounded-full"></span>
                   Warunki realizacji
                 </h3>
@@ -722,8 +704,8 @@ export default async function OfferDetailsPage({
             )}
 
             {hasCompanyDefinedMilestones && (
-              <section className="bg-white rounded-[2rem] p-8 md:p-12 border border-indigo-100 shadow-xl shadow-slate-200/30">
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
+              <section className="rounded-[2rem] border border-indigo-100 bg-white p-5 shadow-xl shadow-slate-200/30 sm:p-8 md:p-12">
+                <h3 className="mb-5 flex items-center gap-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400 sm:mb-8 sm:text-sm sm:tracking-[0.2em]">
                   <span className="w-8 h-1 bg-indigo-500 rounded-full"></span>
                   Etapy realizacji ustalone przez firme
                 </h3>
@@ -738,7 +720,7 @@ export default async function OfferDetailsPage({
 
                 <div className="space-y-4">
                   {companyMilestones.map((milestone, index) => (
-                    <div key={`${milestone.title}-${index}`} className="rounded-[1.75rem] border border-slate-100 bg-slate-50/80 p-6">
+                    <div key={`${milestone.title}-${index}`} className="rounded-[1.75rem] border border-slate-100 bg-slate-50/80 p-5 sm:p-6">
                       <div className="flex flex-wrap items-center gap-3">
                         <Badge className="rounded-full bg-indigo-600 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white">
                           Etap {index + 1}
@@ -762,8 +744,8 @@ export default async function OfferDetailsPage({
 
             {/* Technologies / Skills */}
             {offer.technologies && offer.technologies.length > 0 && (
-              <section className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
+              <section className="rounded-[2rem] border border-white bg-white/70 p-5 shadow-xl shadow-slate-200/20 backdrop-blur-xl sm:p-8 md:p-12">
+                <h3 className="mb-5 flex items-center gap-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400 sm:mb-8 sm:text-sm sm:tracking-[0.2em]">
                   <span className="w-8 h-1 bg-emerald-500 rounded-full"></span>
                   Wymagane umiejętności
                 </h3>
@@ -781,9 +763,9 @@ export default async function OfferDetailsPage({
             {/* Additional Requirements & Time */}
             {isPlatformService ? (
               responsibilityLines.length > 0 && (
-              <section className="bg-indigo-900 rounded-[2.5rem] p-8 md:p-12 shadow-2xl text-white relative overflow-hidden">
+              <section className="relative overflow-hidden rounded-[2.5rem] bg-indigo-900 p-5 text-white shadow-2xl sm:p-8 md:p-12">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] -mr-32 -mt-32"></div>
-                <h3 className="relative z-10 text-sm font-black text-indigo-300 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
+                <h3 className="relative z-10 mb-6 flex items-center gap-3 text-xs font-black uppercase tracking-[0.16em] text-indigo-300 sm:mb-10 sm:text-sm sm:tracking-[0.2em]">
                   <span className="w-8 h-1 bg-amber-400 rounded-full"></span>
                   Zakres Obowiązków
                 </h3>
@@ -809,8 +791,8 @@ export default async function OfferDetailsPage({
               )
             ) : (
               (offer.wymagania || offer.czas) && (
-                <section className="bg-white/70 backdrop-blur-xl rounded-[2rem] p-8 md:p-12 border border-white shadow-xl shadow-slate-200/20">
-                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-10 flex items-center gap-3">
+              <section className="rounded-[2rem] border border-white bg-white/70 p-5 shadow-xl shadow-slate-200/20 backdrop-blur-xl sm:p-8 md:p-12">
+                  <h3 className="mb-6 flex items-center gap-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400 sm:mb-10 sm:text-sm sm:tracking-[0.2em]">
                     <span className="w-8 h-1 bg-amber-500 rounded-full"></span>
                     Szczegóły współpracy
                   </h3>
@@ -834,7 +816,7 @@ export default async function OfferDetailsPage({
           </div>
 
           {/* RIGHT COLUMN - SIDEBAR */}
-          <div className="lg:col-span-4 space-y-8">
+          <div className="space-y-6 sm:space-y-8 lg:col-span-4">
             {/* Application Section */}
             <div className="space-y-8">
               {canApply ? (

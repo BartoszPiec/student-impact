@@ -3,7 +3,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Check, X, CalendarClock } from "lucide-react";
-import { useState } from "react";
 import { acceptDeadline, rejectDeadline } from "@/app/app/chat/_actions";
 import { useTransition } from "react";
 
@@ -48,7 +47,7 @@ export function DeadlineCard({
 
     return (
         <div className={`
-      relative p-4 rounded-xl border shadow-sm w-full max-w-[320px] bg-white text-slate-800
+      relative p-4 rounded-xl border shadow-sm w-full max-w-[min(78vw,320px)] bg-white text-slate-800
       ${isMine ? "border-indigo-100" : "border-slate-200"}
       ${status === 'accepted' ? 'border-emerald-200 bg-emerald-50/30' : ''}
       ${status === 'rejected' ? 'border-red-200 bg-red-50/30 opacity-70' : ''}

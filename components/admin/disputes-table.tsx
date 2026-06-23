@@ -204,7 +204,7 @@ export function DisputesTable({
                     <p className="font-bold text-slate-500">
                       {statusFilter === "all" && !deferredSearch
                         ? emptyMessage
-                        : "Brak sporow pasujacych do wybranych filtrow."}
+                        : "Brak sporów pasujacych do wybranych filtrow."}
                     </p>
                   </div>
                 </td>

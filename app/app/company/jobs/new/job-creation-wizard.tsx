@@ -4,8 +4,11 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Briefcase, Zap, CheckCircle2, ArrowRight, Building2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import dynamic from "next/dynamic";
 
-import NewOfferForm from "./new-offer-form";
+const NewOfferForm = dynamic(() => import("./new-offer-form"), {
+    loading: () => <div className="h-96 animate-pulse rounded-[2rem] bg-slate-100" />,
+});
 
 type OfferType = "job" | "micro" | null;
 
@@ -89,7 +92,7 @@ export default function JobCreationWizard() {
                         </div>
 
                         <p className="mb-6 text-base font-medium leading-relaxed text-slate-600">
-                            Dluzsza wspolpraca, staz, praktyka lub rola projektowa. Dobre, gdy szukasz osoby do stalej odpowiedzialnosci lub rozwoju.
+                            Dluzsza wspolpraca, staż, praktyka lub rola projektowa. Dobre, gdy szukasz osoby do stalej odpowiedzialnosci lub rozwoju.
                         </p>
 
                         <div className="mb-8 rounded-2xl border border-slate-100 bg-white/40 p-5 backdrop-blur-sm transition-colors group-hover:bg-indigo-50/30">
@@ -104,7 +107,7 @@ export default function JobCreationWizard() {
                                     <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
                                         <CheckCircle2 className="h-4 w-4" />
                                     </div>
-                                    <span>Lepszy kontekst dla wspolpracy dlugiej</span>
+                                    <span>Lepszy kontekst dla współpracy dlugiej</span>
                                 </li>
                             </ul>
                         </div>
@@ -130,7 +133,7 @@ export default function JobCreationWizard() {
                                 <h2 className="text-2xl font-bold tracking-tight text-slate-900">
                                     {offerType === "micro" ? "Szczegoly mikrozlecenia" : "Szczegoly ogloszenia"}
                                 </h2>
-                                <p className="text-sm font-medium text-slate-500">Wypelnij formularz tak, aby kandydat od razu rozumial zakres, cel i warunki wspolpracy.</p>
+                                <p className="text-sm font-medium text-slate-500">Wypelnij formularz tak, aby kandydat od razu rozumial zakres, cel i warunki współpracy.</p>
                             </div>
                         </div>
 

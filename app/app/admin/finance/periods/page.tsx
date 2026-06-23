@@ -81,7 +81,7 @@ export default async function AdminFinancePeriodsPage() {
   if (accountingError) {
     return (
       <div className="p-8 text-red-500">
-        Blad pobierania okresow ksiegowych: {accountingError.message}
+        Błąd pobierania okresow ksiegowych: {accountingError.message}
       </div>
     );
   }
@@ -89,7 +89,7 @@ export default async function AdminFinancePeriodsPage() {
   if (pitError) {
     return (
       <div className="p-8 text-red-500">
-        Blad pobierania okresow PIT: {pitError.message}
+        Błąd pobierania okresow PIT: {pitError.message}
       </div>
     );
   }
@@ -196,7 +196,7 @@ export default async function AdminFinancePeriodsPage() {
             <p className="max-w-2xl font-medium leading-relaxed text-slate-400">
               Read-only przeglad dwoch warstw: bucketow ksiegowych po{" "}
               <code className="text-slate-300">month_bucket</code> oraz okresow PIT po{" "}
-              <code className="text-slate-300">tax_period</code>. Obie sekcje sa celowo
+              <code className="text-slate-300">tax_period</code>. Obie sekcje są celowo
               oddzielone, bo operuja na innych typach i innym znaczeniu biznesowym.
             </p>
           </div>
@@ -213,7 +213,7 @@ export default async function AdminFinancePeriodsPage() {
         </div>
         <div className="rounded-3xl border border-white/5 bg-slate-950/40 p-5">
           <div className="text-xs font-black uppercase tracking-widest text-slate-500">
-            Wolumen platnosci
+            Wolumen płatności
           </div>
           <div className="mt-2 text-3xl font-black text-white">
             {formatMoneyFromMinor(totalVolumeMinor)}
@@ -271,7 +271,7 @@ export default async function AdminFinancePeriodsPage() {
               {periods.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-20 text-center font-bold text-slate-500">
-                    Brak bucketow ksiegowych do wyswietlenia.
+                    Brak bucketow ksiegowych do wyświetlenia.
                   </td>
                 </tr>
               ) : (
@@ -377,7 +377,7 @@ export default async function AdminFinancePeriodsPage() {
               {pitPeriods.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="py-20 text-center font-bold text-slate-500">
-                    Brak okresow PIT do wyswietlenia.
+                    Brak okresow PIT do wyświetlenia.
                   </td>
                 </tr>
               ) : (

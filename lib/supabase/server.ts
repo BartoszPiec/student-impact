@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import { cache } from "react";
 
 type CookieStore = Awaited<ReturnType<typeof cookies>>;
 type MutableCookieStore = CookieStore & {
@@ -10,10 +11,10 @@ function isMutableCookieStore(store: CookieStore): store is MutableCookieStore {
   return "set" in store && typeof store.set === "function";
 }
 
-export async function createClient() {
+export const createClient = cache(async function createClient() {
   const cookieStore = await cookies();
 
-  return createServerClient(
+  const client = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -35,4 +36,15 @@ export async function createClient() {
       },
     }
   );
-}
+
+  const getUser = client.auth.getUser.bind(client.auth);
+  let currentUserPromise: ReturnType<typeof getUser> | undefined;
+
+  client.auth.getUser = (jwt?: string) => {
+    if (jwt) return getUser(jwt);
+    currentUserPromise ??= getUser();
+    return currentUserPromise;
+  };
+
+  return client;
+});

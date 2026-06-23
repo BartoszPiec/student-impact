@@ -4,12 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Save, Send, AlertTriangle, Lock, GripVertical, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { DraftViewer } from "./DraftViewer";
-import { MilestoneItem, DraftRole, DraftHeader } from "./types";
+import { MilestoneItem, DraftRole } from "./types";
 
 // Simple UUID generator
 const uuidv4 = () => {
@@ -46,7 +45,6 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [allocationMode, setAllocationMode] = useState<'MANUAL' | 'REST_TO_LAST'>('MANUAL');
     const [acceptedDiffs, setAcceptedDiffs] = useState<Set<string>>(new Set());
-    const [lastDebugError, setLastDebugError] = useState<unknown>(null);
 
     // Sync initial checks
     useEffect(() => {
@@ -54,7 +52,6 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
         setHasUnsavedChanges(false);
         setAllocationMode('MANUAL');
         setAcceptedDiffs(new Set());
-        setLastDebugError(null);
     }, [initialMilestones]);
 
     // Budget Calcs
@@ -128,7 +125,7 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
     };
 
     // Actions
-    const handleUpdate = (client_id: string, field: keyof MilestoneItem, value: any) => {
+    const handleUpdate = <K extends keyof MilestoneItem>(client_id: string, field: K, value: MilestoneItem[K]) => {
         let newItems = items.map(item =>
             item.client_id === client_id ? { ...item, [field]: value } : item
         );
@@ -232,7 +229,7 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
                 position: idx
             }));
 
-            const { data, error } = await supabase.rpc('draft_save_version', {
+            const { error } = await supabase.rpc('draft_save_version', {
                 p_contract_id: contractId,
                 p_base_version_id: null,
                 p_items: payload
@@ -246,7 +243,7 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
             return true;
         } catch (e: unknown) {
             console.error("Save Error:", e);
-            toast.error("Nie udalo sie zapisac wersji roboczej. Sprobuj ponownie.");
+            toast.error("Nie udało sie zapisać wersji roboczej. Spróbuj ponownie.");
             return false;
         } finally {
             setLoading(false);
@@ -254,8 +251,6 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
     };
 
     const handleSubmit = async () => {
-        setLastDebugError(null); // Clear previous
-
         if (!isBudgetValid) {
             toast.error("Budżet musi się zgadzać co do grosza!");
             return;
@@ -281,13 +276,12 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
 
             // Check Application-Level Validation (JSON)
             if (data && data.status && data.status !== 'OK') {
-                setLastDebugError(data);
                 if (data.status === 'UNDER') {
                     toast.error(`Błąd: Budżet niepełny. Brakuje ${(data.delta / 100).toFixed(2)} PLN`);
                 } else if (data.status === 'OVER') {
                     toast.error(`Błąd: Przekroczono budżet o ${(data.delta / 100).toFixed(2)} PLN`);
                 } else {
-                    toast.error("Nie udalo sie zatwierdzic harmonogramu. Sprawdz kwoty i sprobuj ponownie.");
+                    toast.error("Nie udało sie zatwierdzic harmonogramu. Sprawdz kwoty i spróbuj ponownie.");
                 }
                 return;
             }
@@ -296,14 +290,13 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
             onRefresh();
         } catch (e: unknown) {
             console.error("Submit Exception:", e);
-            setLastDebugError(e); // Log exception
-            const msg = getErrorMessage(e, "Nie udalo sie wyslac propozycji.");
+            const msg = getErrorMessage(e, "Nie udało sie wysłać propozycji.");
 
             // Handle P0001 from legacy RPC if it exists
             if (msg.includes("Budget validation failed")) {
-                toast.error("Suma etapow musi wynosic dokladnie " + totalBudget.toFixed(2) + " PLN.");
+                toast.error("Suma etapów musi wynosic dokladnie " + totalBudget.toFixed(2) + " PLN.");
             } else {
-                toast.error("Nie udalo sie wyslac propozycji. Sprobuj ponownie.");
+                toast.error("Nie udało sie wysłać propozycji. Spróbuj ponownie.");
             }
         } finally {
             setLoading(false);
@@ -355,7 +348,7 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
         toast.success("Cofnięto zmiany (przywrócono wersję oryginalną).");
     };
 
-    const handleConfirmDelete = (item: MilestoneItem) => {
+    const handleConfirmDelete = () => {
         toast.info("Zatwierdzono usunięcie etapu (widoczne w podglądzie).");
     };
 

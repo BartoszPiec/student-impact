@@ -113,7 +113,7 @@ export async function createOfferFromPackage(packageId: string) {
     }
 
     if (pkg.student_id && pkg.student_id === user.id) {
-        throw new Error("Nie mozesz zamowic wlasnej uslugi.");
+        throw new Error("Nie mozesz zamowic wlasnej usługi.");
     }
 
     const isPlatformService = pkg.type === 'platform_service';
@@ -239,7 +239,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
     }
 
     if (pkg.student_id && pkg.student_id === user.id) {
-        throw new Error("Nie mozesz zamowic wlasnej uslugi.");
+        throw new Error("Nie mozesz zamowic wlasnej usługi.");
     }
 
     const isSystemPackage = isSystemServicePackage(pkg);
@@ -254,7 +254,6 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
         ? extractRequestFormAnswers(Array.from(formData.entries()), formSchema)
         : [];
     const effectivePrice = selectedVariant?.price ?? pkg.price;
-    const effectiveDeliveryDays = selectedVariant?.delivery_time_days ?? pkg.delivery_time_days;
     const effectiveCommissionRate = selectedVariant?.commission_rate ?? pkg.commission_rate ?? null;
     const baseTitle = pkg.id === LOGO_PACKAGE_ID ? "Projekt Logo" : pkg.title;
     const effectiveTitle = selectedVariant ? `${baseTitle} - ${selectedVariant.label}` : baseTitle;
@@ -460,7 +459,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
                     user_id: effectiveStudentId,
                     typ: "application_new",
                     payload: {
-                        snippet: `Otrzymales nowe zamowienie uslugi: ${effectiveTitle}`,
+                        snippet: `Otrzymales nowe zamowienie usługi: ${effectiveTitle}`,
                         service_order_id: logoOrder.id,
                         conversation_id: conversationId,
                     },
@@ -488,7 +487,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
                     user_id: user.id,
                     typ: "application_new",
                     payload: {
-                        snippet: "Nie udalo sie automatycznie przypisac studenta. Mozesz wybrac wykonawce recznie z listy.",
+                        snippet: "Nie udało sie automatycznie przypisac studenta. Mozesz wybrac wykonawce ręcznie z listy.",
                         service_order_id: logoOrder.id,
                     },
                 });
@@ -505,7 +504,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
             : (await findSystemServiceStudent(supabase, pkg.category))?.user_id ?? null;
 
         if (!assignedStudentId) {
-            throw new Error("Brak dostepnego studenta do tej uslugi. Sprobuj ponownie pozniej lub skontaktuj sie z obsluga.");
+            throw new Error("Brak dostępnego studenta do tej usługi. Spróbuj ponownie później lub skontaktuj sie z obsługa.");
         }
 
         const requestSnapshot = buildRequestSnapshot({
@@ -536,7 +535,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
 
         if (serviceOrderError || !serviceOrder) {
             console.error("Error creating system service order:", serviceOrderError);
-            throw new Error(serviceOrderError?.message || "Nie udalo sie utworzyc zamowienia uslugi.");
+            throw new Error(serviceOrderError?.message || "Nie udało sie utworzyc zamowienia usługi.");
         }
 
         let conversationId: string | null = null;
@@ -557,7 +556,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
             user_id: assignedStudentId,
             typ: "application_new",
             payload: {
-                snippet: `Otrzymales nowe zamowienie uslugi: ${effectiveTitle}`,
+                snippet: `Otrzymales nowe zamowienie usługi: ${effectiveTitle}`,
                 service_order_id: serviceOrder.id,
                 conversation_id: conversationId,
             },
@@ -635,7 +634,7 @@ export async function createCustomizedOffer(packageId: string, formData: FormDat
         user_id: pkg.student_id,
         typ: "application_new",
         payload: {
-            snippet: `Otrzymales nowe zamowienie na usluge: ${effectiveTitle}`,
+            snippet: `Otrzymales nowe zamowienie na usługę: ${effectiveTitle}`,
             service_order_id: order.id,
             conversation_id: conversation?.id,
         }
@@ -798,6 +797,5 @@ export async function updateCustomizedOffer(offerId: string, formData: FormData)
     revalidatePath(`/app/offers/${offerId}`);
     redirect(`/app/offers/${offerId}`);
 }
-
 
 

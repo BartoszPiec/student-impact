@@ -30,7 +30,7 @@ export function VaultRowActions({ contractId, documents }: VaultRowActionsProps)
             disabled
           >
             <FileText className="h-3.5 w-3.5 text-slate-600" />
-            <span>Brak umow PDF</span>
+            <span>Brak umów PDF</span>
           </Button>
           <form action={repairSingleContractPdf.bind(null, contractId)}>
             <RepairButton />

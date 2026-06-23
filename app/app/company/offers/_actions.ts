@@ -56,7 +56,7 @@ export async function setOfferStatus(
       .select("id")
       .eq("offer_id", offerId);
 
-    const ids = (appIds ?? []).map((x: any) => x.id);
+    const ids = (appIds ?? []).map((application) => application.id);
     if (ids.length > 0) {
       const { data: approved } = await supabase
         .from("deliverables")
@@ -101,7 +101,7 @@ export async function updateOffer(offerId: string, formData: FormData) {
 
   if (profile?.role !== "company") redirect("/app");
 
-  // blokada edycji po rozpoczeciu albo zakonczeniu realizacji
+  // blokada edycji po rozpoczeciu albo zakończeniu realizacji
   const { data: accepted } = await supabase
     .from("applications")
     .select("id")

@@ -5,9 +5,9 @@ export const dynamic = "force-dynamic";
 
 export default function ChatLayout({ children }: { children: ReactNode }) {
     return (
-        <div className="flex h-[calc(100vh-theme(spacing.16))] w-full bg-slate-50">
+        <div className="flex h-[calc(100dvh-4.5rem)] w-full bg-slate-50 lg:h-[calc(100vh-theme(spacing.16))]">
             {/* Sidebar */}
-            <div className="hidden md:block h-full flex-none">
+            <div className="hidden h-full flex-none lg:block">
                 <ChatListSidebar />
             </div>
 

@@ -20,7 +20,7 @@ export function ChatHeaderActions({ conversationId }: { conversationId: string }
         toast.success("Rozmowa oznaczona jako nieprzeczytana.");
         router.refresh();
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Nie udalo sie oznaczyc rozmowy.";
+        const message = error instanceof Error ? error.message : "Nie udało się oznaczyć rozmowy.";
         toast.error(message);
       }
     });

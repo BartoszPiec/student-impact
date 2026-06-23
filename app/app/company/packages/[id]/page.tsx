@@ -55,6 +55,10 @@ import { LOGO_PACKAGE_ID } from "@/lib/services/logo-student-selection";
 
 export const dynamic = "force-dynamic";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
 // Category config
 
 const categoryConfig: Record<string, { icon: React.ReactNode; gradient: string; lightBg: string; darkText: string }> = {
@@ -174,7 +178,7 @@ function detectSectionType(title: string): SectionType {
     if (t.includes('nie obejmuj') || t.includes('nie zawiera') || t.includes('ograniczen')) return 'exclusions';
     if (t.includes('proces') || t.includes('etap') || t.includes('przebieg') || t.includes('jak to dziala')) return 'process';
     if (t.includes('otrzym') || t.includes('dostaje') || t.includes('co dostajesz')) return 'deliverables';
-    if (t.includes('analizow') || t.includes('zakres') || t.includes('co mozna') || t.includes('co obejmuje') || t.includes('mozliw')) return 'features';
+    if (t.includes('analizow') || t.includes('zakres') || t.includes('co można') || t.includes('co obejmuje') || t.includes('mozliw')) return 'features';
     return 'default';
 }
 
@@ -326,7 +330,7 @@ const LOGO_AUDIENCE_SECTION: DescriptionSection = {
     type: "features",
     content: [
         "- **Nowa firma lub startup** - Dopiero zaczynasz i potrzebujesz pierwszego profesjonalnego logo.",
-        "- **Firma z amatorskim logo** - Czas na znak, ktory lepiej reprezentuje Twoja marke.",
+        "- **Firma z amatorskim logo** - Czas na znak, który lepiej reprezentuje Twoja marke.",
         "- **Stowarzyszenie lub NGO** - Potrzebujesz profesjonalnego wizerunku przy ograniczonym budzecie.",
         "- **Freelancer lub specjalista** - Budujesz marke osobista do strony, portfolio i social mediow.",
         "- **Rebrand** - Firma rosnie i stare logo przestalo pasowac do nowego etapu.",
@@ -355,9 +359,9 @@ const LOGO_FAQ_FALLBACK: Array<{ question: string; answer: string }> = [
             "Tak. W obu pakietach nastepuje pelne przeniesienie majatkowych praw autorskich na firme.",
     },
     {
-        question: "Jak zabezpieczona jest platnosc?",
+        question: "Jak zabezpieczona jest płatność?",
         answer:
-            "Platnosc jest realizowana przez Escrow. Srodki sa uwalniane po Twojej akceptacji dostarczonej pracy.",
+            "Platnosc jest realizowana przez Escrow. Srodki są uwalniane po Twojej akceptacji dostarczonej pracy.",
     },
 ];
 
@@ -430,7 +434,7 @@ function stripRedundantServiceHeading(content: string): string {
 
 function isServiceIntroSectionTitle(title: string): boolean {
     const normalized = normalizeSearchText(title);
-    return normalized.includes("opis uslug") || normalized.includes("o usludze") || normalized.includes("o pakiecie");
+    return normalized.includes("opis usług") || normalized.includes("o usludze") || normalized.includes("o pakiecie");
 }
 
 export default async function PackageDetailsPage(props: { params: Promise<{ id: string }> }) {
@@ -460,7 +464,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
     const config = getCategoryConfig(pkg.category);
     const heroSubtitle = isLogoPackage ? LOGO_HERO_SUBTITLE : extractHeroSubtitle(pkg.description);
 
-    const variants = resolvePackageVariantsWithFallback(pkg.id, (pkg as any).variants);
+    const variants = resolvePackageVariantsWithFallback(pkg.id, pkg.variants);
     const hasVariants = variants.length > 0;
 
     const recommendedVariant = hasVariants
@@ -491,8 +495,9 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
     const deliveryRangeLabel = minDeliveryDays === maxDeliveryDays
         ? `${minDeliveryDays} dni`
         : `${minDeliveryDays}–${maxDeliveryDays} dni`;
-    const formSchema = normalizePackageFormSchema((pkg as any).form_schema);
+    const formSchema = normalizePackageFormSchema(pkg.form_schema);
     const briefPreviewSections = groupPackageFormSchemaBySection(formSchema);
+    const studentProfile = Array.isArray(pkg.student) ? pkg.student[0] : pkg.student;
 
     const publicDescription = pkg.description
         ? pkg.description.split(/--- \[MATERIA(?:Ł|L)Y DLA WYKONAWCY\] ---/i)[0].trim()
@@ -540,10 +545,10 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
         : sectionListWithoutIntro;
     const hasPricingSection = sections.some((section) => section.type === "pricing");
 
-    const dbFaqItems: Array<{ question: string; answer: string }> = Array.isArray((pkg as any).faq)
-        ? (pkg as any).faq
-            .filter((item: any) => item && typeof item === "object")
-            .map((item: any) => ({
+    const dbFaqItems: Array<{ question: string; answer: string }> = Array.isArray(pkg.faq)
+        ? pkg.faq
+            .filter(isRecord)
+            .map((item) => ({
                 question:
                     typeof item.question === "string"
                         ? item.question
@@ -557,7 +562,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                             ? item.a
                             : "",
             }))
-            .filter((item: any) => item.question.length > 0 && item.answer.length > 0)
+            .filter((item) => item.question.length > 0 && item.answer.length > 0)
         : [];
     const faqItems = dbFaqItems.length > 0 ? dbFaqItems : (isLogoPackage ? LOGO_FAQ_FALLBACK : []);
 
@@ -576,8 +581,8 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
     }
     const firstSectionId = navItems[0]?.id || null;
 
-    const relatedServiceIds = Array.isArray((pkg as any).related_service_ids)
-        ? (pkg as any).related_service_ids.filter((value: unknown): value is string => typeof value === "string")
+    const relatedServiceIds = Array.isArray(pkg.related_service_ids)
+        ? pkg.related_service_ids.filter((value: unknown): value is string => typeof value === "string")
         : [];
 
     type RelatedServiceRow = {
@@ -642,7 +647,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                             <div className="mb-8 flex flex-wrap items-center gap-3">
                                 <Badge className="rounded-full border border-indigo-200 bg-indigo-50/90 px-4 py-1.5 text-sm font-semibold text-indigo-700">
                                     <Zap className="mr-1.5 h-4 w-4 opacity-90" />
-                                    {pkg.category || "Usluga systemowa"}
+                                    {pkg.category || "Usługa systemowa"}
                                 </Badge>
                                 {pkg.type === "student_gig" && (
                                     <Badge className="rounded-full border border-blue-200 bg-blue-50/90 px-4 py-1.5 text-sm font-semibold text-blue-700">
@@ -720,7 +725,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                             </div>
                                         </div>
                                         <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
-                                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Zakres wspolpracy</p>
+                                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Zakres współpracy</p>
                                             <div className="h-2 w-full rounded-full bg-slate-100">
                                                 <div className={`h-2 rounded-full bg-gradient-to-r ${config.gradient} w-4/5`} />
                                             </div>
@@ -832,7 +837,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                 <div className="relative mb-8 overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white p-8 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.55)] transition-all duration-500 group hover:shadow-[0_40px_90px_-45px_rgba(15,23,42,0.65)] md:p-12">
                                     <div className="mb-8">
                                         <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">O pakiecie</h2>
-                                        <p className="mt-1 font-medium text-lg text-slate-500">W skrocie o tym, czego dotyczy ta usluga</p>
+                                        <p className="mt-1 font-medium text-lg text-slate-500">W skrocie o tym, czego dotyczy ta usługa</p>
                                     </div>
                                     <div className="prose prose-lg prose-slate max-w-none text-slate-600 leading-relaxed font-normal">
                                         <MarkdownLite content={introText} />
@@ -950,7 +955,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                     <div className="mb-8">
                                         <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">FAQ</h2>
                                         <p className="mt-1 font-medium text-lg text-slate-500">
-                                            Najczestsze pytania przed startem wspolpracy.
+                                            Najczestsze pytania przed startem współpracy.
                                         </p>
                                     </div>
 
@@ -991,7 +996,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                     <div className="mb-8">
                                         <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Co dalej</h2>
                                         <p className="mt-1 font-medium text-lg text-slate-500">
-                                            Jesli potrzebujesz wiecej, sprawdz podobne uslugi.
+                                            Jesli potrzebujesz wiecej, sprawdz podobne usługi.
                                         </p>
                                     </div>
 
@@ -1003,7 +1008,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                                 className="rounded-[1.5rem] border border-slate-100 bg-slate-50/80 p-5 transition hover:-translate-y-1 hover:border-indigo-200 hover:bg-white"
                                             >
                                                 <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-                                                    {related.category || "Usluga"}
+                                                    {related.category || "Usługa"}
                                                 </p>
                                                 <h3 className="mt-3 text-lg font-bold text-slate-900 line-clamp-2">{related.title}</h3>
                                                 <p className="mt-4 text-sm font-semibold text-slate-600">
@@ -1085,7 +1090,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                         <Link href={`/app/company/packages/${pkg.id}/customize`}>
                                             <div className="absolute inset-0 bg-white/20 opacity-0 hover:opacity-100 transition-opacity" />
                                             <span className="flex items-center">
-                                                Rozpocznij wspolprace
+                                                Rozpocznij współpracę
                                                 <ArrowRight className="ml-2 w-5 h-5" />
                                             </span>
                                         </Link>
@@ -1099,16 +1104,16 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                 </div>
                             )}
 
-                            {pkg.type === 'student_gig' && pkg.student && (
+                            {pkg.type === 'student_gig' && studentProfile && (
                                 <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] p-6 border border-white shadow-xl shadow-slate-200/20 flex flex-col items-center text-center relative overflow-hidden group">
                                     <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${config.gradient} opacity-5 rounded-full blur-2xl -mr-10 -mt-10`} />
                                     
                                     <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center font-bold text-3xl text-slate-400 mb-4 border-4 border-white shadow-md relative z-10">
-                                        {(pkg.student as any).public_name?.[0] || "?"}
+                                        {studentProfile.public_name?.[0] || "?"}
                                     </div>
                                     <div className="relative z-10">
                                         <div className="text-xs text-slate-400 uppercase font-black tracking-widest mb-1">Wykonawca</div>
-                                        <div className="font-extrabold text-xl text-slate-900">{(pkg.student as any).public_name}</div>
+                                        <div className="font-extrabold text-xl text-slate-900">{studentProfile.public_name}</div>
                                         <div className="mt-3 inline-flex items-center text-sm font-medium text-slate-500 bg-slate-50 px-4 py-1.5 rounded-full border border-slate-100">
                                             <ShieldCheck className="w-4 h-4 mr-1.5 text-emerald-500" />
                                             Zweryfikowany talent

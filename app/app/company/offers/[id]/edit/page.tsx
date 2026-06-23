@@ -13,6 +13,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type OfferWithPackage = {
+  service_packages: unknown | unknown[] | null;
+};
+
 export default async function EditOfferPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const supabase = await createClient();
@@ -59,9 +63,10 @@ export default async function EditOfferPage(props: { params: Promise<{ id: strin
     return match ? match[1].trim() : "";
   }
 
-  const servicePackage = Array.isArray((offer as any).service_packages)
-    ? (offer as any).service_packages[0]
-    : (offer as any).service_packages;
+  const servicePackageNode = (offer as unknown as OfferWithPackage).service_packages;
+  const servicePackage = Array.isArray(servicePackageNode)
+    ? servicePackageNode[0]
+    : servicePackageNode;
   const parsedBrief = parsePackageBriefDescription(offer.opis);
   const isSystemPackage = isSystemServicePackage(servicePackage);
   const formSchema = isSystemPackage ? normalizePackageFormSchema(servicePackage?.form_schema) : [];

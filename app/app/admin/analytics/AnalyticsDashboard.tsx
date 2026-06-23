@@ -15,7 +15,9 @@ import {
   Wallet,
 } from "lucide-react";
 import { DashboardHeader } from "./DashboardHeader";
-import { FunnelChart } from "./FunnelChart";
+import dynamic from "next/dynamic";
+
+const FunnelChart = dynamic(() => import("./FunnelChart").then((module) => module.FunnelChart));
 
 type AnalyticsSeriesPoint = {
   month: string;
@@ -248,7 +250,7 @@ export function AnalyticsDashboard({
               {formatMoneyPLN(financials.escrow_active_pln)}
             </div>
             <p className="mt-2 text-sm font-medium text-slate-400">
-              Srodki firm juz zasilone i czekajace na kolejne rozliczenia.
+              Srodki firm już zasilone i czekajace na kolejne rozliczenia.
             </p>
           </CardContent>
         </Card>
@@ -276,7 +278,7 @@ export function AnalyticsDashboard({
               {formatMoneyPLN(financials.tax_payable_pln)}
             </div>
             <p className="mt-2 text-sm font-medium text-slate-400">
-              Zobowiazania PIT wynikajace z zaakceptowanych milestone'ow.
+              Zobowiazania PIT wynikajace z zaakceptowanych milestone&apos;ow.
             </p>
           </CardContent>
         </Card>
@@ -310,7 +312,7 @@ export function AnalyticsDashboard({
               {formatMoneyPLN(financials.paid_out_pln)}
             </div>
             <p className="mt-2 text-sm font-medium text-slate-400">
-              Laczna wartosc juz wyplacona studentom z warstwy ksiegowej.
+              Laczna wartosc już wyplacona studentom z warstwy ksiegowej.
             </p>
           </CardContent>
         </Card>
@@ -440,7 +442,7 @@ export function AnalyticsDashboard({
                         {company.email?.split("@")[0] || "firma"}
                       </div>
                       <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                        {company.contracts_count ?? 0} kontraktow
+                        {company.contracts_count ?? 0} kontraktów
                       </div>
                     </div>
                   </div>
@@ -481,7 +483,7 @@ export function AnalyticsDashboard({
                         {student.email?.split("@")[0] || "student"}
                       </div>
                       <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                        {student.contracts_count ?? 0} kontraktow
+                        {student.contracts_count ?? 0} kontraktów
                       </div>
                     </div>
                   </div>
@@ -513,7 +515,7 @@ export function AnalyticsDashboard({
           <CardContent className="p-0">
             {categories.length === 0 ? (
               <div className="p-8 text-sm font-medium italic text-slate-500">
-                Brak kategorii do wyswietlenia.
+                Brak kategorii do wyświetlenia.
               </div>
             ) : (
               <div className="divide-y divide-white/5">
@@ -527,7 +529,7 @@ export function AnalyticsDashboard({
                         {category.category || "Bez kategorii"}
                       </div>
                       <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                        {category.count ?? 0} kontraktow
+                        {category.count ?? 0} kontraktów
                       </div>
                     </div>
                     <div className="text-right">
@@ -557,7 +559,7 @@ export function AnalyticsDashboard({
           <CardContent className="p-0">
             {recent.length === 0 ? (
               <div className="p-8 text-sm font-medium italic text-slate-500">
-                Brak ostatniej aktywnosci do wyswietlenia.
+                Brak ostatniej aktywnosci do wyświetlenia.
               </div>
             ) : (
               <div className="divide-y divide-white/5">

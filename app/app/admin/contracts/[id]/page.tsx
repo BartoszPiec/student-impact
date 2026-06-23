@@ -10,11 +10,22 @@ import {
   Users,
 } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getDocumentTypeDescription, getDocumentTypeLabel } from "@/types/documents";
+import { getDocumentTypeDescription, getDocumentTypeLabel, type UserDocumentType } from "@/types/documents";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ id: string }>;
+
+type MilestoneRow = { id: string; idx: number; title: string; amount: number; status: string | null; due_at: string | null };
+type ContractDocumentRow = { id: string; document_type: UserDocumentType; file_name: string | null; storage_path: string | null; generated_at: string | null; created_at: string };
+type InvoiceRow = { id: string; invoice_number: string | null; invoice_type: string | null; amount_gross: number | null; amount_net: number | null; status: string; created_at: string; storage_path: string | null };
+type PayoutRow = { id: string; amount_net: number | null; status: string; created_at: string };
+type PitRow = { id: string; pit_amount: number | null; status: string; tax_period: string | null; created_at: string };
+type ContractRelations = {
+  company: { nazwa: string | null } | null;
+  student: { public_name: string | null } | null;
+  applications: { offers: { tytul: string | null } | { tytul: string | null }[] | null } | { offers: { tytul: string | null } | { tytul: string | null }[] | null }[] | null;
+};
 
 function formatMoney(value: number | string | null | undefined, currency = "PLN") {
   return Number(value || 0).toLocaleString("pl-PL", {
@@ -133,49 +144,42 @@ export default async function AdminContractDetailPage({ params }: { params: Para
         .limit(10),
     ]);
 
-  const milestones = milestonesResult.data || [];
-  const documents = documentsResult.data || [];
-  const invoices = invoicesResult.data || [];
-  const payouts = payoutsResult.data || [];
-  const pitRows = pitResult.data || [];
-  const paidInvoices = invoices.filter((invoice: any) => invoice.status === "paid").length;
-  const contractADocument = documents.find((document: any) => document.document_type === "contract_a");
-  const contractBDocument = documents.find((document: any) => document.document_type === "contract_b");
-  const companyInvoicesCount = invoices.filter((invoice: any) => invoice.invoice_type === "company").length;
-  const studentInvoicesCount = invoices.filter((invoice: any) => invoice.invoice_type === "student").length;
+  const milestones = (milestonesResult.data || []) as MilestoneRow[];
+  const documents = (documentsResult.data || []) as ContractDocumentRow[];
+  const invoices = (invoicesResult.data || []) as InvoiceRow[];
+  const payouts = (payoutsResult.data || []) as PayoutRow[];
+  const pitRows = (pitResult.data || []) as PitRow[];
+  const paidInvoices = invoices.filter((invoice) => invoice.status === "paid").length;
+  const contractADocument = documents.find((document) => document.document_type === "contract_a");
+  const contractBDocument = documents.find((document) => document.document_type === "contract_b");
+  const companyInvoicesCount = invoices.filter((invoice) => invoice.invoice_type === "company").length;
+  const studentInvoicesCount = invoices.filter((invoice) => invoice.invoice_type === "student").length;
   const workspaceId = contract.application_id || contract.service_order_id || null;
-  const offerTitle =
-    (Array.isArray((contract as any).applications)
-      ? (contract as any).applications[0]?.offers?.tytul
-      : (contract as any).applications?.offers?.tytul) || "Kontrakt";
-  const [documentsWithUrl, invoicesWithUrl] = await Promise.all([
-    Promise.all(
-      documents.map(async (document: any) => {
-        if (!document.storage_path) {
-          return { ...document, download_url: null };
-        }
-
-        const { data } = await admin.storage
-          .from("deliverables")
-          .createSignedUrl(document.storage_path, 60 * 60);
-
-        return { ...document, download_url: data?.signedUrl || null };
-      }),
-    ),
-    Promise.all(
-      invoices.map(async (invoice: any) => {
-        if (!invoice.storage_path) {
-          return { ...invoice, download_url: null };
-        }
-
-        const { data } = await admin.storage
-          .from("deliverables")
-          .createSignedUrl(invoice.storage_path, 60 * 60);
-
-        return { ...invoice, download_url: data?.signedUrl || null };
-      }),
-    ),
-  ]);
+  const contractRelations = contract as unknown as ContractRelations;
+  const relatedApplication = Array.isArray(contractRelations.applications)
+    ? contractRelations.applications[0] ?? null
+    : contractRelations.applications;
+  const relatedOffer = Array.isArray(relatedApplication?.offers)
+    ? relatedApplication.offers[0] ?? null
+    : relatedApplication?.offers;
+  const offerTitle = relatedOffer?.tytul || "Kontrakt";
+  const storagePaths = [...documents, ...invoices]
+    .map((row) => row.storage_path)
+    .filter((path): path is string => Boolean(path));
+  const { data: signedUrls } = storagePaths.length > 0
+    ? await admin.storage.from("deliverables").createSignedUrls(storagePaths, 60 * 60)
+    : { data: [] };
+  const signedUrlByPath = new Map(
+    (signedUrls ?? []).map((signedUrl, index) => [storagePaths[index], signedUrl.signedUrl ?? null]),
+  );
+  const documentsWithUrl = documents.map((document) => ({
+    ...document,
+    download_url: document.storage_path ? signedUrlByPath.get(document.storage_path) ?? null : null,
+  }));
+  const invoicesWithUrl = invoices.map((invoice) => ({
+    ...invoice,
+    download_url: invoice.storage_path ? signedUrlByPath.get(invoice.storage_path) ?? null : null,
+  }));
 
   return (
     <div className="space-y-8 pb-12">
@@ -187,7 +191,7 @@ export default async function AdminContractDetailPage({ params }: { params: Para
               className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-300 transition hover:bg-white/10 hover:text-white"
             >
               <ArrowLeft className="h-4 w-4" />
-              Wroc do kontraktow
+              Wroc do kontraktów
             </Link>
 
             <div className="mb-4 flex items-center gap-3">
@@ -263,7 +267,7 @@ export default async function AdminContractDetailPage({ params }: { params: Para
               <div className="text-xs font-black uppercase tracking-widest text-slate-500">Firma</div>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="font-medium text-white">
-                  {(contract as any).company?.nazwa || "Brak danych"}
+                  {contractRelations.company?.nazwa || "Brak danych"}
                 </div>
                 {contract.company_id ? (
                   <Link
@@ -285,7 +289,7 @@ export default async function AdminContractDetailPage({ params }: { params: Para
               <div className="text-xs font-black uppercase tracking-widest text-slate-500">Student</div>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="font-medium text-white">
-                  {(contract as any).student?.public_name || "Brak danych"}
+                  {contractRelations.student?.public_name || "Brak danych"}
                 </div>
                 {contract.student_id ? (
                   <Link
@@ -309,7 +313,7 @@ export default async function AdminContractDetailPage({ params }: { params: Para
                 <div>
                   {contract.documents_generated_at
                     ? `Wygenerowane ${new Date(contract.documents_generated_at).toLocaleDateString("pl-PL")}`
-                    : "Brak wygenerowanych dokumentow"}
+                    : "Brak wygenerowanych dokumentów"}
                 </div>
                 <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-wider">
                   <span className={contractADocument
@@ -344,7 +348,7 @@ export default async function AdminContractDetailPage({ params }: { params: Para
             {milestones.length === 0 ? (
               <div className="text-sm text-slate-500">Brak milestoneow dla tego kontraktu.</div>
             ) : (
-              milestones.map((milestone: any) => (
+              milestones.map((milestone) => (
                 <div
                   key={milestone.id}
                   className="rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3"
@@ -391,9 +395,9 @@ export default async function AdminContractDetailPage({ params }: { params: Para
               <div className="text-xs font-black uppercase tracking-widest text-slate-500">Wyplaty</div>
               <div className="mt-2 space-y-2">
                 {payouts.length === 0 ? (
-                  <div className="text-sm text-slate-500">Brak wyplat dla tego kontraktu.</div>
+                  <div className="text-sm text-slate-500">Brak wypłat dla tego kontraktu.</div>
                 ) : (
-                  payouts.map((payout: any) => (
+                  payouts.map((payout) => (
                     <div
                       key={payout.id}
                       className="rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3"
@@ -421,7 +425,7 @@ export default async function AdminContractDetailPage({ params }: { params: Para
                 {pitRows.length === 0 ? (
                   <div className="text-sm text-slate-500">Brak pozycji PIT dla tego kontraktu.</div>
                 ) : (
-                  pitRows.map((row: any) => (
+                  pitRows.map((row) => (
                     <div
                       key={row.id}
                       className="rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3"
@@ -458,9 +462,9 @@ export default async function AdminContractDetailPage({ params }: { params: Para
               </div>
               <div className="mt-2 space-y-2">
                 {documentsWithUrl.length === 0 ? (
-                  <div className="text-sm text-slate-500">Brak dokumentow dla tego kontraktu.</div>
+                  <div className="text-sm text-slate-500">Brak dokumentów dla tego kontraktu.</div>
                 ) : (
-                  documentsWithUrl.map((document: any) => (
+                  documentsWithUrl.map((document) => (
                     <div
                       key={document.id}
                       className="rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3"
@@ -474,10 +478,10 @@ export default async function AdminContractDetailPage({ params }: { params: Para
                             <span
                               className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider ${getContractDocumentBadge(document.document_type)}`}
                             >
-                              {getDocumentTypeLabel(document.document_type as any)}
+                              {getDocumentTypeLabel(document.document_type)}
                             </span>
                             <span className="text-xs text-slate-500">
-                              {getDocumentTypeDescription(document.document_type as any)}
+                              {getDocumentTypeDescription(document.document_type)}
                             </span>
                           </div>
                         </div>
@@ -501,7 +505,7 @@ export default async function AdminContractDetailPage({ params }: { params: Para
                         </div>
                       </div>
                       <div className="mt-1 text-xs text-slate-500">
-                        {new Date(document.created_at || document.generated_at).toLocaleDateString("pl-PL")}
+                        {new Date(document.created_at ?? document.generated_at ?? 0).toLocaleDateString("pl-PL")}
                       </div>
                     </div>
                   ))
@@ -515,7 +519,7 @@ export default async function AdminContractDetailPage({ params }: { params: Para
                 {invoicesWithUrl.length === 0 ? (
                   <div className="text-sm text-slate-500">Brak faktur dla tego kontraktu.</div>
                 ) : (
-                  invoicesWithUrl.map((invoice: any) => (
+                  invoicesWithUrl.map((invoice) => (
                     <div
                       key={invoice.id}
                       className="rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3"

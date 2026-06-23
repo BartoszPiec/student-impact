@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { csvCell } from "@/lib/security/csv";
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
   const { data: payments, error } = await query;
   if (error) {
     console.error("[admin-export:invoices]", error);
-    return NextResponse.json({ error: "Nie udalo sie przygotowac eksportu." }, { status: 500 });
+    return NextResponse.json({ error: "Nie udało sie przygotowac eksportu." }, { status: 500 });
   }
 
   if (!payments || payments.length === 0) {
@@ -139,7 +140,7 @@ export async function GET(req: NextRequest) {
       student?.pesel ?? "—",
       p.contract_id ?? "—",
       p.description ?? "—",
-    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
+    ].map(csvCell).join(",");
   });
 
   const csv = BOM + [headers.join(","), ...rows].join("\n");

@@ -23,6 +23,7 @@ import {
 import { acceptApplication, counterOffer, rejectApplication } from "./_actions";
 import { openChatForApplication } from "@/app/app/chat/_actions";
 import { CompanyMetricTile, CompanyStatePill } from "../_components/company-card-theme";
+import { storageDownloadUrl } from "@/lib/security/storage-url";
 
 export const dynamic = "force-dynamic";
 
@@ -94,7 +95,7 @@ function StatusBadge({ status }: { status: string | null }) {
     return <Badge variant="secondary" className="border-none bg-amber-100 text-amber-700">negocjacje</Badge>;
   }
   if (status === "sent") {
-    return <Badge variant="outline" className="border-indigo-200 bg-indigo-50 text-indigo-600">nowe zgloszenie</Badge>;
+    return <Badge variant="outline" className="border-indigo-200 bg-indigo-50 text-indigo-600">nowe zgłoszenie</Badge>;
   }
   if (status === "completed") {
     return <Badge className="border-none bg-slate-100 text-slate-700">zakonczone</Badge>;
@@ -222,7 +223,7 @@ export default async function CompanyApplicationsPage({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13.5px] font-extrabold text-slate-900">
-                  {isCountered ? `Trwa negocjacja - Twoja kontroferta: ${money(counter)}` : "Nowe zgloszenie - rozpatrz kandydata"}
+                  {isCountered ? `Trwa negocjacja - Twoja kontroferta: ${money(counter)}` : "Nowe zgłoszenie - rozpatrz kandydata"}
                 </div>
                 <div className="mt-0.5 text-xs font-semibold" style={{ color: isCountered ? "#b45309" : "#4f46e5" }}>
                   {isCountered ? "Czekasz na odpowiedz studenta." : "Student czeka na Twoja decyzje."}
@@ -261,7 +262,7 @@ export default async function CompanyApplicationsPage({
                 <div className="mt-4 flex flex-wrap gap-2">
                   {row.cv_url ? (
                     <Button asChild variant="outline" className="h-9 rounded-xl border-slate-200 bg-white px-3 text-xs font-bold text-slate-600">
-                      <a href={row.cv_url} target="_blank" rel="noopener noreferrer">
+                      <a href={storageDownloadUrl(row.cv_url)} target="_blank" rel="noopener noreferrer">
                         <FileText className="mr-2 h-4 w-4" />
                         CV.pdf
                       </a>
@@ -316,7 +317,7 @@ export default async function CompanyApplicationsPage({
                   </>
                 ) : (
                   <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-                    Student moze zaakceptowac, odrzucic albo wyslac wlasna propozycje.
+                    Student może zaakceptować, odrzucic albo wysłać wlasna propozycje.
                   </div>
                 )}
               </div>
@@ -364,7 +365,7 @@ export default async function CompanyApplicationsPage({
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-medium text-slate-700">Postep realizacji</span>
-                    <span className="text-sm font-bold text-slate-900">{completed}/{total} etapow</span>
+                    <span className="text-sm font-bold text-slate-900">{completed}/{total} etapów</span>
                   </div>
                   <Progress value={progress} className="h-2" />
 
@@ -485,7 +486,7 @@ export default async function CompanyApplicationsPage({
       <PageContainer className={embedded ? "mt-8 px-0 sm:px-0 lg:px-0 xl:px-0" : "mt-8"}>
         {error ? (
           <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
-            Nie udalo sie pobrac listy aplikacji. Odswiez strone albo wroc za chwile.
+            Nie udało sie pobrać listy aplikacji. Odśwież stronę albo wróć za chwile.
           </div>
         ) : null}
 
@@ -494,11 +495,11 @@ export default async function CompanyApplicationsPage({
             <p className="text-xs font-black uppercase tracking-[0.22em] text-indigo-300">Wymagana akcja</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight">Karty aplikacji z sygnalem decyzji po stronie firmy</h2>
             <p className="mt-2 max-w-3xl text-sm font-medium text-indigo-100/75">
-              Nowe zgloszenia i negocjacje maja mocniejszy sygnal wizualny. Realizacje i archiwum pozostaja
+              Nowe zgłoszenia i negocjacje maja mocniejszy sygnal wizualny. Realizacje i archiwum pozostaja
               spokojniejsze, ale dalej czytelne operacyjnie.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <CompanyStatePill tone="indigo">Nowe zgloszenia</CompanyStatePill>
+              <CompanyStatePill tone="indigo">Nowe zgłoszenia</CompanyStatePill>
               <CompanyStatePill tone="amber">Negocjacje</CompanyStatePill>
               <CompanyStatePill tone="emerald">W realizacji</CompanyStatePill>
               <CompanyStatePill tone="slate">Archiwum</CompanyStatePill>
@@ -536,7 +537,7 @@ export default async function CompanyApplicationsPage({
               <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 py-24 text-center">
                 <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-white text-3xl shadow-sm">-</div>
                 <h3 className="text-xl font-bold text-slate-900">Brak aktywnych realizacji</h3>
-                <p className="mx-auto mt-2 max-w-xs text-slate-500">Zaakceptuj zgloszenie, aby rozpoczac wspolprace.</p>
+                <p className="mx-auto mt-2 max-w-xs text-slate-500">Zaakceptuj zgłoszenie, aby rozpoczac współpracę.</p>
               </div>
             ) : (
               wRealizacji.map(renderProgressCard)
@@ -548,7 +549,7 @@ export default async function CompanyApplicationsPage({
               <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 py-24 text-center">
                 <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-white text-3xl shadow-sm">-</div>
                 <h3 className="text-xl font-bold text-slate-900">Brak zakonczonych zlecen</h3>
-                <p className="mx-auto mt-2 max-w-xs text-slate-500">Tutaj pojawia sie zakonczone i odrzucone zgloszenia.</p>
+                <p className="mx-auto mt-2 max-w-xs text-slate-500">Tutaj pojawia sie zakonczone i odrzucone zgłoszenia.</p>
               </div>
             ) : (
               zakonczone.map(renderClosedCard)

@@ -130,7 +130,7 @@ export function UsersTable({ users }: { users: ProfileRow[] }) {
                 Rola
               </th>
               <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                Imie
+                Imię
               </th>
               <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
                 Nazwisko

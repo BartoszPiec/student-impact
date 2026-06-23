@@ -15,7 +15,7 @@ function MissingResourceState({ title }: { title: string }) {
     <main className="mx-auto max-w-2xl space-y-4 p-6">
       <h1 className="text-xl font-semibold">{title}</h1>
       <p className="text-sm text-muted-foreground">
-        Nie mozemy otworzyc tego formularza. Wroc do panelu i wybierz aktywne zlecenie z listy.
+        Nie mozemy otworzyć tego formularza. Wroc do panelu i wybierz aktywne zlecenie z listy.
       </p>
       <Button asChild variant="outline">
         <Link href="/app">Wroc</Link>
@@ -86,10 +86,10 @@ export default async function CancelPage({
                   <AlertTriangle className="h-6 w-6" />
                 </div>
                 <div className="space-y-2">
-                  <h1 className="text-3xl font-black tracking-tight text-slate-950">Anuluj wspolprace</h1>
+                  <h1 className="text-3xl font-black tracking-tight text-slate-950">Anuluj współpracę</h1>
                   <p className="text-sm leading-6 text-slate-600">
                     Ta operacja zakonczy zlecenie i zapisze powod anulowania w historii sprawy. Historia czatu pozostanie
-                    dostepna, a dalsze kroki rozliczeniowe beda zalezne od stanu wspolpracy.
+                    dostepna, a dalsze kroki rozliczeniowe będą zalezne od stanu współpracy.
                   </p>
                   <p className="text-sm font-semibold text-slate-700">
                     Oferta: <span className="text-slate-950">{offer.tytul ?? "Zlecenie"}</span>
@@ -112,7 +112,7 @@ export default async function CancelPage({
                     rows={6}
                     required
                     className="min-h-[180px] rounded-[1.5rem] border-slate-200 bg-slate-50 px-5 py-4 text-base leading-7 text-slate-900"
-                    placeholder="Napisz krotko dlaczego anulujesz wspolprace."
+                    placeholder="Napisz krotko dlaczego anulujesz współpracę."
                   />
                 </div>
 

@@ -12,6 +12,12 @@ type CreatePayoutTransferInput = {
 
 type PayoutContractRelation = {
   student_id: string | null;
+  status: string | null;
+};
+
+type PayoutMilestoneRelation = {
+  contract_id: string | null;
+  status: string | null;
 };
 
 type PayoutTransferRow = {
@@ -23,6 +29,7 @@ type PayoutTransferRow = {
   status: string | null;
   stripe_transfer_id?: string | null;
   contracts: PayoutContractRelation | PayoutContractRelation[] | null;
+  milestones: PayoutMilestoneRelation | PayoutMilestoneRelation[] | null;
 };
 
 type StudentStripeProfileRow = {
@@ -39,6 +46,7 @@ type PayoutTransferResult =
   | { status: "not_found" }
   | { status: "already_paid" }
   | { status: "not_payable_status"; payoutStatus: string | null }
+  | { status: "not_transferable"; message: string }
   | { status: "missing_account"; message: string }
   | { status: "failed"; message: string }
   | { status: "marked_paid"; transferId: string; amountNetMinor: number }
@@ -60,7 +68,7 @@ function amountNetMinorFromPayout(payout: Pick<PayoutTransferRow, "amount_net" |
 
   const amountNet = Number(payout.amount_net);
   if (!Number.isFinite(amountNet) || amountNet <= 0) {
-    throw new Error("Nieprawidlowa kwota wyplaty.");
+    throw new Error("Nieprawidłowa kwota wypłaty.");
   }
 
   return Math.round(amountNet * 100);
@@ -79,7 +87,7 @@ async function markPayoutPaidInLedger(
   });
 
   if (error) {
-    throw new Error("Nie udalo sie zatwierdzic wyplaty po transferze Stripe: " + error.message);
+    throw new Error("Nie udało się zatwierdzić wypłaty po transferze Stripe: " + error.message);
   }
 }
 
@@ -96,13 +104,51 @@ async function recordPayoutTransferError(payoutId: string, message: string): Pro
     .neq("status", "paid");
 }
 
+async function assertPayoutCanBeTransferred(payout: PayoutTransferRow): Promise<void> {
+  if (!payout.contract_id || !payout.milestone_id) {
+    throw new Error("Wyplata nie jest powiazana z kontraktem i etapem.");
+  }
+
+  const contract = unwrapRelation(payout.contracts);
+  const milestone = unwrapRelation(payout.milestones);
+
+  if (!contract || !milestone || milestone.contract_id !== payout.contract_id) {
+    throw new Error("Wyplata nie pasuje do kontraktu lub etapu.");
+  }
+
+  if (!["active", "completed"].includes(String(contract.status))) {
+    throw new Error("Kontrakt nie jest w stanie pozwalającym na wypłatę.");
+  }
+
+  if (milestone.status !== "released") {
+    throw new Error("Etap nie został zaakceptowany ani automatycznie zwolniony.");
+  }
+
+  const admin = createAdminClient();
+  const { data: payment, error } = await admin
+    .from("payments")
+    .select("id")
+    .eq("contract_id", payout.contract_id)
+    .eq("status", "completed")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Nie udało się potwierdzić płatności kontraktu: " + error.message);
+  }
+
+  if (!payment) {
+    throw new Error("Brak zakończonej płatności Stripe dla tego kontraktu.");
+  }
+}
+
 function resolvePayoutError(error: unknown): string {
-  return error instanceof Error ? error.message : "Nie udalo sie wykonac transferu Stripe.";
+  return error instanceof Error ? error.message : "Nie udało się wykonać transferu Stripe.";
 }
 
 export async function createPayoutTransfer(input: CreatePayoutTransferInput) {
   if (!Number.isInteger(input.amountNetMinor) || input.amountNetMinor <= 0) {
-    throw new Error("Nieprawidlowa kwota wyplaty dla Stripe.");
+    throw new Error("Nieprawidłowa kwota wypłaty dla Stripe.");
   }
 
   return getStripe().transfers.create(
@@ -133,12 +179,12 @@ export async function transferPayoutViaStripe(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("payouts")
-    .select("id, contract_id, milestone_id, amount_net, amount_net_minor, status, stripe_transfer_id, contracts(student_id)")
+    .select("id, contract_id, milestone_id, amount_net, amount_net_minor, status, stripe_transfer_id, contracts(student_id, status), milestones(contract_id, status)")
     .eq("id", payoutId)
     .maybeSingle();
 
   if (error) {
-    const message = "Nie udalo sie pobrac wyplaty: " + error.message;
+    const message = "Nie udało się pobrać wypłaty: " + error.message;
     if (options.throwOnError) throw new Error(message);
     return { status: "failed", message };
   }
@@ -158,6 +204,15 @@ export async function transferPayoutViaStripe(
     return { status: "not_payable_status", payoutStatus: payout.status };
   }
 
+  try {
+    await assertPayoutCanBeTransferred(payout);
+  } catch (error) {
+    const message = resolvePayoutError(error);
+    await recordPayoutTransferError(payout.id, message);
+    if (options.throwOnError) throw new Error(message);
+    return { status: "not_transferable", message };
+  }
+
   if (payout.stripe_transfer_id) {
     await markPayoutPaidInLedger(payout.id, amountNetMinor, options.paidByAdminId ?? null);
     return { status: "marked_paid", transferId: payout.stripe_transfer_id, amountNetMinor };
@@ -173,7 +228,7 @@ export async function transferPayoutViaStripe(
   const contract = unwrapRelation(payout.contracts);
   const studentId = contract?.student_id ?? null;
   if (!studentId) {
-    const message = "Nie znaleziono studenta dla tej wyplaty.";
+    const message = "Nie znaleziono studenta dla tej wypłaty.";
     await recordPayoutTransferError(payout.id, message);
     if (options.throwOnError) throw new Error(message);
     return { status: "failed", message };
@@ -186,7 +241,7 @@ export async function transferPayoutViaStripe(
     .maybeSingle();
 
   if (studentStripeError) {
-    const message = "Nie udalo sie pobrac konta Stripe studenta: " + studentStripeError.message;
+    const message = "Nie udało się pobrać konta Stripe studenta: " + studentStripeError.message;
     await recordPayoutTransferError(payout.id, message);
     if (options.throwOnError) throw new Error(message);
     return { status: "failed", message };
@@ -194,7 +249,7 @@ export async function transferPayoutViaStripe(
 
   const stripeProfile = studentStripeProfile as StudentStripeProfileRow | null;
   if (!stripeProfile?.stripe_account_id) {
-    const message = "Student nie ma skonfigurowanego konta Stripe do wyplat.";
+    const message = "Student nie ma skonfigurowanego konta Stripe do wypłat.";
     await recordPayoutTransferError(payout.id, message);
     if (options.throwOnError) throw new Error(message);
     return { status: "missing_account", message };
@@ -266,7 +321,7 @@ export async function transferLatestPayoutForMilestone(
     .maybeSingle();
 
   if (error) {
-    const message = "Nie udalo sie pobrac wyplaty dla etapu: " + error.message;
+    const message = "Nie udało się pobrać wypłaty dla etapu: " + error.message;
     if (options.throwOnError) throw new Error(message);
     return { status: "failed", message };
   }

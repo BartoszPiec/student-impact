@@ -93,7 +93,7 @@ export default async function ServiceOrderDetailPage(props: Props) {
     return (
       <div className="container py-12 text-center">
         <h1 className="mb-4 text-2xl font-bold">Nie znaleziono zlecenia</h1>
-        <p className="mb-6 text-slate-500">Prawdopodobnie zostalo usuniete lub nie masz do niego dostepu.</p>
+        <p className="mb-6 text-slate-500">Prawdopodobnie zostało usuniete lub nie masz do niego dostepu.</p>
         <Link href="/app/services/dashboard">
           <Button>Wroc do pulpitu</Button>
         </Link>
@@ -143,7 +143,7 @@ export default async function ServiceOrderDetailPage(props: Props) {
               {statusInfo.label}
             </span>
             <Badge variant="outline" className="rounded-full border-indigo-200 bg-indigo-50 px-4 py-1.5 text-sm font-medium text-indigo-700">
-              {isPrivateProposal ? "Twoja prywatna propozycja" : "Zapytanie od firmy"}
+              {isPrivateProposal ? "Twoja prywatną propozycja" : "Zapytanie od firmy"}
             </Badge>
           </div>
 
@@ -374,7 +374,7 @@ export default async function ServiceOrderDetailPage(props: Props) {
             ) : null}
           </div>
 
-          {/* RIGHT SIDEBAR — company + prywatna propozycja info */}
+          {/* RIGHT SIDEBAR — company + prywatną propozycja info */}
           <div className="space-y-6">
 
             {/* Company card */}

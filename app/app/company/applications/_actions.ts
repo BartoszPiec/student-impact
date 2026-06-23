@@ -10,10 +10,28 @@ import { closeRejectedApplicationConversation } from "@/lib/services/application
 interface OfferRow {
   id: string;
   company_id: string;
-  stawka: number | null;
+  stawka?: number | null;
   tytul: string | null;
   is_platform_service?: boolean | null;
   typ?: string | null;
+}
+
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+type ApplicationWithOffer = {
+  id: string;
+  status: string;
+  student_id: string;
+  offer_id: string;
+  proposed_stawka?: number | null;
+  agreed_stawka?: number | null;
+  agreed_stawka_minor?: number | null;
+  counter_stawka?: number | null;
+  offers: OfferRow | OfferRow[] | null;
+};
+
+function unwrapRelation<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
 }
 
 function toMinorUnits(value: number | null | undefined): number | null {
@@ -54,16 +72,15 @@ async function hasAnotherLockedApplication(
 }
 
 async function notifyUser(
-  _supabase: any,
   userId: string,
   typ: string,
-  payload: Record<string, any> = {}
+  payload: Record<string, unknown> = {}
 ) {
   await trySendNotification(userId, typ, payload);
 }
 
 async function ensureConversationForApplication(
-  supabase: any,
+  supabase: SupabaseClient,
   args: {
     application_id: string;
     offer_id: string;
@@ -80,12 +97,12 @@ async function ensureConversationForApplication(
 }
 
 async function insertChatMessage(
-  supabase: any,
+  supabase: SupabaseClient,
   conversationId: string,
   senderId: string,
   content: string,
   event: string | null = null,
-  payload: Record<string, any> | null = null
+  payload: Record<string, unknown> | null = null
 ) {
   const b = (content ?? "").trim();
   if (!b) return;
@@ -118,9 +135,8 @@ export async function acceptApplication(applicationId: string) {
 
   if (appErr || !appRow) redirect("/app");
 
-  const offer: OfferRow = Array.isArray((appRow as any).offers)
-    ? (appRow as any).offers[0]
-    : (appRow as any).offers;
+  const application = appRow as ApplicationWithOffer;
+  const offer = unwrapRelation(application.offers);
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
@@ -130,13 +146,13 @@ export async function acceptApplication(applicationId: string) {
   }
 
   if (!isMultiInstanceOffer(offer) && (await hasAnotherLockedApplication(supabase, offer.id, applicationId))) {
-    throw new Error("To zlecenie ma juz zaakceptowanego wykonawce.");
+    throw new Error("To zlecenie ma już zaakceptowanego wykonawce.");
   }
 
   const now = new Date().toISOString();
-  const agreed = (appRow as any).agreed_stawka
-    ?? fromMinorUnits((appRow as any).agreed_stawka_minor)
-    ?? (appRow as any).proposed_stawka
+  const agreed = application.agreed_stawka
+    ?? fromMinorUnits(application.agreed_stawka_minor)
+    ?? application.proposed_stawka
     ?? offer.stawka
     ?? null;
 
@@ -178,12 +194,12 @@ export async function acceptApplication(applicationId: string) {
     // powiadom pozostałych
     for (const o of others ?? []) {
       if (!o?.student_id) continue;
-      await notifyUser(supabase as any, o.student_id, "offer_closed", {
+      await notifyUser(o.student_id, "offer_closed", {
         offer_id: offer.id,
         offer_title: offer.tytul ?? null,
         reason: "accepted_other",
       });
-      const rejectedConversationId = await closeRejectedApplicationConversation(supabase as any, {
+      const rejectedConversationId = await closeRejectedApplicationConversation(supabase, {
         applicationId: o.id,
         offerId: offer.id,
         companyId: offer.company_id,
@@ -206,7 +222,7 @@ export async function acceptApplication(applicationId: string) {
 
   // ✅ wiadomość systemowa na czacie
   try {
-    const conversationId = await ensureConversationForApplication(supabase as any, {
+    const conversationId = await ensureConversationForApplication(supabase, {
       application_id: applicationId,
       offer_id: offer.id,
       company_id: offer.company_id,
@@ -214,7 +230,7 @@ export async function acceptApplication(applicationId: string) {
     });
 
     await insertChatMessage(
-      supabase as any,
+      supabase,
       conversationId,
       user.id,
       `Stawka ${agreed ?? offer.stawka ?? "-"} zł zaakceptowana.`,
@@ -229,7 +245,7 @@ export async function acceptApplication(applicationId: string) {
   }
 
   // ✅ powiadom zaakceptowanego studenta
-  await notifyUser(supabase as any, appRow.student_id, "application_accepted", {
+  await notifyUser(appRow.student_id, "application_accepted", {
     application_id: applicationId,
     offer_id: offer.id,
     offer_title: offer.tytul ?? null,
@@ -268,9 +284,8 @@ export async function rejectApplication(applicationId: string) {
 
   if (appErr || !appRow) redirect("/app");
 
-  const offer: any = Array.isArray((appRow as any).offers)
-    ? (appRow as any).offers[0]
-    : (appRow as any).offers;
+  const application = appRow as ApplicationWithOffer;
+  const offer = unwrapRelation(application.offers);
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
@@ -286,7 +301,7 @@ export async function rejectApplication(applicationId: string) {
 
   if (updErr) throw new Error(updErr.message);
 
-  await notifyUser(supabase as any, appRow.student_id, "application_rejected", {
+  await notifyUser(appRow.student_id, "application_rejected", {
     application_id: applicationId,
     offer_id: offer.id,
     offer_title: offer.tytul ?? null,
@@ -294,14 +309,14 @@ export async function rejectApplication(applicationId: string) {
 
   // ✅ message systemowy "Odrzucono" (opcjonalnie, ale w Vinted stylu warto)
   try {
-    const conversationId = await ensureConversationForApplication(supabase as any, {
+    const conversationId = await ensureConversationForApplication(supabase, {
       application_id: applicationId,
       offer_id: offer.id,
       company_id: offer.company_id,
       student_id: appRow.student_id,
     });
     await insertChatMessage(
-      supabase as any,
+      supabase,
       conversationId,
       user.id,
       "Aplikacja została odrzucona.",
@@ -336,9 +351,8 @@ export async function counterOffer(applicationId: string, formData: FormData) {
 
   if (appErr || !appRow) redirect("/app");
 
-  const offer: any = Array.isArray((appRow as any).offers)
-    ? (appRow as any).offers[0]
-    : (appRow as any).offers;
+  const application = appRow as ApplicationWithOffer;
+  const offer = unwrapRelation(application.offers);
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
@@ -348,7 +362,7 @@ export async function counterOffer(applicationId: string, formData: FormData) {
   }
 
   if (!isMultiInstanceOffer(offer as OfferRow) && (await hasAnotherLockedApplication(supabase, offer.id, applicationId))) {
-    throw new Error("To zlecenie ma juz zaakceptowanego wykonawce.");
+    throw new Error("To zlecenie ma już zaakceptowanego wykonawce.");
   }
 
   const { error: updErr } = await supabase
@@ -366,7 +380,7 @@ export async function counterOffer(applicationId: string, formData: FormData) {
 
   // ✅ dopisz do czatu
   try {
-    const conversationId = await ensureConversationForApplication(supabase as any, {
+    const conversationId = await ensureConversationForApplication(supabase, {
       application_id: applicationId,
       offer_id: offer.id,
       company_id: offer.company_id,
@@ -374,7 +388,7 @@ export async function counterOffer(applicationId: string, formData: FormData) {
     });
 
     await insertChatMessage(
-      supabase as any,
+      supabase,
       conversationId,
       user.id,
       `Kontrpropozycja firmy: ${counter} zł.`,
@@ -385,7 +399,7 @@ export async function counterOffer(applicationId: string, formData: FormData) {
     // nie blokujemy
   }
 
-  await notifyUser(supabase as any, appRow.student_id, "application_countered", {
+  await notifyUser(appRow.student_id, "application_countered", {
     application_id: applicationId,
     offer_id: offer.id,
     offer_title: offer.tytul ?? null,

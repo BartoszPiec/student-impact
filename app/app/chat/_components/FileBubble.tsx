@@ -1,5 +1,6 @@
 
 import { FileIcon, ImageIcon } from "lucide-react";
+import { storageDownloadUrl } from "@/lib/security/storage-url";
 
 export function FileBubble({
     name,
@@ -13,20 +14,26 @@ export function FileBubble({
     isMine: boolean;
 }) {
     const isImage = type === "image";
+    const downloadUrl = storageDownloadUrl(url);
 
     return (
-        <div className="flex flex-col gap-1">
+        <div className="flex max-w-[min(78vw,26rem)] flex-col gap-1 sm:max-w-md">
             {isImage ? (
-                <a href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-slate-200 shadow-sm max-w-[280px]">
-                    {/*eslint-disable-next-line @next/next/no-img-element*/}
-                    <img src={url} alt={name} className="w-full h-auto object-cover max-h-64 hover:opacity-95 transition-opacity" />
+                <a href={downloadUrl} target="_blank" rel="noreferrer" className="flex max-w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-colors hover:bg-slate-50">
+                    <div className="rounded-lg bg-slate-100 p-2 text-slate-500">
+                        <ImageIcon className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-700">{name || "Obraz"}</p>
+                        <p className="text-xs uppercase text-slate-400">Prywatny załącznik</p>
+                    </div>
                 </a>
             ) : (
                 <a
-                    href={url}
+                    href={downloadUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className={`flex items-center gap-3 p-3 rounded-xl border shadow-sm transition-colors hover:bg-opacity-90 ${isMine ? "bg-indigo-600/10 border-indigo-200" : "bg-white border-slate-200 hover:bg-slate-50"
+                    className={`flex max-w-full items-center gap-3 p-3 rounded-xl border shadow-sm transition-colors hover:bg-opacity-90 ${isMine ? "bg-indigo-600/10 border-indigo-200" : "bg-white border-slate-200 hover:bg-slate-50"
                         }`}
                 >
                     <div className={`p-2 rounded-lg ${isMine ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500"}`}>

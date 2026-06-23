@@ -2,6 +2,13 @@
 
 This folder stores historical ad-hoc SQL scripts that are **not** part of the Supabase migration pipeline.
 
+`legacy-migrations/` additionally contains the old eight-digit migration files
+archived during the 2026-06-20 production-history reconciliation. Supabase CLI
+treated their repeated date prefixes as migration versions, so leaving them in
+`supabase/migrations/` made safe history comparison and `db push` impossible.
+Their effective database state is represented by the canonical fourteen-digit
+migrations now present in `supabase/migrations/`.
+
 ## What belongs in migrations
 
 Only timestamped files in `supabase/migrations/` matching:

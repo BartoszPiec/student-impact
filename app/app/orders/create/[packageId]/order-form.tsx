@@ -4,7 +4,7 @@
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Coins, Clock, Sparkles, User, Briefcase, Star } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
@@ -26,7 +26,6 @@ interface OrderFormProps {
     description: string;
     formSchema: FormField[] | null;
     defaultEmail?: string;
-    defaultPhone?: string;
     defaultWebsite?: string;
 }
 
@@ -37,7 +36,6 @@ export default function OrderForm({
     description,
     formSchema,
     defaultEmail,
-    defaultPhone,
     defaultWebsite
 }: OrderFormProps) {
     const [loading, setLoading] = useState(false);
@@ -48,7 +46,7 @@ export default function OrderForm({
 
     // Stan dla odpowiedzi z formularza dynamicznego
     // Klucz = field.id, Wartość = odpowiedź
-    const [answers, setAnswers] = useState<Record<string, string>>({});
+    const [, setAnswers] = useState<Record<string, string>>({});
 
     const handleAnswerChange = (id: string, value: string) => {
         setAnswers(prev => ({ ...prev, [id]: value }));
@@ -256,7 +254,7 @@ export default function OrderForm({
                         />
                     </div>
 
-                    <div className="pt-6">
+                    <div className="mobile-sticky-actions pt-6">
                         <Button
                             disabled={loading || isPending}
                             type="submit"

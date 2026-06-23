@@ -41,7 +41,7 @@ export function DashboardHeader({ onRefresh, loading }: DashboardHeaderProps) {
             className="h-10 gap-2 rounded-2xl border-white/10 bg-white/5 px-6 text-xs font-bold uppercase tracking-widest text-slate-200 hover:bg-white/10 hover:text-white"
           >
             <RefreshCcw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Odswiez
+            Odśwież
           </Button>
 
           <Button

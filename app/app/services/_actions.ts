@@ -22,6 +22,7 @@ import {
     findConversationForServiceOrder,
 } from "@/lib/services/service-order-conversations";
 import { LOGO_PACKAGE_ID } from "@/lib/services/logo-student-selection";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type ServiceOrderNegotiationRow = {
     id: string;
@@ -33,7 +34,7 @@ type ServiceOrderNegotiationRow = {
 };
 
 async function getConversationForOrder(
-    supabase: any,
+    supabase: SupabaseClient,
     params: { orderId: string; companyId: string; studentId: string; packageId?: string | null },
 ) {
     return findConversationForServiceOrder(supabase, {
@@ -320,11 +321,11 @@ export async function createPrivateProposalAction(formData: FormData) {
     const message = String(formData.get("message") || "").trim();
 
     if (!packageId || !targetCompanyId) {
-        throw new Error("Wybierz usluge i firme docelowa.");
+        throw new Error("Wybierz usługę i firme docelowa.");
     }
 
     if (!proposalGoal || !expectedResult || !scopeSummary) {
-        throw new Error("Uzupelnij cel wspolpracy, oczekiwany rezultat i zakres propozycji.");
+        throw new Error("Uzupelnij cel współpracy, oczekiwany rezultat i zakres propozycji.");
     }
 
     const proposedAmount = Number(proposedAmountRaw);
@@ -345,7 +346,7 @@ export async function createPrivateProposalAction(formData: FormData) {
         .single();
 
     if (pkgError || !pkg) {
-        throw new Error("Nie znaleziono wybranej uslugi.");
+        throw new Error("Nie znaleziono wybranej usługi.");
     }
 
     await assertStudentCanPrivatelyProposeToCompany(supabase, user.id, targetCompanyId);
@@ -358,7 +359,7 @@ export async function createPrivateProposalAction(formData: FormData) {
 
     const requestSnapshot = buildPrivateProposalRequestSnapshot({
         packageId: pkg.id,
-        packageTitle: pkg.title || "Usluga",
+        packageTitle: pkg.title || "Usługa",
         targetCompanyId,
         targetCompanyName: company?.nazwa || null,
         proposalGoal,
@@ -403,7 +404,7 @@ export async function createPrivateProposalAction(formData: FormData) {
         .single();
 
     if (insertError || !order) {
-        throw new Error(insertError?.message || "Nie udalo sie zapisac prywatnej propozycji.");
+        throw new Error(insertError?.message || "Nie udało sie zapisać prywatnej propozycji.");
     }
 
     const conversation = await ensureConversationForServiceOrder(supabase, {
@@ -417,7 +418,7 @@ export async function createPrivateProposalAction(formData: FormData) {
         {
             conversation_id: conversation.id,
             sender_id: user.id,
-            content: "Student wyslal prywatna propozycje wspolpracy.",
+            content: "Student wyslal prywatną propozycje współpracy.",
         },
         {
             conversation_id: conversation.id,
@@ -430,7 +431,7 @@ export async function createPrivateProposalAction(formData: FormData) {
     await sendNotification(targetCompanyId, "application_new", {
         conversation_id: conversation.id,
         service_order_id: order.id,
-        snippet: `Otrzymales prywatna propozycje wspolpracy: ${pkg.title}`,
+        snippet: `Otrzymales prywatną propozycje współpracy: ${pkg.title}`,
         offer_title: pkg.title,
     });
 
@@ -757,11 +758,11 @@ export async function selectCompanyOrderStudentAction(formData: FormData) {
     }
 
     if (order.student_id) {
-        throw new Error("Do tego zamowienia student jest juz przypisany.");
+        throw new Error("Do tego zamowienia student jest już przypisany.");
     }
 
     if (!["pending_selection", "pending"].includes(order.status)) {
-        throw new Error("To zamowienie nie jest juz na etapie wyboru studenta.");
+        throw new Error("To zamowienie nie jest już na etapie wyboru studenta.");
     }
 
     const maxActiveOrders = order.package_id === LOGO_PACKAGE_ID ? 1 : 2;
@@ -776,7 +777,7 @@ export async function selectCompanyOrderStudentAction(formData: FormData) {
 
     const assignedRow = Array.isArray(lockResult) ? lockResult[0] : null;
     if (lockError || !assignedRow?.order_id) {
-        throw new Error(lockError?.message || "Nie udalo sie przypisac studenta.");
+        throw new Error(lockError?.message || "Nie udało sie przypisac studenta.");
     }
 
     const existingConversation = await findConversationForServiceOrder(supabase, {
@@ -802,7 +803,7 @@ export async function selectCompanyOrderStudentAction(formData: FormData) {
         user_id: studentId,
         typ: "application_new",
         payload: {
-            snippet: `Firma wybrala Cie do realizacji uslugi: ${order.title || "Usluga"}`,
+            snippet: `Firma wybrala Cie do realizacji usługi: ${order.title || "Usługa"}`,
             service_order_id: orderId,
             conversation_id: conversationId,
         },
@@ -874,8 +875,8 @@ export async function confirmStudentSelectionAction(orderId: string) {
         await sendNotification(order.company_id, "application_accepted", {
             conversation_id: conversation.id,
             service_order_id: orderId,
-            snippet: `Student potwierdzil realizacje: ${order.title || "Usluga"}`,
-            offer_title: order.title || "Usluga",
+            snippet: `Student potwierdzil realizacje: ${order.title || "Usługa"}`,
+            offer_title: order.title || "Usługa",
         });
     }
 

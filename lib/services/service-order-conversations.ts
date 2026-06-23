@@ -121,7 +121,7 @@ export async function ensureConversationForApplication(
     if (racedExisting) return { ...racedExisting, created: false };
   }
 
-  throw new Error(error?.message ?? "Nie udalo sie utworzyc rozmowy");
+  throw new Error(error?.message ?? "Nie udało sie utworzyc rozmowy");
 }
 
 export async function ensureConversationIdForApplication(
@@ -159,7 +159,7 @@ export async function ensureConversationForServiceOrder(
     if (racedExisting) return { ...racedExisting, created: false };
   }
 
-  throw new Error(error?.message ?? "Nie udalo sie utworzyc rozmowy");
+  throw new Error(error?.message ?? "Nie udało sie utworzyc rozmowy");
 }
 
 export async function findConversationForServiceOrder(

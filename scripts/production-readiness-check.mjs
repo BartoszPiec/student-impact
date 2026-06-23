@@ -52,20 +52,34 @@ function requireEnv(env, checks, keys) {
 }
 
 function assertKeyMode(env, checks, target) {
-  const expectedSecretPrefix = target === "production" ? "sk_live_" : "sk_test_";
-  const expectedPublicPrefix = target === "production" ? "pk_live_" : "pk_test_";
+  const allowTestStripeInProduction =
+    target === "production" && env.ALLOW_TEST_STRIPE_IN_PRODUCTION === "true";
+  const expectedSecretPrefixes = allowTestStripeInProduction
+    ? ["sk_live_", "sk_test_"]
+    : [target === "production" ? "sk_live_" : "sk_test_"];
+  const expectedPublicPrefixes = allowTestStripeInProduction
+    ? ["pk_live_", "pk_test_"]
+    : [target === "production" ? "pk_live_" : "pk_test_"];
 
-  if (env.STRIPE_SECRET_KEY?.startsWith(expectedSecretPrefix)) {
-    pass(checks, "stripe:key-mode:secret", target);
+  if (expectedSecretPrefixes.some((prefix) => env.STRIPE_SECRET_KEY?.startsWith(prefix))) {
+    pass(checks, "stripe:key-mode:secret", allowTestStripeInProduction ? "production:test-allowed" : target);
   } else {
-    fail(checks, "stripe:key-mode:secret", `STRIPE_SECRET_KEY musi zaczynac sie od ${expectedSecretPrefix}.`);
+    fail(
+      checks,
+      "stripe:key-mode:secret",
+      `STRIPE_SECRET_KEY musi zaczynac sie od ${expectedSecretPrefixes.join(" albo ")}.`,
+    );
   }
 
   const publishableKey = env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || env.STRIPE_PUBLISHABLE_KEY;
-  if (publishableKey?.startsWith(expectedPublicPrefix)) {
-    pass(checks, "stripe:key-mode:publishable", target);
+  if (expectedPublicPrefixes.some((prefix) => publishableKey?.startsWith(prefix))) {
+    pass(checks, "stripe:key-mode:publishable", allowTestStripeInProduction ? "production:test-allowed" : target);
   } else {
-    fail(checks, "stripe:key-mode:publishable", `Stripe publishable key musi zaczynac sie od ${expectedPublicPrefix}.`);
+    fail(
+      checks,
+      "stripe:key-mode:publishable",
+      `Stripe publishable key musi zaczynac sie od ${expectedPublicPrefixes.join(" albo ")}.`,
+    );
   }
 
   if (target === "production" && env.STRIPE_WEBHOOK_PROCESS_INLINE === "true") {
@@ -260,7 +274,7 @@ async function main() {
     "NEXT_PUBLIC_APP_URL",
   ]);
 
-  if (target === "production") {
+  if (target === "production" && env.ALLOW_TEST_STRIPE_IN_PRODUCTION !== "true") {
     requireEnv(env, checks, ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "SENTRY_DSN"]);
   }
 

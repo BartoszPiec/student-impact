@@ -2,7 +2,7 @@
 import { Redis } from "@upstash/redis";
 import type { NextRequest } from "next/server";
 
-type LimiterName = "checkout" | "ceidg" | "apply" | "message" | "notifications";
+type LimiterName = "checkout" | "ceidg" | "apply" | "message" | "notifications" | "upload";
 type EdgeLimiterName = "auth" | "api";
 type AnyLimiterName = LimiterName | EdgeLimiterName;
 
@@ -17,11 +17,20 @@ type RateLimitResult = {
 const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
   ? Redis.fromEnv()
   : null;
+const shouldFailClosedWithoutRedis = process.env.VERCEL_ENV === "production";
 
 const fallbackResult: RateLimitResult = {
   success: true,
   limit: Number.MAX_SAFE_INTEGER,
   remaining: Number.MAX_SAFE_INTEGER,
+  reset: Date.now() + 60_000,
+  reason: "upstash_not_configured",
+};
+
+const productionFailClosedResult: RateLimitResult = {
+  success: false,
+  limit: 0,
+  remaining: 0,
   reset: Date.now() + 60_000,
   reason: "upstash_not_configured",
 };
@@ -47,6 +56,9 @@ const limiters: Record<AnyLimiterName, Ratelimit | null> = {
     : null,
   notifications: redis
     ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(60, "1 m"), analytics: true, prefix: "rl:notifications" })
+    : null,
+  upload: redis
+    ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(20, "1 h"), analytics: true, prefix: "rl:upload" })
     : null,
 };
 
@@ -77,6 +89,12 @@ export async function enforceRateLimit(
 ): Promise<RateLimitResult> {
   const limiter = limiters[limiterName];
   if (!limiter) {
+    if (shouldFailClosedWithoutRedis) {
+      return {
+        ...productionFailClosedResult,
+        reset: Date.now() + 60_000,
+      };
+    }
     return fallbackResult;
   }
 

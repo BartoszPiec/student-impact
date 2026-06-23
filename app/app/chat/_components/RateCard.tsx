@@ -92,7 +92,7 @@ export function RateCard({
   return (
     <div
       className={`
-        relative w-full max-w-[320px] rounded-xl border bg-white p-4 text-slate-800 shadow-sm
+        relative w-full max-w-[min(78vw,320px)] rounded-xl border bg-white p-4 text-slate-800 shadow-sm
         ${isMine ? "border-indigo-100" : "border-slate-200"}
         ${effectiveStatus === "accepted" ? "border-emerald-200 bg-emerald-50/30" : ""}
         ${effectiveStatus === "rejected" ? "border-red-200 bg-red-50/30 opacity-70" : ""}
