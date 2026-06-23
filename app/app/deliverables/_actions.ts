@@ -7,10 +7,6 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import React from "react";
-import { renderPdfToBuffer } from "@/lib/pdf/render";
-import { ContractADocument } from "@/lib/pdf/contract-a-template";
-import { ContractBDocument } from "@/lib/pdf/contract-b-template";
-import { generateStudentInvoice } from "@/lib/pdf/generate-invoice";
 import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
 import { transferLatestPayoutForMilestone } from "@/lib/stripe/payouts";
@@ -986,6 +982,7 @@ export async function reviewMilestoneAction(
         const amount = Number(payoutData?.amount_gross ?? milestoneData.amount);
         const fee = Number(payoutData?.platform_fee ?? 0);
         const net = Number(payoutData?.amount_net ?? Math.max(amount - fee, 0));
+        const { generateStudentInvoice } = await import("@/lib/pdf/generate-invoice");
         await generateStudentInvoice(
           milestoneData.contract_id,
           milestoneId,
@@ -1291,7 +1288,12 @@ export async function generateContractDocuments(contractId: string, applicationI
     reviewWindowDays: contract.review_window_days || 8,
   };
 
-  // 6. Render PDFs
+  // 6. Render PDFs only when contract generation is requested.
+  const [{ renderPdfToBuffer }, { ContractADocument }, { ContractBDocument }] = await Promise.all([
+    import("@/lib/pdf/render"),
+    import("@/lib/pdf/contract-a-template"),
+    import("@/lib/pdf/contract-b-template"),
+  ]);
   const pdfA = await renderPdfToBuffer(
     React.createElement(ContractADocument, { data: contractData })
   );
@@ -1523,9 +1525,18 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
     reviewWindowDays: contract.review_window_days || 8,
   };
 
+  const [{ renderPdfToBuffer }, { ContractADocument }, { ContractBDocument }] = await Promise.all([
+    import("@/lib/pdf/render"),
+    import("@/lib/pdf/contract-a-template"),
+    import("@/lib/pdf/contract-b-template"),
+  ]);
   const [pdfA, pdfB] = await Promise.all([
-    renderPdfToBuffer(React.createElement(ContractADocument, { data: contractData })),
-    renderPdfToBuffer(React.createElement(ContractBDocument, { data: contractData })),
+    needsContractA
+      ? renderPdfToBuffer(React.createElement(ContractADocument, { data: contractData }))
+      : Promise.resolve(null),
+    needsContractB
+      ? renderPdfToBuffer(React.createElement(ContractBDocument, { data: contractData }))
+      : Promise.resolve(null),
   ]);
 
   const timestamp = Date.now();
@@ -1538,7 +1549,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
   }> = [];
   const generated: string[] = [];
 
-  if (needsContractA) {
+  if (needsContractA && pdfA) {
     const pathA = `contracts/${contractId}/Umowa_A_Firma_${timestamp}.pdf`;
     const { error: uploadErrorA } = await admin.storage
       .from("deliverables")
@@ -1559,7 +1570,7 @@ async function generateContractDocumentsInternal(contractId: string, actorUserId
     generated.push("contract_a");
   }
 
-  if (needsContractB) {
+  if (needsContractB && pdfB) {
     const pathB = `contracts/${contractId}/Umowa_B_Student_${timestamp}.pdf`;
     const { error: uploadErrorB } = await admin.storage
       .from("deliverables")

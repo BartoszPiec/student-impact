@@ -8,6 +8,7 @@ import { acceptRate, rejectRate, sendEventMessage } from "@/app/app/chat/_action
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -157,6 +158,7 @@ export function RateCard({
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Zaproponuj inną stawkę</DialogTitle>
+                <DialogDescription>Podaj nową kwotę do dalszej negocjacji.</DialogDescription>
               </DialogHeader>
               <div className="space-y-2 py-4">
                 <Label>Twoja propozycja (PLN)</Label>

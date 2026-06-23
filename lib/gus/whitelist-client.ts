@@ -21,7 +21,6 @@ export class VatWhiteListClient {
         const url = `${this.baseUrl}/${cleanNip}?date=${date}`;
 
         try {
-            console.log(`[VAT] Fetching data for NIP: ${cleanNip}`);
             const res = await fetch(url, {
                 headers: {
                     "Accept": "application/json",

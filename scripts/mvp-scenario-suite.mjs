@@ -143,7 +143,7 @@ async function checkSupabaseEvidence(checks, env) {
 
   const { data: completedContract, error: contractError } = await supabase
     .from("contracts")
-    .select("id, status, company_id, student_id, payments(status), payouts(status)")
+    .select("id, status, company_id, student_id, total_amount")
     .eq("status", "completed")
     .not("service_order_id", "is", null)
     .order("updated_at", { ascending: false })
@@ -156,31 +156,94 @@ async function checkSupabaseEvidence(checks, env) {
     details: contractError?.message || completedContract?.id || "missing",
   });
 
-  const { data: contractADocument, error: documentError } = completedContract?.id
+  const contractId = completedContract?.id;
+  const { data: payments, error: paymentsError } = contractId
     ? await supabase
-        .from("contract_documents")
-        .select("id")
-        .eq("contract_id", completedContract.id)
-        .eq("document_type", "contract_a")
-        .limit(1)
-        .maybeSingle()
-    : { data: null, error: null };
+        .from("payments")
+        .select("id, status, stripe_session_id, stripe_payment_intent_id, amount_total, platform_fee")
+        .eq("contract_id", contractId)
+    : { data: [], error: null };
+  const completedPayment = payments?.find((payment) => payment.status === "completed");
 
   checks.push({
-    ok: !documentError && Boolean(contractADocument?.id),
-    name: "db contract document evidence",
-    details: documentError?.message || contractADocument?.id || "missing",
+    ok: !paymentsError
+      && Boolean(completedPayment?.stripe_session_id)
+      && Boolean(completedPayment?.stripe_payment_intent_id)
+      && Number(completedPayment?.amount_total) > 0
+      && Number(completedPayment?.platform_fee) >= 0
+      && Number(completedPayment?.platform_fee) < Number(completedPayment?.amount_total),
+    name: "db completed Stripe payment evidence",
+    details: paymentsError?.message || completedPayment?.id || "missing or inconsistent",
   });
 
-  const { data: contractBDocument } = completedContract?.id
+  const { data: milestones, error: milestonesError } = contractId
+    ? await supabase
+        .from("milestones")
+        .select("id, status, amount, accepted_at")
+        .eq("contract_id", contractId)
+    : { data: [], error: null };
+  checks.push({
+    ok: !milestonesError
+      && Boolean(milestones?.length)
+      && milestones.every((milestone) => milestone.status === "released" && milestone.accepted_at),
+    name: "db released milestones evidence",
+    details: milestonesError?.message || `${milestones?.length ?? 0} milestone(s)`,
+  });
+
+  const { data: payouts, error: payoutsError } = contractId
+    ? await supabase
+        .from("payouts")
+        .select("id, status, amount_gross, platform_fee, amount_net, stripe_transfer_id, stripe_transfer_error")
+        .eq("contract_id", contractId)
+    : { data: [], error: null };
+  const paidPayouts = payouts?.filter((payout) => payout.status === "paid") ?? [];
+  const payoutAmountsConsistent = paidPayouts.every((payout) =>
+    Math.abs(
+      Number(payout.amount_gross) - Number(payout.platform_fee) - Number(payout.amount_net),
+    ) < 0.01,
+  );
+  checks.push({
+    ok: !payoutsError
+      && paidPayouts.length > 0
+      && paidPayouts.every((payout) => payout.stripe_transfer_id)
+      && payoutAmountsConsistent,
+    name: "db paid Stripe payout evidence",
+    details: payoutsError?.message || (payouts?.length
+      ? payouts.map((payout) => `${payout.status}:${payout.stripe_transfer_error || "no-error"}`).join(", ")
+      : "no payouts"),
+  });
+
+  const { data: documents, error: documentsError } = contractId
     ? await supabase
         .from("contract_documents")
-        .select("id")
-        .eq("contract_id", completedContract.id)
-        .eq("document_type", "contract_b")
-        .limit(1)
-        .maybeSingle()
-    : { data: null };
+        .select("id, document_type, storage_path")
+        .eq("contract_id", contractId)
+        .in("document_type", ["contract_a", "contract_b"])
+    : { data: [], error: null };
+  const contractADocument = documents?.find((document) => document.document_type === "contract_a");
+  const contractBDocument = documents?.find((document) => document.document_type === "contract_b");
+  checks.push({
+    ok: !documentsError
+      && Boolean(contractADocument?.id && contractADocument.storage_path)
+      && Boolean(contractBDocument?.id && contractBDocument.storage_path),
+    name: "db both contract documents evidence",
+    details: documentsError?.message || `${documents?.length ?? 0} document(s)`,
+  });
+
+  const { data: invoices, error: invoicesError } = contractId
+    ? await supabase
+        .from("invoices")
+        .select("id, status, invoice_type, storage_path")
+        .eq("contract_id", contractId)
+    : { data: [], error: null };
+  const companyInvoice = invoices?.find((invoice) => invoice.invoice_type === "company");
+  checks.push({
+    ok: !invoicesError
+      && Boolean(companyInvoice?.id && companyInvoice.storage_path)
+      && ["issued", "paid"].includes(companyInvoice?.status),
+    name: "db company invoice evidence",
+    details: invoicesError?.message || companyInvoice?.id || "missing",
+  });
 
   return {
     completedContract,
@@ -205,8 +268,15 @@ async function main() {
   await assertHttp(checks, baseUrl, "/app/profile", [302, 303, 307, 308]);
   await assertHttp(checks, baseUrl, "/api/stripe/create-checkout", [401, 403], { method: "POST" });
   await assertHttp(checks, baseUrl, "/api/stripe/connect/onboarding", [401, 403], { method: "POST" });
+  await assertHttp(checks, baseUrl, "/api/stripe/verify-payment", [401, 403], { method: "POST" });
   await assertHttp(checks, baseUrl, "/api/stripe/webhook", 400, { method: "POST" });
   await assertHttp(checks, baseUrl, "/api/documents/download", 400);
+  await assertHttp(checks, baseUrl, "/api/storage/download", 400);
+  await assertHttp(checks, baseUrl, "/api/storage/upload", [401, 403], { method: "POST" });
+  await assertHttp(checks, baseUrl, "/api/auth/verify-turnstile", [200, 400, 403, 500], { method: "POST" });
+  await assertHttp(checks, baseUrl, "/api/webhooks/notifications", 401, { method: "POST" });
+  await assertHttp(checks, baseUrl, "/api/admin/export/invoices-zip", 401);
+  await assertHttp(checks, baseUrl, "/api/admin/export/pit-csv", 401);
   await assertCronProtected(checks, baseUrl, "/api/cron/process-stripe-events");
   await assertCronProtected(checks, baseUrl, "/api/cron/auto-accept");
   await assertCronProtected(checks, baseUrl, "/api/cron/cleanup-expired-sessions");

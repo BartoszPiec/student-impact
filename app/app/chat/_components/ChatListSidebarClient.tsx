@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
@@ -26,11 +25,17 @@ export default function ChatListSidebarClient({
 
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
+  const knownConversationIdsRef = useRef(
+    new Set(initialConversations.map((conversation) => conversation.id)),
+  );
 
   useEffect(() => {
     setConversations(initialConversations);
   }, [initialConversations]);
+
+  useEffect(() => {
+    knownConversationIdsRef.current = new Set(conversations.map((conversation) => conversation.id));
+  }, [conversations]);
 
   useEffect(() => {
     const match = pathname?.match(/\/app\/chat\/([^/]+)/);
@@ -38,14 +43,19 @@ export default function ChatListSidebarClient({
       const id = match[1];
       const conversation = conversations.find((item) => item.id === id);
       if (conversation) {
-        setReadMap((prev) => ({ ...prev, [id]: conversation.last_message }));
+        setReadMap((previous) =>
+          previous[id] === conversation.last_message
+            ? previous
+            : { ...previous, [id]: conversation.last_message },
+        );
       }
     }
   }, [pathname, conversations]);
 
   useEffect(() => {
+    let active = true;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-    const knownConversationIds = new Set(conversations.map((conversation) => conversation.id));
+    let removeChannel: (() => void) | undefined;
     const requestRefresh = () => {
       if (refreshTimer) return;
       refreshTimer = setTimeout(() => {
@@ -54,35 +64,47 @@ export default function ChatListSidebarClient({
       }, 1200);
     };
 
-    const channel = supabase
-      .channel("chat_list_updates")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
-        const newMsg = payload.new as { conversation_id?: string; sender_id?: string } | null;
-        if (newMsg?.sender_id === userId) return;
-        if (newMsg?.conversation_id && !knownConversationIds.has(newMsg.conversation_id)) return;
-        requestRefresh();
-      })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "conversations" }, (payload) => {
-        const conversation = payload.new as { company_id?: string; student_id?: string } | null;
-        if (conversation?.company_id === userId || conversation?.student_id === userId) {
+    void import("@/lib/supabase/client").then(({ createClient }) => {
+      if (!active) return;
+
+      const supabase = createClient();
+      const channel = supabase
+        .channel("chat_list_updates")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+          const newMsg = payload.new as { conversation_id?: string; sender_id?: string } | null;
+          if (newMsg?.sender_id === userId) return;
+          if (newMsg?.conversation_id && !knownConversationIdsRef.current.has(newMsg.conversation_id)) return;
           requestRefresh();
-        }
-      })
-      .subscribe();
+        })
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "conversations" }, (payload) => {
+          const conversation = payload.new as { company_id?: string; student_id?: string } | null;
+          if (conversation?.company_id === userId || conversation?.student_id === userId) {
+            requestRefresh();
+          }
+        })
+        .subscribe();
+
+      removeChannel = () => {
+        void supabase.removeChannel(channel);
+      };
+    });
 
     return () => {
+      active = false;
       if (refreshTimer) clearTimeout(refreshTimer);
-      supabase.removeChannel(channel);
+      removeChannel?.();
     };
-  }, [conversations, router, supabase, userId]);
+  }, [router, userId]);
 
   const filtered = useMemo(() => {
+    const normalizedSearch = search.toLocaleLowerCase("pl-PL");
+
     return conversations.filter((conversation) => {
       const name = conversation.other_user.nazwa || conversation.other_user.public_name || "Użytkownik";
       const title = conversation.offer?.tytul || conversation.package?.title || "";
       const matchSearch =
-        name.toLowerCase().includes(search.toLowerCase()) ||
-        title.toLowerCase().includes(search.toLowerCase());
+        name.toLocaleLowerCase("pl-PL").includes(normalizedSearch) ||
+        title.toLocaleLowerCase("pl-PL").includes(normalizedSearch);
 
       if (activeTab === "unread") {
         return matchSearch && (conversation.unread_count || 0) > 0;

@@ -65,6 +65,7 @@ export default async function CompanyOrdersPage() {
   return (
     <main className="min-h-screen bg-slate-50/60 pb-12">
       <PremiumPageHeader
+        tourId="company-orders"
         badge="Panel Pracodawcy"
         title="Zamowienia usług"
         description="Wszystkie zamowione usługi studentow, negocjacje, realizacje i archiwum w jednym operacyjnym widoku."

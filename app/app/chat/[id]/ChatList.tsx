@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getOlderMessages, markConversationAsUnread, markMessagesAsRead, toggleMessageFlag } from "../_actions";
 import { useRouter } from "next/navigation";
-import { normalizeMessage } from "@/app/lib/chat/chatEventUtils";
+import { normalizeMessage, type NormalizedMessage } from "@/app/lib/chat/chatEventUtils";
 import { TextBubble } from "../_components/TextBubble";
 import { FileBubble } from "../_components/FileBubble";
 import { RateCard } from "../_components/RateCard";
@@ -13,7 +13,6 @@ import { SystemEventRow } from "../_components/SystemEventRow";
 import { InquiryCard } from "../_components/InquiryCard";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Flag, MailOpen, MoreHorizontal } from "lucide-react";
@@ -62,7 +61,6 @@ export function ChatList({
     conversationStatus?: string | null;
     initialHasMore?: boolean;
 }) {
-    const supabase = useMemo(() => createClient(), []);
     const router = useRouter();
     const bottomRef = useRef<HTMLDivElement>(null);
     const suppressAutoReadRef = useRef(false);
@@ -96,78 +94,90 @@ export function ChatList({
     }, [messages]);
 
     useEffect(() => {
-        const channel = supabase
-            .channel(`messages:${conversationId}`)
-            .on(
-                "postgres_changes",
-                {
-                    event: "INSERT",
-                    schema: "public",
-                    table: "messages",
-                    filter: `conversation_id=eq.${conversationId}`,
-                },
-                (payload) => {
-                    const incoming = payload.new as ChatMessageRecord;
-                    mergeMessage(incoming);
-                },
-            )
-            .on(
-                "postgres_changes",
-                {
-                    event: "UPDATE",
-                    schema: "public",
-                    table: "messages",
-                    filter: `conversation_id=eq.${conversationId}`,
-                },
-                (payload) => {
-                    const updated = payload.new as ChatMessageRecord;
-                    mergeMessage(updated);
-                },
-            )
-            .subscribe();
+        let active = true;
+        let removeChannel: (() => void) | undefined;
+
+        void import("@/lib/supabase/client").then(({ createClient }) => {
+            if (!active) return;
+
+            const supabase = createClient();
+            const channel = supabase
+                .channel(`messages:${conversationId}`)
+                .on(
+                    "postgres_changes",
+                    {
+                        event: "INSERT",
+                        schema: "public",
+                        table: "messages",
+                        filter: `conversation_id=eq.${conversationId}`,
+                    },
+                    (payload) => {
+                        mergeMessage(payload.new as ChatMessageRecord);
+                    },
+                )
+                .on(
+                    "postgres_changes",
+                    {
+                        event: "UPDATE",
+                        schema: "public",
+                        table: "messages",
+                        filter: `conversation_id=eq.${conversationId}`,
+                    },
+                    (payload) => {
+                        mergeMessage(payload.new as ChatMessageRecord);
+                    },
+                )
+                .subscribe();
+
+            removeChannel = () => {
+                void supabase.removeChannel(channel);
+            };
+        });
 
         return () => {
-            supabase.removeChannel(channel);
+            active = false;
+            removeChannel?.();
         };
-    }, [conversationId, mergeMessage, supabase]);
+    }, [conversationId, mergeMessage]);
 
-    // 1. Normalize messages
-    const normalizedMessages = useMemo(() => {
-        return liveMessages.map((message) => normalizeMessage(message, userId));
+    const {
+        normalizedMessages,
+        rawMessagesById,
+        statusMap,
+        latestRateProposalId,
+        latestDeadlineProposalId,
+    } = useMemo(() => {
+        const normalized: NormalizedMessage[] = [];
+        const rawById = new Map<string, ChatMessageRecord>();
+        const statuses = new Map<string, "accepted" | "rejected">();
+        let latestRateId: string | null = null;
+        let latestDeadlineId: string | null = null;
+
+        for (const rawMessage of liveMessages) {
+            rawById.set(rawMessage.id, rawMessage);
+            const message = normalizeMessage(rawMessage, userId);
+            normalized.push(message);
+
+            if (message.event === "rate.proposed") latestRateId = message.id;
+            if (message.event === "deadline.proposed") latestDeadlineId = message.id;
+
+            const refMessageId = getPayloadString(message.payload, "ref_message_id");
+            if (!refMessageId) continue;
+            if (message.event === "rate.accepted" || message.event === "deadline.accepted") {
+                statuses.set(refMessageId, "accepted");
+            } else if (message.event === "rate.rejected" || message.event === "deadline.rejected") {
+                statuses.set(refMessageId, "rejected");
+            }
+        }
+
+        return {
+            normalizedMessages: normalized,
+            rawMessagesById: rawById,
+            statusMap: statuses,
+            latestRateProposalId: latestRateId,
+            latestDeadlineProposalId: latestDeadlineId,
+        };
     }, [liveMessages, userId]);
-
-    // 2. Identify Latest Proposals
-    const statusMap = useMemo(() => {
-        const map = new Map<string, "accepted" | "rejected">();
-        normalizedMessages.forEach(m => {
-            const refMessageId = getPayloadString(m.payload, "ref_message_id");
-            if (m.event === "rate.accepted" || m.event === "deadline.accepted") {
-                if (refMessageId) map.set(refMessageId, "accepted");
-            }
-            if (m.event === "rate.rejected" || m.event === "deadline.rejected") {
-                if (refMessageId) map.set(refMessageId, "rejected");
-            }
-        });
-        return map;
-    }, [normalizedMessages]);
-
-    const latestRateProposalId = useMemo(() => {
-        for (let i = normalizedMessages.length - 1; i >= 0; i--) {
-            if (normalizedMessages[i].event === "rate.proposed") {
-                return normalizedMessages[i].id;
-            }
-        }
-        return null;
-    }, [normalizedMessages]);
-
-    const latestDeadlineProposalId = useMemo(() => {
-        for (let i = normalizedMessages.length - 1; i >= 0; i--) {
-            if (normalizedMessages[i].event === "deadline.proposed") {
-                return normalizedMessages[i].id;
-            }
-        }
-        return null;
-    }, [normalizedMessages]);
 
     const isConversationLocked =
         conversationStatus === "inactive" ||
@@ -283,7 +293,7 @@ export function ChatList({
                 </div>
             ) : null}
             {normalizedMessages.map((msg, index) => {
-                const rawMessage = liveMessages.find((message) => message.id === msg.id);
+                const rawMessage = rawMessagesById.get(msg.id);
                 const isFlagged = Array.isArray(rawMessage?.flagged_by) && rawMessage.flagged_by.includes(userId);
                 const isTimelineEvent = msg.event.includes("system") || msg.event.includes("accepted") || msg.event.includes("rejected");
                 const dateKey = new Date(msg.created_at).toDateString();
@@ -357,12 +367,10 @@ export function ChatList({
                             )}
 
                             {msg.event === "rate.proposed" && (() => {
-                                // Extract rate from payload with multiple fallbacks
                                 const rateValue = getPayloadNumber(msg.payload, "proposed_stawka")
                                     ?? getPayloadNumber(msg.payload, "amount")
                                     ?? (msg.content ? parseFloat(msg.content.replace(/[^\d.]/g, '')) : undefined);
                                 
-                                // Defensive check
                                 const safeRateValue =
                                     typeof rateValue === "number" && !isNaN(rateValue) ? rateValue : 0;
 
@@ -403,7 +411,6 @@ export function ChatList({
                             ) : null}
 
 
-                            {/* Timestamp */}
                             {!isTimelineEvent && (
                                 <span className="flex items-center gap-1 px-1 text-[10px] text-slate-400 opacity-70">
                                     <span>{format(new Date(msg.created_at), "HH:mm")}</span>

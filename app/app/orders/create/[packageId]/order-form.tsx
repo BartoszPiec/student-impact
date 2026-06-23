@@ -1,15 +1,14 @@
 "use client";
 
-// Removed unused imports if any, keeping core structure
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Sparkles } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useFormStatus } from "react-dom";
 import { createOrder, startInquiry } from "./_actions";
-import { useTransition } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type FormField = {
@@ -29,6 +28,20 @@ interface OrderFormProps {
     defaultWebsite?: string;
 }
 
+function SubmitOrderButton() {
+    const { pending } = useFormStatus();
+
+    return (
+        <Button
+            disabled={pending}
+            type="submit"
+            className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white h-16 text-lg font-bold rounded-2xl shadow-xl shadow-indigo-500/20 hover:shadow-indigo-500/40 hover:-translate-y-0.5 transition-all duration-300"
+        >
+            {pending ? "Przetwarzanie..." : "Zamów wycenę usługi"}
+        </Button>
+    );
+}
+
 export default function OrderForm({
     packageId,
     price,
@@ -38,19 +51,10 @@ export default function OrderForm({
     defaultEmail,
     defaultWebsite
 }: OrderFormProps) {
-    const [loading, setLoading] = useState(false);
     const [isPending, startTransition] = useTransition();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [inquiryMessage, setInquiryMessage] = useState("");
     const [step, setStep] = useState(1);
-
-    // Stan dla odpowiedzi z formularza dynamicznego
-    // Klucz = field.id, Wartość = odpowiedź
-    const [, setAnswers] = useState<Record<string, string>>({});
-
-    const handleAnswerChange = (id: string, value: string) => {
-        setAnswers(prev => ({ ...prev, [id]: value }));
-    };
 
     const handleSendInquiry = () => {
         startTransition(() => {
@@ -153,7 +157,7 @@ export default function OrderForm({
                     </div>
                 </div>
             ) : (
-                <form action={createOrder} onSubmit={() => setLoading(true)} className="space-y-8 animate-in slide-in-from-right-8 duration-500">
+                <form action={createOrder} className="space-y-8 animate-in slide-in-from-right-8 duration-500">
                     <div className="flex items-center gap-2 mb-2">
                         <Button
                             type="button"
@@ -170,7 +174,6 @@ export default function OrderForm({
                     <input type="hidden" name="price" value={price} />
                     <input type="hidden" name="title" value={title} />
 
-                    {/* Sekcja Kontaktowa */}
                     <div className="space-y-6">
                         <h3 className="font-bold text-xl text-slate-900 flex items-center gap-2">
                             Dane Kontaktowe
@@ -203,7 +206,6 @@ export default function OrderForm({
                         </div>
                     </div>
 
-                    {/* Sekcja Pytań Dedykowanych */}
                     {formSchema && formSchema.length > 0 && (
                         <div className="space-y-6">
                             <h3 className="font-bold text-xl text-slate-900">Szczegóły realizacji</h3>
@@ -212,7 +214,7 @@ export default function OrderForm({
                                     <div key={field.id} className="space-y-2">
                                         <Label htmlFor={field.id} className="font-semibold text-slate-700">{field.label}</Label>
                                         {field.type === "select" ? (
-                                            <Select name={`q_${field.id}`} required onValueChange={(val) => handleAnswerChange(field.id, val)}>
+                                            <Select name={`q_${field.id}`} required>
                                                 <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500">
                                                     <SelectValue placeholder="Wybierz z listy..." />
                                                 </SelectTrigger>
@@ -228,7 +230,6 @@ export default function OrderForm({
                                                 required
                                                 placeholder="Wpisz odpowiedź..."
                                                 className="h-12 rounded-xl border-slate-200 bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
-                                                onChange={(e) => handleAnswerChange(field.id, e.target.value)}
                                             />
                                         )}
                                     </div>
@@ -237,7 +238,6 @@ export default function OrderForm({
                         </div>
                     )}
 
-                    {/* Informacje Dodatkowe */}
                     <div className="space-y-3">
                         <Label htmlFor="requirements" className="text-lg font-bold text-slate-900">
                             Dodatkowe informacje (Opcjonalne)
@@ -255,13 +255,7 @@ export default function OrderForm({
                     </div>
 
                     <div className="mobile-sticky-actions pt-6">
-                        <Button
-                            disabled={loading || isPending}
-                            type="submit"
-                            className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white h-16 text-lg font-bold rounded-2xl shadow-xl shadow-indigo-500/20 hover:shadow-indigo-500/40 hover:-translate-y-0.5 transition-all duration-300"
-                        >
-                            {loading ? "Przetwarzanie..." : "Zamów wycenę usługi"}
-                        </Button>
+                        <SubmitOrderButton />
                         <p className="text-center text-xs text-slate-400 mt-4">
                             Klikając, akceptujesz regulamin usług Student2Work. Płatność nastąpi dopiero po akceptacji wykonania.
                         </p>

@@ -167,21 +167,11 @@ export async function generateCompanyInvoice(
       return null;
     }
 
-    const { data: companyById } = await admin
+    const { data: company } = await admin
       .from("company_profiles")
-      .select("nazwa_firmy, nip, ulica, miasto, kod_pocztowy")
-      .eq("id", contract.company_id)
+      .select("nazwa, nip, address, city, miasto")
+      .eq("user_id", contract.company_id)
       .maybeSingle();
-
-    const company = companyById
-      ? companyById
-      : (
-          await admin
-            .from("company_profiles")
-            .select("nazwa_firmy, nip, ulica, miasto, kod_pocztowy")
-            .eq("user_id", contract.company_id)
-            .maybeSingle()
-        ).data;
 
     const offerTitle = (contract.applications as { offers?: { tytul?: string } } | null)?.offers?.tytul || "Usługa platformowa";
     const amountNet = amountGross - platformFee;
@@ -193,10 +183,10 @@ export async function generateCompanyInvoice(
       issuerName: PLATFORM_ENTITY.name,
       issuerNip: PLATFORM_ENTITY.nip,
       issuerAddress: `${PLATFORM_ENTITY.address}, ${PLATFORM_ENTITY.city}`,
-      recipientName: company?.nazwa_firmy || "Firma",
+      recipientName: company?.nazwa || "Firma",
       recipientNip: company?.nip || null,
       recipientAddress: company
-        ? `${company.ulica || ""}, ${company.kod_pocztowy || ""} ${company.miasto || ""}`.trim()
+        ? [company.address, company.city || company.miasto].filter(Boolean).join(", ")
         : "",
       items: [
         {
@@ -226,7 +216,7 @@ export async function generateCompanyInvoice(
       platformFee,
       issuerName: PLATFORM_ENTITY.name,
       issuerNip: PLATFORM_ENTITY.nip,
-      recipientName: company?.nazwa_firmy || "Firma",
+      recipientName: company?.nazwa || "Firma",
       recipientNip: company?.nip || null,
       storagePath: tempStoragePath,
       fileName: "invoice-draft.pdf",
@@ -248,7 +238,6 @@ export async function generateCompanyInvoice(
 
     await admin.storage.from("deliverables").remove([tempStoragePath]);
 
-    console.log(`[generate-invoice] Company invoice ${issued.invoice_number} generated for contract ${contractId}`);
     return issued.id;
   } catch (err) {
     console.error("[generate-invoice] Error:", err);
@@ -322,21 +311,11 @@ export async function generateStudentInvoice(
       return null;
     }
 
-    const { data: studentById } = await admin
+    const { data: student } = await admin
       .from("student_profiles")
       .select("public_name")
-      .eq("id", contract.student_id)
+      .eq("user_id", contract.student_id)
       .maybeSingle();
-
-    const student = studentById
-      ? studentById
-      : (
-          await admin
-            .from("student_profiles")
-            .select("public_name")
-            .eq("user_id", contract.student_id)
-            .maybeSingle()
-        ).data;
 
     const { data: authUser } = await admin.auth.admin.getUserById(contract.student_id);
     const studentEmail = authUser?.user?.email || "";
@@ -401,7 +380,6 @@ export async function generateStudentInvoice(
 
     await admin.storage.from("deliverables").remove([tempStoragePath]);
 
-    console.log(`[generate-invoice] Student invoice ${issued.invoice_number} generated for milestone ${milestoneId}`);
     return issued.id;
   } catch (err) {
     console.error("[generate-invoice] Error:", err);

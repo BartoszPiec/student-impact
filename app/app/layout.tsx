@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getRequestContext } from "@/lib/auth/request-context";
 import { EnsureOnboarding } from "./EnsureOnboarding";
 import { AppNavbar } from "./app-navbar";
+import { AppTourProvider } from "@/components/app-tour/app-tour-provider";
 
 type OnboardingDetails = {
   kierunek?: string | null;
@@ -47,10 +48,16 @@ export default async function AppLayout({
   const needsOnboarding = Boolean(role && role !== "admin" && !hasDetails);
 
   return (
-    <div className="min-h-screen">
-      {needsOnboarding ? <EnsureOnboarding /> : null}
-      <AppNavbar user={user} role={role} unread={unread} unreadChat={unreadChat} />
-      <main className="min-h-screen pb-24 lg:pb-0">{children}</main>
-    </div>
+    <AppTourProvider
+      userId={user.id}
+      role={role}
+      enabled={!needsOnboarding && (role === "company" || role === "student")}
+    >
+      <div className="min-h-screen">
+        {needsOnboarding ? <EnsureOnboarding /> : null}
+        <AppNavbar user={user} role={role} unread={unread} unreadChat={unreadChat} />
+        <main className="min-h-screen pb-24 lg:pb-0">{children}</main>
+      </div>
+    </AppTourProvider>
   );
 }

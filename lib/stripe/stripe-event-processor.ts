@@ -1,6 +1,5 @@
 import Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { generateCompanyInvoice } from "@/lib/pdf/generate-invoice";
 import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
 import { rejectCompetingApplicationsForOffer } from "@/lib/services/application-chat-closure";
@@ -194,6 +193,12 @@ async function processStripeEvent(event: Stripe.Event) {
     case "checkout.session.completed":
       await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
       return;
+    case "checkout.session.async_payment_succeeded":
+      await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+      return;
+    case "checkout.session.async_payment_failed":
+      await handleCheckoutFailed(event.data.object as Stripe.Checkout.Session);
+      return;
     case "checkout.session.expired":
       await handleCheckoutExpired(event.data.object as Stripe.Checkout.Session);
       return;
@@ -214,6 +219,10 @@ async function processStripeEvent(event: Stripe.Event) {
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
+    return;
+  }
+
   const supabase = createAdminClient();
 
   const contractId = session.metadata?.contract_id;
@@ -373,6 +382,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   try {
     const amountPLN = session.amount_total ? session.amount_total / 100 : 0;
+    const { generateCompanyInvoice } = await import("@/lib/pdf/generate-invoice");
     await generateCompanyInvoice(contractId, amountPLN, resolvedFeePln, "Stripe");
   } catch (error) {
     console.error("Invoice generation failed:", error);
@@ -388,6 +398,19 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
 
   if (error) {
     throw new Error(`Failed to mark payment as expired (${session.id}): ${error.message}`);
+  }
+}
+
+async function handleCheckoutFailed(session: Stripe.Checkout.Session) {
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("payments")
+    .update({ status: "failed" })
+    .eq("stripe_session_id", session.id)
+    .neq("status", "completed");
+
+  if (error) {
+    throw new Error(`Failed to mark payment as failed (${session.id}): ${error.message}`);
   }
 }
 

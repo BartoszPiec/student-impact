@@ -12,7 +12,6 @@ import { SERVICE_CATEGORIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { createInquiryAction } from "./_actions";
 import { toast } from "sonner";
-import Image from "next/image";
 
 type Package = {
     id: string;
@@ -25,9 +24,7 @@ type Package = {
     is_system?: boolean;
     categories?: string[] | null;
     profiles?: {
-        imie: string;
-        nazwisko: string;
-        avatar_url: string | null;
+        public_name: string | null;
     } | null;
 };
 
@@ -98,13 +95,9 @@ export default function CatalogClient({ packages, isCompany }: { packages: Packa
                             {!pkg.is_system && pkg.profiles && pkg.student_id && (
                                 <Link href={`/app/students/${pkg.student_id}`} className="mb-3 flex items-center gap-2 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg w-fit border border-slate-100 hover:bg-slate-100 hover:border-slate-300 transition-all cursor-pointer">
                                     <div className="h-6 w-6 rounded-full bg-slate-200 overflow-hidden relative">
-                                        {pkg.profiles.avatar_url ? (
-                                            <Image src={pkg.profiles.avatar_url} alt="Avatar" fill sizes="24px" unoptimized className="object-cover" />
-                                        ) : (
-                                            <User className="h-3 w-3 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-400" />
-                                        )}
+                                        <User className="h-3 w-3 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-400" />
                                     </div>
-                                    <span className="font-medium text-slate-700">{pkg.profiles.imie} {pkg.profiles.nazwisko}</span>
+                                    <span className="font-medium text-slate-700">{pkg.profiles.public_name || "Student"}</span>
                                 </Link>
                             )}
 

@@ -8,6 +8,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import {
   Briefcase,
+  CircleHelp,
   CircleDollarSign,
   FileText,
   LayoutGrid,
@@ -31,6 +32,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { signOut } from "./_actions/auth";
+import { useAppTour } from "@/components/app-tour/app-tour-provider";
 
 const NotificationsBell = dynamic(() => import("@/components/notifications-bell"));
 const UnreadChatBadge = dynamic(() =>
@@ -49,6 +51,14 @@ interface AppNavbarProps {
   unreadChat?: number;
 }
 
+type MobileNavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  chat?: boolean;
+  tourId?: string;
+};
+
 function isPathActive(pathname: string | null, path: string) {
   return pathname === path || pathname?.startsWith(`${path}/`);
 }
@@ -59,12 +69,14 @@ function AppNavLink({
   icon: Icon,
   onClick,
   pathname,
+  tourId,
 }: {
   href: string;
   children: ReactNode;
   icon?: LucideIcon;
   onClick?: () => void;
   pathname: string | null;
+  tourId?: string;
 }) {
   const active = isPathActive(pathname, href);
 
@@ -72,6 +84,7 @@ function AppNavLink({
     <Link
       href={href}
       onClick={onClick}
+      data-tour={tourId}
       className={cn(
         "relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200",
         active
@@ -95,21 +108,21 @@ function AppNavLink({
   );
 }
 
-function getMobileNavItems(role: string | null) {
+function getMobileNavItems(role: string | null): MobileNavItem[] {
   if (role === "company") {
     return [
-      { href: "/app/company/packages", label: "Katalog", icon: Search },
-      { href: "/app/company/offers", label: "Oferty", icon: LayoutGrid },
-      { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true },
+      { href: "/app/company/packages", label: "Katalog", icon: Search, tourId: "company-catalog" },
+      { href: "/app/company/offers", label: "Oferty", icon: LayoutGrid, tourId: "company-offers" },
+      { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true, tourId: "company-chat" },
       { href: "/app/profile", label: "Profil", icon: User },
     ];
   }
 
   if (role === "student") {
     return [
-      { href: "/app/jobs", label: "Zlecenia", icon: Search },
-      { href: "/app/applications", label: "Aplikacje", icon: FileText },
-      { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true },
+      { href: "/app/jobs", label: "Zlecenia", icon: Search, tourId: "student-jobs" },
+      { href: "/app/applications", label: "Aplikacje", icon: FileText, tourId: "student-applications" },
+      { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true, tourId: "student-chat" },
       { href: "/app/profile", label: "Profil", icon: User },
     ];
   }
@@ -137,6 +150,7 @@ export function AppNavbar({
   unreadChat = 0,
 }: AppNavbarProps) {
   const pathname = usePathname();
+  const { available: tourAvailable, restart: restartTour } = useAppTour();
   const [isOpen, setIsOpen] = useState(false);
 
   const mobileNavItems = getMobileNavItems(role);
@@ -184,23 +198,23 @@ export function AppNavbar({
                       <div className="px-4 text-[10px] font-black text-white/30 uppercase tracking-[0.15em] mb-2 mt-1">
                         Panel Firmy
                       </div>
-                      <AppNavLink href="/app/company/packages" icon={Search} onClick={() => setIsOpen(false)} pathname={pathname}>
+                      <AppNavLink href="/app/company/packages" icon={Search} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-catalog">
                         Katalog Usług
                       </AppNavLink>
-                      <AppNavLink href="/app/company/offers" icon={LayoutGrid} onClick={() => setIsOpen(false)} pathname={pathname}>
+                      <AppNavLink href="/app/company/offers" icon={LayoutGrid} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-offers">
                         Moje ogloszenia
                       </AppNavLink>
                       <AppNavLink href="/app/company/documents" icon={FileText} onClick={() => setIsOpen(false)} pathname={pathname}>
                         Dokumenty
                       </AppNavLink>
-                      <AppNavLink href="/app/company/orders" icon={Briefcase} onClick={() => setIsOpen(false)} pathname={pathname}>
+                      <AppNavLink href="/app/company/orders" icon={Briefcase} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-orders">
                         Zamowienia usług
                       </AppNavLink>
-                      <AppNavLink href="/app/chat" icon={MessageSquare} onClick={() => setIsOpen(false)} pathname={pathname}>
+                      <AppNavLink href="/app/chat" icon={MessageSquare} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-chat">
                         Wiadomosci
                         {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
                       </AppNavLink>
-                      <AppNavLink href="/app/company/jobs/new" icon={PlusCircle} onClick={() => setIsOpen(false)} pathname={pathname}>
+                      <AppNavLink href="/app/company/jobs/new" icon={PlusCircle} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-create-offer">
                         Dodaj ofertę
                       </AppNavLink>
                     </>
@@ -211,19 +225,19 @@ export function AppNavbar({
                       <div className="px-4 text-[10px] font-black text-white/30 uppercase tracking-[0.15em] mb-2 mt-1">
                         Panel Studenta
                       </div>
-                      <AppNavLink href="/app/jobs" icon={Search} onClick={() => setIsOpen(false)} pathname={pathname}>
+                      <AppNavLink href="/app/jobs" icon={Search} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-jobs">
                         Gielda Zlecen
                       </AppNavLink>
-                      <AppNavLink href="/app/applications" icon={FileText} onClick={() => setIsOpen(false)} pathname={pathname}>
+                      <AppNavLink href="/app/applications" icon={FileText} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-applications">
                         Aplikacje
                       </AppNavLink>
-                      <AppNavLink href="/app/services/my" icon={Briefcase} onClick={() => setIsOpen(false)} pathname={pathname}>
+                      <AppNavLink href="/app/services/my" icon={Briefcase} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-services">
                         Usługi
                       </AppNavLink>
                       <AppNavLink href="/app/finances" icon={CircleDollarSign} onClick={() => setIsOpen(false)} pathname={pathname}>
                         Finanse
                       </AppNavLink>
-                      <AppNavLink href="/app/chat" icon={MessageSquare} onClick={() => setIsOpen(false)} pathname={pathname}>
+                      <AppNavLink href="/app/chat" icon={MessageSquare} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-chat">
                         Wiadomosci
                         {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
                       </AppNavLink>
@@ -277,6 +291,7 @@ export function AppNavbar({
 
             <Link
               href={role === "student" ? "/app/jobs" : role === "admin" ? "/app/admin" : role === "company" ? "/app/company/packages" : "/app"}
+              data-tour="tour-home"
               className="flex items-center gap-2.5 group"
             >
               <div className="relative">
@@ -286,6 +301,7 @@ export function AppNavbar({
                   alt="Logo"
                   width={128}
                   height={32}
+                  priority
                   className="h-7 w-auto relative z-10 transition-transform duration-300 group-hover:scale-110"
                 />
               </div>
@@ -298,24 +314,25 @@ export function AppNavbar({
           <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 px-3 lg:flex">
             {role === "company" && (
               <>
-                <AppNavLink href="/app/company/packages" icon={Search} pathname={pathname}>
+                <AppNavLink href="/app/company/packages" icon={Search} pathname={pathname} tourId="company-catalog">
                   Katalog Usług
                 </AppNavLink>
-                <AppNavLink href="/app/company/offers" icon={LayoutGrid} pathname={pathname}>
+                <AppNavLink href="/app/company/offers" icon={LayoutGrid} pathname={pathname} tourId="company-offers">
                   Moje ogloszenia
                 </AppNavLink>
                 <AppNavLink href="/app/company/documents" icon={FileText} pathname={pathname}>
                   Dokumenty
                 </AppNavLink>
-                <AppNavLink href="/app/company/orders" icon={Briefcase} pathname={pathname}>
+                <AppNavLink href="/app/company/orders" icon={Briefcase} pathname={pathname} tourId="company-orders">
                   Zamowienia usług
                 </AppNavLink>
-                <AppNavLink href="/app/chat" icon={MessageSquare} pathname={pathname}>
+                <AppNavLink href="/app/chat" icon={MessageSquare} pathname={pathname} tourId="company-chat">
                   Wiadomosci
                   {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
                 </AppNavLink>
                 <Link
                   href="/app/company/jobs/new"
+                  data-tour="company-create-offer"
                   className={cn(
                     "ml-3 flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-black transition-all active:scale-95",
                     isPathActive(pathname, "/app/company/jobs/new")
@@ -331,19 +348,19 @@ export function AppNavbar({
 
             {role === "student" && (
               <>
-                <AppNavLink href="/app/jobs" icon={Search} pathname={pathname}>
+                <AppNavLink href="/app/jobs" icon={Search} pathname={pathname} tourId="student-jobs">
                   Gielda Zlecen
                 </AppNavLink>
-                <AppNavLink href="/app/applications" icon={FileText} pathname={pathname}>
+                <AppNavLink href="/app/applications" icon={FileText} pathname={pathname} tourId="student-applications">
                   Aplikacje
                 </AppNavLink>
-                <AppNavLink href="/app/services/my" icon={Briefcase} pathname={pathname}>
+                <AppNavLink href="/app/services/my" icon={Briefcase} pathname={pathname} tourId="student-services">
                   Usługi
                 </AppNavLink>
                 <AppNavLink href="/app/finances" icon={CircleDollarSign} pathname={pathname}>
                   Finanse
                 </AppNavLink>
-                <AppNavLink href="/app/chat" icon={MessageSquare} pathname={pathname}>
+                <AppNavLink href="/app/chat" icon={MessageSquare} pathname={pathname} tourId="student-chat">
                   Wiadomosci
                   {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
                 </AppNavLink>
@@ -356,6 +373,19 @@ export function AppNavbar({
           </nav>
 
           <div className="ml-auto flex items-center gap-1 border-l border-white/5 pl-2 sm:gap-2 sm:pl-3 lg:ml-2">
+            {tourAvailable ? (
+              <button
+                type="button"
+                onClick={restartTour}
+                data-testid="restart-app-tour"
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-white/50 transition-all hover:bg-white/10 hover:text-white"
+                title="Uruchom samouczek"
+                aria-label="Uruchom samouczek"
+              >
+                <CircleHelp className="h-4 w-4" />
+              </button>
+            ) : null}
+
             {user && (
               <div className="relative [&_button]:text-white/60 [&_button]:hover:text-white [&_button]:hover:bg-white/10 [&_button]:rounded-xl">
                 <NotificationsBell unread={unread} />
@@ -401,13 +431,14 @@ export function AppNavbar({
 
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200/70 bg-white/90 px-3 pb-[calc(env(safe-area-inset-bottom)+0.55rem)] pt-2 shadow-[0_-14px_40px_-24px_rgba(15,23,42,0.55)] backdrop-blur-2xl lg:hidden">
       <div className="mx-auto grid max-w-md grid-cols-4 gap-1 rounded-[1.35rem] border border-slate-200/70 bg-white px-1.5 py-1.5 shadow-lg shadow-slate-200/60">
-        {mobileNavItems.map(({ href, label, icon: Icon, chat }) => {
+        {mobileNavItems.map(({ href, label, icon: Icon, chat, tourId }) => {
           const active = isPathActive(pathname, href);
 
           return (
             <Link
               key={href}
               href={href}
+              data-tour={tourId}
               className={cn(
                 "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[10px] font-black transition-all",
                 active

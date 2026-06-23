@@ -51,26 +51,23 @@ export function JobBoardView({
     const searchParams = useSearchParams();
     const companyIdFromUrl = searchParams.get("companyId");
 
-    // State
-    const [offers] = useState<JobOffer[]>(initialOffers);
-    const [mode, setMode] = useState<"job" | "micro">("micro"); // Default to micro
-    const [subFilter, setSubFilter] = useState<"all" | "platform" | "regular">("all"); // Systemowe vs Zwykłe
+    const offers = initialOffers;
+    const [mode, setMode] = useState<"job" | "micro">("micro");
+    const [subFilter, setSubFilter] = useState<"all" | "platform" | "regular">("all");
     const [search, setSearch] = useState("");
     const deferredSearch = useDeferredValue(search);
 
-    // Filters - Job
     const [locationFilter, setLocationFilter] = useState("");
     const [techFilters, setTechFilters] = useState<string[]>([]);
     const [contractFilters, setContractFilters] = useState<string[]>([]);
     const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
     const [salaryMin, setSalaryMin] = useState<number | "">("");
-    const [salaryMax, setSalaryMax] = useState<number | "">(""); // Added Max for Jobs
+    const [salaryMax, setSalaryMax] = useState<number | "">("");
 
-    // Filters - Micro
     const [budgetMin, setBudgetMin] = useState<number | "">("");
-    const [budgetMax, setBudgetMax] = useState<number | "">(""); // Added Max
+    const [budgetMax, setBudgetMax] = useState<number | "">("");
 
-    const [showApplied, setShowApplied] = useState(false); // New Filter: Show Applied
+    const [showApplied, setShowApplied] = useState(false);
 
     const [companyIdFilter, setCompanyIdFilter] = useState(initialCompanyId || companyIdFromUrl || "");
     const nextPageHref = useMemo(() => {
@@ -102,16 +99,12 @@ export function JobBoardView({
         Number(showApplied) +
         Number(mode === "micro" && subFilter !== "all");
 
-    // Data Extraction based on ACTIVE MODE offers
     const { locations, contracts, categories } = useMemo(() => {
         const locs = new Set<string>(POPULAR_CITIES);
         const conts = new Set<string>(POPULAR_CONTRACTS);
         const cats = new Set<string>(POPULAR_CATEGORIES);
 
         offers.forEach(o => {
-            // Only aggregate data relevant to the current mode? 
-            // Actually, better to show all available options or just relevant ones. 
-            // Let's filter by mode first for metadata to keep filters clean.
             const isJob = isJobOffer(o);
             const matchesMode = mode === "job" ? isJob : !isJob;
 
@@ -130,36 +123,29 @@ export function JobBoardView({
         };
     }, [offers, mode]);
 
-    // Derived State: Filtered Offers
     const filtered = useMemo(() => {
+        const normalizedSearch = normalizeSearchText(deferredSearch);
+
         return offers.filter(o => {
-            // 0. Company Filter (Strict)
             if (companyIdFilter && o.company_id !== companyIdFilter) return false;
 
-            // 0.5 Applied Filter (New)
             if (!showApplied && appliedOfferIds?.has(o.id)) return false;
 
             const isJob = isJobOffer(o);
 
-            // 1. Mode Filter
             if (!companyIdFilter) {
                 if (mode === "job" && !isJob) return false;
                 if (mode === "micro" && isJob) return false;
             }
 
-            // 1.5 Subfilter (Micro only)
             if (mode === "micro" && !companyIdFilter) {
-                // Treat null/undefined as false (regular offer)
                 const isPlatform = !!o.is_platform_service;
 
                 if (subFilter === "platform" && !isPlatform) return false;
                 if (subFilter === "regular" && isPlatform) return false;
             }
 
-            // ... (rest common)
-            // 2. Search
-            const s = normalizeSearchText(deferredSearch);
-            if (s) {
+            if (normalizedSearch) {
                 const searchable = [
                     o.tytul,
                     o.company_name,
@@ -174,13 +160,10 @@ export function JobBoardView({
                     .map(normalizeSearchText)
                     .join(" ");
 
-                if (!searchable.includes(s)) return false;
+                if (!searchable.includes(normalizedSearch)) return false;
             }
 
-            // 3. Specific Filters
             if (mode === "job") {
-                // ... same logic
-                // Location
                 if (locationFilter) {
                     if (locationFilter === "Remote") {
                         if (!o.is_remote) return false;
@@ -188,20 +171,16 @@ export function JobBoardView({
                         return false;
                     }
                 }
-                // Category
                 if (categoryFilter.length > 0) {
                     if (!o.category || !categoryFilter.includes(o.category)) return false;
                 }
-                // Tech
                 if (techFilters.length > 0) {
                     const hasTech = o.technologies?.some(t => techFilters.includes(t));
                     if (!hasTech) return false;
                 }
-                // Contract
                 if (contractFilters.length > 0) {
                     if (!o.contract_type || !contractFilters.includes(o.contract_type)) return false;
                 }
-                // Salary
                 const oMsgMin = o.salary_range_min || 0;
                 const oMsgMax = o.salary_range_max || oMsgMin;
 
@@ -212,8 +191,6 @@ export function JobBoardView({
                     if (oMsgMin > Number(salaryMax)) return false;
                 }
             } else {
-                // Micro Mode Filters
-                // Location
                 if (locationFilter) {
                     if (locationFilter === "Remote") {
                         if (!o.is_remote) return false;
@@ -221,11 +198,9 @@ export function JobBoardView({
                         return false;
                     }
                 }
-                // Category
                 if (categoryFilter.length > 0) {
                     if (!o.category || !categoryFilter.includes(o.category)) return false;
                 }
-                // Budget
                 const rate = getOfferAmount(o);
                 if (budgetMin !== "" && rate < Number(budgetMin)) return false;
                 if (budgetMax !== "" && rate > Number(budgetMax)) return false;
@@ -235,7 +210,6 @@ export function JobBoardView({
         });
     }, [offers, mode, deferredSearch, locationFilter, techFilters, contractFilters, categoryFilter, salaryMin, salaryMax, budgetMin, budgetMax, subFilter, companyIdFilter, showApplied, appliedOfferIds]);
 
-    // Handlers
     const toggleContract = (c: string) => setContractFilters(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
     const toggleCategory = (c: string) => setCategoryFilter(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
 
@@ -261,7 +235,6 @@ export function JobBoardView({
     return (
         <div className="flex flex-col gap-6 sm:gap-10">
 
-            {/* Mobile discovery controls */}
             <div className="space-y-4 lg:hidden">
                 <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="mb-3 flex items-center justify-between gap-3">
@@ -342,9 +315,7 @@ export function JobBoardView({
                             <SheetHeader className="mb-4 text-left sm:mb-8">
                                 <SheetTitle className="text-xl font-extrabold text-[#1a1a2e] sm:text-2xl">Filtruj oferty</SheetTitle>
                             </SheetHeader>
-                            {/* ... Content adapted below ... */}
                             <div className="space-y-8">
-                                {/* Search */}
                                 <div className="space-y-3">
                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Szukaj</label>
                                     <Input
@@ -355,7 +326,6 @@ export function JobBoardView({
                                     />
                                 </div>
 
-                                {/* Location */}
                                 <div className="space-y-3">
                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Lokalizacja</label>
                                     <Select value={locationFilter || "all_locations"} onValueChange={handleLocationChange}>
@@ -394,7 +364,6 @@ export function JobBoardView({
                                     </div>
                                 )}
 
-                                {/* Mode Specific */}
                                 {mode === "job" ? (
                                     <>
                                         <div className="space-y-4">
@@ -465,7 +434,6 @@ export function JobBoardView({
                 </Sheet>
             </div>
 
-            {/* MODE SWITCHER - Premium Cards */}
             <div className="hidden grid-cols-1 gap-4 lg:grid lg:grid-cols-2 lg:gap-6">
                 <div
                     onClick={() => setMode("micro")}
@@ -524,13 +492,10 @@ export function JobBoardView({
                 </div>
             </div>
 
-            {/* MAIN CONTENT AREA */}
             <div className="flex flex-col items-start gap-8 lg:flex-row lg:gap-12">
 
-                {/* DYNAMIC SIDEBAR FILTERS - Premium Styling */}
                 <div className="hidden lg:block w-72 flex-shrink-0 space-y-10 sticky top-24">
                     <div className="space-y-10 animate-in fade-in slide-in-from-left-4 duration-500">
-                        {/* Search */}
                         <div className="space-y-3">
                             <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Szukaj</label>
                             <div className="relative group">
@@ -544,7 +509,6 @@ export function JobBoardView({
                             </div>
                         </div>
 
-                        {/* Location */}
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Lokalizacja</label>
@@ -561,7 +525,6 @@ export function JobBoardView({
                             </Select>
                         </div>
 
-                        {/* SUB FILTERS - TABS (External) */}
                         {mode === "micro" && (
                             <div className="space-y-3 animate-in zoom-in-95 duration-300">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Rodzaj zlecenia</label>
@@ -585,7 +548,6 @@ export function JobBoardView({
                             </div>
                         )}
 
-                        {/* Categories */}
                         {categories.length > 0 && (
                             <div className="space-y-4">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Kategorie</label>
@@ -605,7 +567,6 @@ export function JobBoardView({
                             </div>
                         )}
 
-                        {/* Salary/Budget */}
                         <div className="space-y-4">
                             <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Budżet / Płaca</label>
                             <div className="flex items-center gap-3">
@@ -660,9 +621,7 @@ export function JobBoardView({
                     </div>
                 </div>
 
-                {/* LIST */}
                 <div className="flex-1 w-full space-y-6">
-                    {/* INFO BAR */}
                     <div className="flex flex-col items-stretch justify-between gap-4 rounded-3xl border border-slate-100 bg-slate-50/50 p-3 sm:flex-row sm:items-center sm:p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                             <div className={cn(

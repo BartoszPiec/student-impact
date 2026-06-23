@@ -114,7 +114,7 @@ export default function OnboardingClient({
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4 relative overflow-hidden bg-slate-900">
-      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
       <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-indigo-500/20 to-purple-500/0 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-0 right-0 w-2/3 h-2/3 bg-gradient-to-tl from-emerald-500/10 to-transparent rounded-full blur-[100px] pointer-events-none" />
 

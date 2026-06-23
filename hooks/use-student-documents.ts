@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
   STUDENT_DOCUMENT_TYPES,
   type StudentDocumentGroup,
@@ -75,11 +74,12 @@ export function useStudentDocuments() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const supabase = createClient();
     setIsLoading(true);
     setError(null);
 
     try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
       const {
         data: { user },
         error: authError,
@@ -230,7 +230,7 @@ export function useStudentDocuments() {
 
       setGroups(grouped);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Nie udalo sie pobrac dokumentow.");
+      setError(caughtError instanceof Error ? caughtError.message : "Nie udało się pobrać dokumentów.");
     } finally {
       setIsLoading(false);
     }

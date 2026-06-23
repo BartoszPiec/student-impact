@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
@@ -299,7 +298,7 @@ export default async function CompanyOrderDetailPage(props: Props) {
 
   const [studentResult, conv, availableStudents] = await Promise.all([
     hasStudentAssigned
-      ? supabase.from("student_profiles").select("public_name, miasto, uczelnia, bio").eq("user_id", order.student_id).maybeSingle()
+      ? supabase.from("student_profiles").select("public_name, kierunek, rok, bio").eq("user_id", order.student_id).maybeSingle()
       : Promise.resolve({ data: null }),
     hasStudentAssigned
       ? findConversationForServiceOrder(supabase, {
@@ -507,7 +506,7 @@ export default async function CompanyOrderDetailPage(props: Props) {
                       <div className="space-y-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Odpowiedzi z briefu</p>
                         <div className="space-y-3">
-                          {requestSnapshot.form_answers.map((answer: any) => (
+                          {requestSnapshot.form_answers.map((answer) => (
                             <div key={answer.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
                               <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{answer.label}</p>
                               <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700">{answer.value}</p>
@@ -691,16 +690,16 @@ export default async function CompanyOrderDetailPage(props: Props) {
                   </Link>
 
                   <div className="space-y-2 text-sm font-medium text-slate-500">
-                    {student?.miasto ? (
+                    {student?.kierunek ? (
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Miasto</span>
-                        <span className="text-slate-700">{student.miasto}</span>
+                        <span className="text-slate-400">Kierunek</span>
+                        <span className="text-slate-700">{student.kierunek}</span>
                       </div>
                     ) : null}
-                    {student?.uczelnia ? (
+                    {student?.rok ? (
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Uczelnia</span>
-                        <span className="text-slate-700 text-right max-w-[160px] truncate">{student.uczelnia}</span>
+                        <span className="text-slate-400">Rok studiów</span>
+                        <span className="text-slate-700 text-right max-w-[160px] truncate">{student.rok}</span>
                       </div>
                     ) : null}
                   </div>

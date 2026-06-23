@@ -12,6 +12,7 @@ interface PremiumPageHeaderProps {
     actions?: React.ReactNode;
     children?: React.ReactNode;
     className?: string;
+    tourId?: string;
 }
 
 export function PremiumPageHeader({
@@ -22,13 +23,14 @@ export function PremiumPageHeader({
     actions,
     children,
     className,
+    tourId,
 }: PremiumPageHeaderProps) {
     return (
-        <div className={cn(
+        <div data-tour={tourId} className={cn(
             "relative mb-6 overflow-hidden border-b border-white/5 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 pb-10 pt-8 text-white shadow-xl sm:mb-8 sm:pb-12 sm:pt-10",
             className
         )}>
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
 
             <div className="container mx-auto max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
                 <div className="flex flex-col items-stretch justify-between gap-6 md:flex-row md:items-center md:gap-8">

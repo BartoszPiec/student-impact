@@ -172,15 +172,35 @@ export default function AdminPayoutsPage() {
     });
   };
 
-  const pendingCount = payouts.filter((payout) => payout.status === "pending").length;
-  const pendingTotal = payouts
-    .filter((payout) => payout.status === "pending")
-    .reduce((sum, payout) => sum + Number(payout.amount_net || 0), 0);
-  const processingCount = payouts.filter((payout) => payout.status === "processing").length;
-  const paidTotal = payouts
-    .filter((payout) => payout.status === "paid")
-    .reduce((sum, payout) => sum + Number(payout.amount_net || 0), 0);
-  const feeTotal = payouts.reduce((sum, payout) => sum + Number(payout.platform_fee || 0), 0);
+  const { pendingCount, pendingTotal, processingCount, paidTotal, feeTotal } = useMemo(() => {
+    let nextPendingCount = 0;
+    let nextPendingTotal = 0;
+    let nextProcessingCount = 0;
+    let nextPaidTotal = 0;
+    let nextFeeTotal = 0;
+
+    for (const payout of payouts) {
+      const netAmount = Number(payout.amount_net || 0);
+      nextFeeTotal += Number(payout.platform_fee || 0);
+
+      if (payout.status === "pending") {
+        nextPendingCount += 1;
+        nextPendingTotal += netAmount;
+      } else if (payout.status === "processing") {
+        nextProcessingCount += 1;
+      } else if (payout.status === "paid") {
+        nextPaidTotal += netAmount;
+      }
+    }
+
+    return {
+      pendingCount: nextPendingCount,
+      pendingTotal: nextPendingTotal,
+      processingCount: nextProcessingCount,
+      paidTotal: nextPaidTotal,
+      feeTotal: nextFeeTotal,
+    };
+  }, [payouts]);
 
   return (
     <div className="space-y-8 pb-12">

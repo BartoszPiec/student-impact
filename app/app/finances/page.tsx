@@ -21,7 +21,7 @@ type MilestoneRow = { id: string; title: string; amount: number | string; status
 type ContractRow = { id: string; status: string; created_at: string; milestones: MilestoneRow[] | null };
 type LegacyApplicationRow = {
     id: string;
-    updated_at: string;
+    created_at: string;
     offers: { tytul: string | null; price_min: number | null; budget: number | null } | null;
 };
 type ReviewRow = { id: string; rating: number; comment: string | null };
@@ -86,7 +86,7 @@ export default async function FinancesPage() {
     // 3. Fetch High Ratings (Successes)
     const { data: reviews } = await supabase
         .from("reviews")
-        .select("*")
+        .select("id, rating, comment")
         .eq("reviewee_id", user.id)
         .gte("rating", 4)
         .order("created_at", { ascending: false })
@@ -96,7 +96,7 @@ export default async function FinancesPage() {
     // This allows showing earnings for older test data or flows without full contract cycle
     const { data: legacyApps } = await supabase
         .from("applications")
-        .select("id, updated_at, offers(tytul, price_min, budget)")
+        .select("id, created_at, offers(tytul, price_min, budget)")
         .eq("student_id", user.id)
         .eq("status", "accepted")
         .is("contract_id", null);
@@ -132,7 +132,7 @@ export default async function FinancesPage() {
             totalEarnings += amount;
             completedProjects++;
 
-            const dateRaw = app.updated_at;
+            const dateRaw = app.created_at;
             addEarnings(dateRaw, amount, 'paid');
 
             historyItems.push({

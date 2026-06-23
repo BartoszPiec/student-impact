@@ -81,7 +81,7 @@ function ChatDetailsContent({
             buttonLabel = "Przejdź do zgłoszenia";
             ButtonIcon = ExternalLink;
         } else if (!isCompany && offer?.id) {
-            targetLink = `/app/jobs/${offer.id}`;
+            targetLink = `/app/offers/${offer.id}`;
             showAction = true;
             buttonLabel = "Przejdź do zgłoszenia";
             ButtonIcon = ExternalLink;

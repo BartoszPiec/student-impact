@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -33,6 +31,88 @@ import { SecureImageViewer } from "@/app/components/SecureImageViewer";
 import { ReviewBreakdown } from "@/components/reviews/ReviewBreakdown";
 import { parseDetailedReviewComment } from "@/lib/reviews";
 
+type ReviewData = {
+    reviewer_id: string;
+    rating: number;
+    comment: string | null;
+    created_at: string;
+};
+
+type DeliverableFile = {
+    name?: string | null;
+    kind?: string | null;
+    url?: string | null;
+    bucket?: string | null;
+    path?: string | null;
+};
+
+type DeliverableRow = {
+    id: string;
+    milestone_id: string | null;
+    status: string;
+    company_feedback: string | null;
+    description: string | null;
+    files: DeliverableFile[] | null;
+    created_at: string;
+};
+
+type ResourceRow = {
+    id: string;
+    file_name: string | null;
+    file_path: string | null;
+    created_at: string | null;
+};
+
+type MilestoneRow = {
+    id: string;
+    status: string;
+    title: string;
+    acceptance_criteria: string | null;
+    amount: number;
+    amount_minor: number | null;
+    idx: number;
+};
+
+type ContractRow = {
+    id: string;
+    status: string;
+    funding_mode: string | null;
+    terms_status: string | null;
+    company_contract_accepted_at: string | null;
+    student_contract_accepted_at: string | null;
+    documents_generated_at: string | null;
+    milestones: MilestoneRow[] | null;
+};
+
+type ContractDocument = {
+    id: string;
+    contract_id: string;
+    document_type: string;
+    storage_path: string;
+    file_name: string;
+    company_accepted_at: string | null;
+    student_accepted_at: string | null;
+    generated_at: string;
+};
+
+type StatusTabProps = {
+    applicationStatus: string;
+    isStudent: boolean;
+    isCompany: boolean;
+    applicationId: string;
+    deliverables: DeliverableRow[];
+    myReview?: ReviewData | null;
+    theirReview?: ReviewData | null;
+    contract: ContractRow | null;
+    totalAmount: number;
+    enableNegotiation?: boolean;
+    isPlatformService?: boolean;
+    studentInstructions?: string | null;
+    contractDocuments?: ContractDocument[];
+    isServiceOrder?: boolean;
+    resources?: ResourceRow[];
+};
+
 export function StatusTab({
     applicationStatus,
     isStudent,
@@ -49,7 +129,7 @@ export function StatusTab({
     contractDocuments = [],
     isServiceOrder = false,
     resources = [],
-}: any) {
+}: StatusTabProps) {
     // State for Payment Modal
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
@@ -68,22 +148,22 @@ export function StatusTab({
 
 
     // Checkout charges the selected funding scope from the server, with full-contract funding as the MVP default.
-    const fundingMode = (contract as any)?.funding_mode === "sequential" ? "sequential" : "full";
-    const nextToFund = milestones.find((m: any) => m.status === "awaiting_funding") || null;
+    const fundingMode = contract?.funding_mode === "sequential" ? "sequential" : "full";
+    const nextToFund = milestones.find((milestone) => milestone.status === "awaiting_funding") || null;
     const hasAgreedMilestones = contract?.terms_status === "agreed" && milestones.length > 0;
     const contractsAccepted = !!contract?.company_contract_accepted_at && !!contract?.student_contract_accepted_at;
     const canEnterEscrow = hasAgreedMilestones && contractsAccepted;
 
     const isEscrowReady =
         canEnterEscrow && fundingMode === "full"
-            ? (milestones.length > 0 && milestones.every((m: any) => ["funded", "in_progress", "delivered", "released", "accepted", "completed"].includes(m.status)))
+            ? (milestones.length > 0 && milestones.every((milestone) => ["funded", "in_progress", "delivered", "released", "accepted", "completed"].includes(milestone.status)))
             : canEnterEscrow && !nextToFund; // sequential: ready when no milestone is currently waiting for funding
 
     // Progress helpers
-    const isAnyFunded = milestones.some((m: any) => ['funded', 'in_progress', 'delivered', 'completed', 'released', 'accepted'].includes(m.status));
+    const isAnyFunded = milestones.some((milestone) => ['funded', 'in_progress', 'delivered', 'completed', 'released', 'accepted'].includes(milestone.status));
 
     // Calculate Total Budget strictly from milestones to avoid mismatches
-    const contractBudget = milestones.reduce((sum: number, m: any) => sum + (Number(m.amount_minor ?? (m.amount * 100)) / 100), 0);
+    const contractBudget = milestones.reduce((sum, milestone) => sum + (Number(milestone.amount_minor ?? (milestone.amount * 100)) / 100), 0);
 
     const handlePaymentConfirm = async () => {
         try {
@@ -114,7 +194,7 @@ export function StatusTab({
 
     if (contract?.status === 'completed') {
         currentStep = 5;
-    } else if (milestones.some((m: any) => m.status === 'delivered')) {
+    } else if (milestones.some((milestone) => milestone.status === 'delivered')) {
         currentStep = 4; // Verification phase (at least one delivered)
     } else if (isAnyFunded) {
         // In sequential funding, work starts as soon as at least one milestone is funded.
@@ -138,7 +218,7 @@ export function StatusTab({
     // Company must review if status is 'delivered' (or 'completed' but missing review due to legacy/migration miss)
     // Robustness: Check contract.status directly, AND check if all milestones are done (for migration safety)
     // FIX: Only show if explicitly completed OR all milestones are released. 'delivered' contract status might be premature if triggered by partial delivery.
-    const allMilestonesReleased = milestones.length > 0 && milestones.every((m: any) => m.status === 'released' || m.status === 'accepted' || m.status === 'completed');
+    const allMilestonesReleased = milestones.length > 0 && milestones.every((milestone) => milestone.status === 'released' || milestone.status === 'accepted' || milestone.status === 'completed');
     const isContractDone = contract?.status === 'completed' || allMilestonesReleased;
 
     // Show if: Company AND No Review AND (Explicit Status OR Implicit Status)
@@ -151,7 +231,7 @@ export function StatusTab({
         ["draft", "awaiting_funding"].includes(String(contract.status));
 
     // Counter Logic
-    const completedCount = milestones.filter((m: any) => ['released', 'accepted', 'completed'].includes(m.status)).length;
+    const completedCount = milestones.filter((milestone) => ['released', 'accepted', 'completed'].includes(milestone.status)).length;
     const totalCount = milestones.length;
 
     return (
@@ -352,7 +432,7 @@ export function StatusTab({
             {((contract?.terms_status === 'agreed') || isAnyFunded) && milestones.length > 0 && (
                 <div className="space-y-6">
                     <h3 className="text-xl font-bold text-slate-800 px-1">Harmonogram Realizacji</h3>
-                    {milestones.map((milestone: any, index: number) => (
+                    {milestones.map((milestone, index) => (
                         <MilestoneItem
                             key={milestone.id}
                             milestone={milestone}
@@ -523,10 +603,10 @@ export function StatusTab({
     );
 }
 
-function MilestoneResources({ applicationId, resources, isCompany }: any) {
+function MilestoneResources({ applicationId, resources, isCompany }: { applicationId: string; resources: ResourceRow[]; isCompany: boolean }) {
     const [isUploading, setIsUploading] = useState(false);
 
-    async function openResource(resource: any) {
+    async function openResource(resource: ResourceRow) {
         if (!resource?.file_path) return;
 
         try {
@@ -596,7 +676,7 @@ function MilestoneResources({ applicationId, resources, isCompany }: any) {
 
             {resources.length > 0 ? (
                 <div className="mt-4 grid gap-2">
-                    {resources.map((resource: any) => (
+                    {resources.map((resource) => (
                         <button
                             key={resource.id}
                             type="button"
@@ -624,8 +704,19 @@ function MilestoneResources({ applicationId, resources, isCompany }: any) {
     );
 }
 
-function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, deliverables, resources, onOpenSecureViewer }: any) {
-    async function openDeliverableFile(file: any, allowFullAccess = false) {
+type MilestoneItemProps = {
+    milestone: MilestoneRow;
+    index: number;
+    isStudent: boolean;
+    isCompany: boolean;
+    applicationId: string;
+    deliverables: DeliverableRow[];
+    resources: ResourceRow[];
+    onOpenSecureViewer: (url: string, name: string, fileType: "image" | "pdf") => void;
+};
+
+function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, deliverables, resources, onOpenSecureViewer }: MilestoneItemProps) {
+    async function openDeliverableFile(file: DeliverableFile, allowFullAccess = false) {
         try {
             let signed = "";
             if (file?.kind === "external_link" && typeof file?.url === "string") {
@@ -646,7 +737,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
             if (allowFullAccess) {
                 window.open(signed, "_blank");
             } else if ((isImage || isPdf) && onOpenSecureViewer) {
-                onOpenSecureViewer(signed, file.name, isPdf ? "pdf" : "image");
+                onOpenSecureViewer(signed, file.name || "Plik", isPdf ? "pdf" : "image");
             } else {
                 toast.info("Pelny plik bedzie dostępny po akceptacji etapu. Popros studenta o preview w formacie PNG/JPG/PDF.");
             }
@@ -659,9 +750,9 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
     const [isOpen, setIsOpen] = useState(milestone.status !== 'completed');
 
     // Find deliverables linked to this milestone
-    const milestoneDeliverables = deliverables?.filter((d: any) => d.milestone_id === milestone.id) || [];
+    const milestoneDeliverables = deliverables.filter((deliverable) => deliverable.milestone_id === milestone.id);
     const latestDeliverable = milestoneDeliverables[0]; // Assuming order by created_at desc
-    const hasFullFileAccess = (deliverable: any) =>
+    const hasFullFileAccess = (deliverable: DeliverableRow) =>
         isStudent ||
         ["accepted", "released", "completed"].includes(String(deliverable?.status)) ||
         ["accepted", "released", "completed"].includes(String(milestone.status));
@@ -775,20 +866,20 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                         <div className="space-y-2">
                                             <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Załączone pliki</label>
                                             <div className="grid gap-2">
-                                                {latestDeliverable.files && latestDeliverable.files.length > 0 ? latestDeliverable.files.map((f: any, i: number) => (
+                                                {latestDeliverable.files && latestDeliverable.files.length > 0 ? latestDeliverable.files.map((file, index) => (
                                                     <button
-                                                        key={i}
+                                                        key={index}
                                                         type="button"
-                                                        onClick={() => openDeliverableFile(f, hasFullFileAccess(latestDeliverable))}
+                                                        onClick={() => openDeliverableFile(file, hasFullFileAccess(latestDeliverable))}
                                                         className="group flex items-center gap-3 p-3 bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100 rounded-xl transition-all text-left w-full overflow-hidden"
                                                     >
                                                         <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                                                            {f?.kind === "external_link" ? <Link2 className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                                                            {file.kind === "external_link" ? <Link2 className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
                                                         </div>
                                                         <div className="min-w-0">
-                                                            <div className="text-sm font-medium text-slate-700 truncate group-hover:text-indigo-700">{f.name}</div>
+                                                            <div className="text-sm font-medium text-slate-700 truncate group-hover:text-indigo-700">{file.name}</div>
                                                             <div className="text-[10px] text-slate-400 uppercase font-bold group-hover:text-indigo-400">
-                                                                {f?.kind === "external_link"
+                                                                {file.kind === "external_link"
                                                                     ? "Otwórz link"
                                                                     : hasFullFileAccess(latestDeliverable)
                                                                       ? "Pobierz"
@@ -823,7 +914,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                     Historia przesłanych wersji
                                 </h5>
                                 <div className="space-y-4 relative before:absolute before:inset-y-0 before:left-2 before:w-px before:bg-slate-200">
-                                    {milestoneDeliverables.map((deliv: any) => (
+                                    {milestoneDeliverables.map((deliv) => (
                                         <div key={deliv.id} className="relative pl-8">
                                             <div className={`absolute top-3 left-0 w-4 h-4 rounded-full border-2 bg-white z-10 
                                                 ${deliv.status === 'accepted' ? 'border-emerald-500' : deliv.status === 'rejected' ? 'border-red-400' : 'border-slate-300'}
@@ -875,7 +966,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
 
                                                 {Array.isArray(deliv.files) && deliv.files.length > 0 && (
                                                     <div className="flex flex-wrap gap-2">
-                                                        {deliv.files.map((file: any, fileIndex: number) => (
+                                                        {deliv.files.map((file, fileIndex) => (
                                                             <button
                                                                 key={`${deliv.id}-${fileIndex}`}
                                                                 type="button"

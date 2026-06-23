@@ -330,7 +330,7 @@ export default function AuthPage({
       }
 
       setPendingMessage("Zalogowano. Otwieramy panel...");
-      router.replace("/app");
+      window.location.assign("/app");
     } catch (error) {
       window.clearTimeout(slowLoginTimer);
       setLoading(false);
@@ -358,6 +358,7 @@ export default function AuthPage({
               alt="Student2Work"
               width={44}
               height={29}
+              priority
               className="brightness-0 invert"
             />
             <div>

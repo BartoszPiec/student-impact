@@ -63,13 +63,13 @@ export default async function CompanyReviewDonePage({
 
   // student name (fallback)
   const { data: studentProfile } = await supabase
-    .from("profiles")
-    .select("name")
+    .from("student_profiles")
+    .select("public_name")
     .eq("user_id", appRow.student_id)
     .maybeSingle();
 
   const studentLabel =
-    studentProfile?.name ||
+    studentProfile?.public_name ||
     "student";
 
   // ✅ akcja otwierająca czat (historia)

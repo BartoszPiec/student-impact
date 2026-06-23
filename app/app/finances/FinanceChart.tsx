@@ -124,7 +124,7 @@ export default function FinanceChart({ data }: FinanceChartProps) {
                                         className="w-full bg-amber-400 relative transition-all duration-500 ease-out"
                                         style={{ height: `${heightPending}%` }}
                                     >
-                                        <div className="absolute inset-0 opacity-20 bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
+                                        <div className="absolute inset-0 bg-gradient-to-br from-white/25 to-transparent" />
                                     </div>
 
                                     {/* Base "Paid" Block */}

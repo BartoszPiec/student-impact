@@ -5,6 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 
 const REQUIRED_STRIPE_EVENTS = [
   "checkout.session.completed",
+  "checkout.session.async_payment_succeeded",
+  "checkout.session.async_payment_failed",
   "checkout.session.expired",
   "account.updated",
   "charge.refunded",

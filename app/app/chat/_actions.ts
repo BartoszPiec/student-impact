@@ -547,13 +547,21 @@ export async function sendEventMessage(
   await enforceMessageRateLimit(user.id, "event", conversationId);
   await assertCanSendMessage(supabase, user.id, conv);
 
-  await supabase.from("messages").insert({
+  if (event !== "rate.proposed" && event !== "deadline.proposed") {
+    throw new Error("Nieobsługiwany typ zdarzenia czatu.");
+  }
+
+  const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
     sender_id: user.id,
     content: content,
     event: event,
     payload: payload
   });
+
+  if (error) {
+    throw new Error("Nie udało się wysłać propozycji.");
+  }
 
   const targetUserId = user.id === conv.company_id ? conv.student_id : conv.company_id;
   await sendNotification(targetUserId, "message_new", {
@@ -724,23 +732,9 @@ export async function acceptDeadline(conversationId: string, refMessageId: strin
   const { data: refMsg } = await supabase.from("messages").select("sender_id").eq("id", refMessageId).maybeSingle();
   if (refMsg && refMsg.sender_id === user.id) throw new Error("Nie możesz zaakceptować własnej propozycji terminu");
 
-  if (conv.application_id) {
-    // 1. Update Application
-    const { error } = await supabase
-      .from("applications")
-      .update({ deadline: deadline })
-      .eq("id", conv.application_id);
-
-    if (error) throw new Error("Błąd aktualizacji terminu");
-  } else {
-    // System Order Context - Service orders might not have a deadline column yet,
-    // or it might be stored only in messages. 
-    // For now, allow the action to proceed (sending the message) so the UI updates,
-    // without failing on missing application_id.
-  }
-
-  // 2. Send Acceptance Message
-  await supabase.from("messages").insert({
+  // Termin negocjacji jest częścią historii rozmowy. Aplikacje nie mają osobnej
+  // kolumny deadline; terminy etapów są zapisywane później w milestones.due_at.
+  const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
     sender_id: user.id,
     content: `Zaakceptowano termin: ${deadline}`,
@@ -750,6 +744,7 @@ export async function acceptDeadline(conversationId: string, refMessageId: strin
       agreed_deadline: deadline
     }
   });
+  if (error) throw new Error("Nie udało się zaakceptować terminu");
   revalidatePath(`/app/chat/${conversationId}`);
 }
 

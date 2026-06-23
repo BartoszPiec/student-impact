@@ -4,7 +4,7 @@
 export default function CompanyHeroSection() {
     return (
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white shadow-2xl mb-12">
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 contrast-150"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.16),transparent_55%)]" />
 
             <div className="relative z-10 px-8 py-20 text-center max-w-4xl mx-auto space-y-6">
                 <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight">

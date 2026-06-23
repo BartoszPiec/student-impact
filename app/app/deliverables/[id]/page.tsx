@@ -69,6 +69,9 @@ type WorkspaceRow = {
 
 type ReviewRow = {
     reviewer_id: string;
+    rating: number;
+    comment: string | null;
+    created_at: string;
 };
 
 type ConversationMatch = {
@@ -77,7 +80,13 @@ type ConversationMatch = {
 
 type ContractDocumentRow = {
     id: string;
-    created_at: string | null;
+    contract_id: string;
+    document_type: string;
+    storage_path: string;
+    file_name: string;
+    company_accepted_at: string | null;
+    student_accepted_at: string | null;
+    generated_at: string;
 };
 
 function unwrapRelation<T>(value: RelationValue<T>): T | null {
@@ -230,14 +239,14 @@ export default async function RealizationWorkspace({
         isStudent && servicePackageId
             ? supabase.from("service_packages").select("locked_content").eq("id", servicePackageId).maybeSingle()
             : Promise.resolve({ data: null }),
-        supabase.from("deliverables").select("*").eq(filterColumn, applicationId).order("created_at", { ascending: false }),
-        supabase.from("reviews").select("*").eq(filterColumn, applicationId),
-        supabase.from("project_resources").select("*").eq(filterColumn, applicationId).order("created_at", { ascending: false }),
-        supabase.from("project_secrets").select("*").eq(filterColumn, applicationId).order("created_at", { ascending: false }),
+        supabase.from("deliverables").select("id, milestone_id, status, company_feedback, description, files, created_at").eq(filterColumn, applicationId).order("created_at", { ascending: false }),
+        supabase.from("reviews").select("reviewer_id, rating, comment, created_at").eq(filterColumn, applicationId),
+        supabase.from("project_resources").select("id, file_name, file_path, created_at").eq(filterColumn, applicationId).order("created_at", { ascending: false }),
+        supabase.from("project_secrets").select("id, title, secret_value, created_at").eq(filterColumn, applicationId).order("created_at", { ascending: false }),
         conversationPromise,
         supabase
             .from("contracts")
-            .select("*, milestones(*)")
+            .select("id, status, funding_mode, terms_status, company_contract_accepted_at, student_contract_accepted_at, documents_generated_at, milestones(id, status, title, acceptance_criteria, amount, amount_minor, idx)")
             .order("idx", { foreignTable: "milestones", ascending: true })
             .or(`application_id.eq.${applicationId},service_order_id.eq.${applicationId}`)
             .maybeSingle(),
@@ -261,14 +270,13 @@ export default async function RealizationWorkspace({
     if (contract?.id) {
         const { data: docs } = await supabase
             .from("contract_documents")
-            .select("*")
+            .select("id, contract_id, document_type, storage_path, file_name, company_accepted_at, student_accepted_at, generated_at")
             .eq("contract_id", contract.id)
             .order("created_at", { ascending: true });
         contractDocuments = (docs ?? []) as ContractDocumentRow[];
     }
 
     // --- HELPERS ---
-    const currentDeliv = deliverables?.[0]; // Latest deliverable
     const status = appRow.status === "cancelled" ? "cancelled" : (appRow.realization_status ?? appRow.status);
     const myReview = reviews.find((review) => review.reviewer_id === user.id);
     const theirReview = reviews.find((review) => review.reviewer_id !== user.id);
@@ -384,13 +392,11 @@ export default async function RealizationWorkspace({
             <div className="container mx-auto max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 -mt-10 relative z-20 pb-20">
                 <WorkspaceTabs
                     statusProps={{
-                        status,
                         applicationStatus: appRow.status,
                         isStudent,
                         isCompany,
                         applicationId,
                         isServiceOrder,
-                        currentDeliv,
                         deliverables,
                         myReview,
                         theirReview,

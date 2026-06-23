@@ -43,10 +43,10 @@ export function CompanyDocumentsPanel() {
           </div>
           <div>
             <h2 className="break-words text-2xl font-black tracking-tight text-slate-900">
-              Faktury i umowy do rozliczen
+              Faktury i umowy do rozliczeń
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Umowy i faktury firmowe powiazane z realizowanymi zleceniami.
+              Umowy i faktury firmowe powiązane z realizowanymi zleceniami.
             </p>
           </div>
         </div>
@@ -111,7 +111,7 @@ export function CompanyDocumentsPanel() {
 
       {!isLoading && error ? (
         <div className="mt-8 rounded-[2rem] border border-red-100 bg-red-50 p-6 text-sm text-red-700">
-          Nie udało sie pobrać dokumentów firmy. Odśwież widok albo wróć za chwile.
+          Nie udało się pobrać dokumentów firmy. Odśwież widok albo wróć za chwilę.
         </div>
       ) : null}
 
@@ -122,7 +122,7 @@ export function CompanyDocumentsPanel() {
           </div>
           <h3 className="mt-4 text-lg font-black text-slate-900">Brak dokumentów firmy</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            Dokumenty pojawia sie tutaj po wygenerowaniu umowy A lub faktury dla Twoich kontraktów.
+            Dokumenty pojawią się tutaj po wygenerowaniu umowy A lub faktury dla Twoich kontraktów.
           </p>
         </div>
       ) : null}

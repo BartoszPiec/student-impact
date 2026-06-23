@@ -42,6 +42,7 @@ export default async function MyServicesPage({
     return (
         <main className="pb-20">
             <PremiumPageHeader
+                tourId="student-services"
                 badge="Panel Studenta"
                 title="Moje Pakiety Usług"
                 description="Zarządzaj swoimi usługami, edytuj cenniki i monitoruj zainteresowanie Twoją ofertą."

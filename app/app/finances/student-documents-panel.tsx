@@ -46,7 +46,7 @@ export default function StudentDocumentsPanel() {
               Twoje umowy i rachunki
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Wszystkie umowy i rachunki powiazane z Twoimi zleceniami w jednym miejscu.
+              Wszystkie umowy i rachunki powiązane z Twoimi zleceniami w jednym miejscu.
             </p>
           </div>
         </div>
@@ -117,7 +117,7 @@ export default function StudentDocumentsPanel() {
 
       {!isLoading && error ? (
         <div className="mt-8 rounded-[2rem] border border-red-100 bg-red-50 p-6 text-sm text-red-700">
-          Nie udało sie pobrać dokumentów. Odśwież widok albo wróć za chwile.
+          Nie udało się pobrać dokumentów. Odśwież widok albo wróć za chwilę.
         </div>
       ) : null}
 
@@ -128,7 +128,7 @@ export default function StudentDocumentsPanel() {
           </div>
           <h3 className="mt-4 text-lg font-black text-slate-900">Brak dokumentów do pokazania</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            Dokumenty pojawia sie tutaj po wygenerowaniu umowy lub rachunku dla Twojego kontraktu.
+            Dokumenty pojawią się tutaj po wygenerowaniu umowy lub rachunku dla Twojego kontraktu.
           </p>
         </div>
       ) : null}

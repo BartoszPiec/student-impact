@@ -158,7 +158,7 @@ export default async function JobsPage({
   return (
     <main className="pb-10">
       <div className="relative bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 py-16 text-white shadow-xl overflow-hidden border-b border-white/10 mb-12">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
 
         <div className="relative z-10 mx-auto w-full max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="max-w-3xl text-center md:text-left">

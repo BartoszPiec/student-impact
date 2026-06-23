@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -22,7 +20,12 @@ import {
 import { Input } from "@/components/ui/input";
 
 interface CompanyOrderDetailActionsProps {
-  order: any;
+  order: {
+    id: string;
+    status: string;
+    amount: number | null;
+    counter_amount: number | null;
+  };
   chatLink: string;
   canMessage?: boolean;
 }
@@ -57,8 +60,8 @@ export default function CompanyOrderDetailActions({
       await acceptServiceProposalAction(order.id);
       toast.success("Oferta studenta została zaakceptowana.");
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Nie udało sie zaakceptować oferty.");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Nie udało sie zaakceptować oferty.");
     } finally {
       setAcceptLoading(false);
     }
@@ -77,8 +80,8 @@ export default function CompanyOrderDetailActions({
       toast.success("Kontroferta została wysłana do studenta.");
       setCounterOpen(false);
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Nie udało sie wysłać kontroferty.");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Nie udało sie wysłać kontroferty.");
     } finally {
       setCounterLoading(false);
     }
@@ -94,8 +97,8 @@ export default function CompanyOrderDetailActions({
       await rejectServiceProposalAction(order.id);
       toast.success("Negocjacja została zakończona.");
       router.push("/app/company/orders");
-    } catch (error: any) {
-      toast.error(error.message || "Nie udało sie zamknąć negocjacji.");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Nie udało sie zamknąć negocjacji.");
     } finally {
       setRejectLoading(false);
     }

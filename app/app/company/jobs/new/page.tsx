@@ -14,6 +14,7 @@ export default async function NewJobPage() {
     return (
         <main className="pb-20">
             <PremiumPageHeader
+                tourId="company-create-offer"
                 title="Dodaj ogloszenie"
                 description="Wybierz typ współpracy i przygotuj brief, który ułatwi aplikowanie, negocjacje i dalsza współpracę."
                 badge="Strefa Rekrutera"

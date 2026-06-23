@@ -29,7 +29,7 @@ import {
   SERVICE_ORDER_BUCKETS,
 } from "./service-order-status";
 
-type DashboardOrder = {
+export type DashboardOrder = {
   id: string;
   company_id: string;
   status: string;
@@ -41,7 +41,7 @@ type DashboardOrder = {
   package: { title?: string | null } | Array<{ title?: string | null }> | null;
 };
 
-type CompanySummary = { nazwa?: string | null };
+export type CompanySummary = { nazwa?: string | null };
 
 function getPackageTitle(order: DashboardOrder) {
   const packageData = Array.isArray(order.package) ? order.package[0] : order.package;

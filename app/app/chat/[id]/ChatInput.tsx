@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { uploadPrivateFile } from "@/lib/security/client-upload";
 import { Paperclip, Send, Banknote, CalendarClock, Plus } from "lucide-react";
@@ -28,6 +28,8 @@ export function ChatInput({
   const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [rateValue, setRateValue] = useState("");
   const [deadlineValue, setDeadlineValue] = useState("");
+  const [eventError, setEventError] = useState<string | null>(null);
+  const [isSendingEvent, setIsSendingEvent] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleSend() {
@@ -79,16 +81,32 @@ export function ChatInput({
       return;
     }
 
-    await sendEventMessage(conversationId, "rate.proposed", { proposed_stawka: rate }, `Proponuję stawkę: ${rate} zł`);
-    setRateOpen(false);
-    setRateValue("");
+    setIsSendingEvent(true);
+    setEventError(null);
+    try {
+      await sendEventMessage(conversationId, "rate.proposed", { proposed_stawka: rate }, `Proponuję stawkę: ${rate} zł`);
+      setRateOpen(false);
+      setRateValue("");
+    } catch {
+      setEventError("Nie udało się wysłać propozycji stawki.");
+    } finally {
+      setIsSendingEvent(false);
+    }
   };
 
   const submitDeadline = async () => {
     if (locked || !deadlineValue) return;
-    await sendEventMessage(conversationId, "deadline.proposed", { proposed_deadline: deadlineValue }, "");
-    setDeadlineOpen(false);
-    setDeadlineValue("");
+    setIsSendingEvent(true);
+    setEventError(null);
+    try {
+      await sendEventMessage(conversationId, "deadline.proposed", { proposed_deadline: deadlineValue }, "");
+      setDeadlineOpen(false);
+      setDeadlineValue("");
+    } catch {
+      setEventError("Nie udało się wysłać propozycji terminu.");
+    } finally {
+      setIsSendingEvent(false);
+    }
   };
 
   return (
@@ -115,6 +133,7 @@ export function ChatInput({
           <button
             type="button"
             onClick={() => setAttachment(null)}
+            aria-label="Usuń załącznik"
             className="ml-2 text-slate-400 hover:text-red-500"
           >
             ×
@@ -135,6 +154,7 @@ export function ChatInput({
             <Button
               variant="outline"
               size="icon"
+              aria-label="Dodaj załącznik lub propozycję"
               className="h-10 w-10 shrink-0 rounded-full border-slate-200 text-slate-500"
               disabled={locked}
             >
@@ -173,6 +193,7 @@ export function ChatInput({
           <Button
             onClick={() => void handleSend()}
             size="icon"
+            aria-label="Wyślij wiadomość"
             className="absolute right-2 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-200/50 transition-all hover:scale-105 hover:bg-indigo-700 active:scale-95"
             disabled={locked || isUploading || (!message.trim() && !attachment)}
           >
@@ -185,6 +206,7 @@ export function ChatInput({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Zaproponuj stawkę</DialogTitle>
+            <DialogDescription>Podaj kwotę, którą chcesz zaproponować drugiej stronie.</DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Label>Kwota (PLN)</Label>
@@ -194,13 +216,14 @@ export function ChatInput({
               onChange={(event) => setRateValue(event.target.value)}
               placeholder="np. 1500"
             />
+            {eventError ? <p className="mt-2 text-sm text-red-600">{eventError}</p> : null}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRateOpen(false)} className="rounded-xl border-slate-200">
               Anuluj
             </Button>
-            <Button onClick={() => void submitRate()} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
-              Wyślij propozycję
+            <Button disabled={isSendingEvent} onClick={() => void submitRate()} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
+              {isSendingEvent ? "Wysyłanie..." : "Wyślij propozycję"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -210,6 +233,7 @@ export function ChatInput({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Zaproponuj termin</DialogTitle>
+            <DialogDescription>Wybierz proponowany termin zakończenia prac.</DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Label>Termin (YYYY-MM-DD)</Label>
@@ -218,13 +242,14 @@ export function ChatInput({
               value={deadlineValue}
               onChange={(event) => setDeadlineValue(event.target.value)}
             />
+            {eventError ? <p className="mt-2 text-sm text-red-600">{eventError}</p> : null}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeadlineOpen(false)} className="rounded-xl border-slate-200">
               Anuluj
             </Button>
-            <Button onClick={() => void submitDeadline()} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
-              Wyślij propozycję
+            <Button disabled={isSendingEvent} onClick={() => void submitDeadline()} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
+              {isSendingEvent ? "Wysyłanie..." : "Wyślij propozycję"}
             </Button>
           </DialogFooter>
         </DialogContent>

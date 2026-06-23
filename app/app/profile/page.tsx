@@ -196,7 +196,7 @@ export default async function ProfilePage({
     <div className="min-h-screen bg-slate-50/50 pb-20">
       {/* PREMIUM HEADER */}
       <div className="relative overflow-hidden bg-slate-900 pb-24 pt-12 md:pb-32 md:pt-16">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/20 rounded-full blur-[100px]" />
         <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-purple-500/20 rounded-full blur-[80px]" />
 

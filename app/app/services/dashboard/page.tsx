@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -7,6 +6,7 @@ import { PageContainer } from "@/components/ui/page-container";
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { Inbox, LayoutGrid } from "lucide-react";
 import DashboardClient from "./dashboard-client";
+import type { CompanySummary, DashboardOrder } from "./dashboard-client";
 
 export default async function ServiceDashboardPage() {
     const supabase = await createClient();
@@ -16,22 +16,18 @@ export default async function ServiceDashboardPage() {
         redirect("/auth");
     }
 
-    const { data: orders, error } = await supabase
+    const { data: orderRows, error } = await supabase
         .from("service_orders")
         .select(`
             id,
             created_at,
             status,
-            entry_point,
-            initiated_by,
             amount,
             counter_amount,
             requirements,
             request_snapshot,
-            quote_snapshot,
             company_id,
             package:service_packages!service_orders_package_id_fkey(
-                id,
                 title
             )
         `)
@@ -39,18 +35,19 @@ export default async function ServiceDashboardPage() {
         .neq("status", "rejected")
         .order("created_at", { ascending: false });
 
-    const companyData: Record<string, any> = {};
+    const orders = (orderRows ?? []) as DashboardOrder[];
+    const companyData: Record<string, CompanySummary> = {};
     if (orders && orders.length > 0) {
-        const companyIds = Array.from(new Set(orders.map((o: any) => o.company_id).filter(Boolean)));
+        const companyIds = Array.from(new Set(orders.map((order) => order.company_id)));
         const { data: companies } = await supabase
             .from("company_profiles")
-            .select("*")
+            .select("user_id, nazwa")
             .in("user_id", companyIds);
 
         if (companies) {
-            companies.forEach((c: any) => {
-                companyData[c.user_id] = c;
-            });
+            for (const company of companies) {
+                companyData[company.user_id] = { nazwa: company.nazwa };
+            }
         }
     }
 
@@ -77,7 +74,7 @@ export default async function ServiceDashboardPage() {
                         Błąd pobierania danych: {String(error)}
                     </div>
                 )}
-                <DashboardClient initialOrders={orders || []} companyData={companyData} />
+                <DashboardClient initialOrders={orders} companyData={companyData} />
             </PageContainer>
         </main>
     );

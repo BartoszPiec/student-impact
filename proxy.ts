@@ -286,13 +286,11 @@ export async function proxy(request: NextRequest) {
     authState = await verifyJwtLocal(token);
   }
 
-  const shouldFallbackAuthCheck = isApp || isAuth || isAdminRoute;
+  const shouldFallbackAuthCheck = isApp || isAdminRoute;
 
-  // Keep proxy decisions aligned with the server client used by App Router layouts.
-  // A locally valid JWT can still be unusable by Supabase SSR when cookies are stale,
-  // split, legacy, or need refresh. If /auth trusts only local JWT while /app calls
-  // getUser(), the browser can loop between /auth and /app.
-  if (shouldFallbackAuthCheck) {
+  // Zweryfikowany lokalnie JWT nie wymaga kolejnego requestu do Supabase przy
+  // każdej nawigacji. Fallback odświeża wygasłą lub starszą sesję z cookies.
+  if (shouldFallbackAuthCheck && !authState.isAuthed) {
     const { data } = await supabase.auth.getUser();
     if (data.user) {
       authState = { isAuthed: true, userId: data.user.id };
@@ -307,11 +305,12 @@ export async function proxy(request: NextRequest) {
     return redirectWithResponseCookies("/auth", request, response);
   }
 
-  if (isAuth && authState.isAuthed) {
-    return redirectWithResponseCookies("/app", request, response);
-  }
+  const onboardingCookie = request.cookies.get("onboarding_complete")?.value;
+  const onboardingAlreadyChecked = authState.userId
+    ? onboardingCookie === `${authState.userId}:1`
+    : false;
 
-  if (isApp && authState.isAuthed && authState.userId && !isOnboardingRoute) {
+  if (isApp && authState.isAuthed && authState.userId && !isOnboardingRoute && !onboardingAlreadyChecked) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
@@ -343,7 +342,7 @@ export async function proxy(request: NextRequest) {
 
     if (needsOnboarding) {
       const redirectResponse = redirectWithResponseCookies("/app/onboarding", request, response);
-      redirectResponse.cookies.set("onboarding_complete", "0", {
+      redirectResponse.cookies.set("onboarding_complete", `${authState.userId}:0`, {
         path: "/",
         httpOnly: true,
         sameSite: "lax",
@@ -352,7 +351,7 @@ export async function proxy(request: NextRequest) {
       return redirectResponse;
     }
 
-    response.cookies.set("onboarding_complete", "1", {
+    response.cookies.set("onboarding_complete", `${authState.userId}:1`, {
       path: "/",
       httpOnly: true,
       sameSite: "lax",

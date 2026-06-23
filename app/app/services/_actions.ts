@@ -442,7 +442,6 @@ export async function createPrivateProposalAction(formData: FormData) {
 }
 
 export async function proposeServicePriceAction(orderId: string, price: number, message?: string) {
-    console.log("Server Action: proposeServicePriceAction started", { orderId, price, message });
     try {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
@@ -489,7 +488,6 @@ export async function proposeServicePriceAction(orderId: string, price: number, 
             packageId: order.package_id,
         });
 
-        console.log("Found conversation:", conv?.id);
 
         if (conv) {
             // 1. Send "Negotiation Proposed" system message (Interactive Bubble)

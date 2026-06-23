@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -23,6 +22,53 @@ import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { PageContainer } from "@/components/ui/page-container";
 
 export const dynamic = "force-dynamic";
+
+type RelationValue<T> = T | T[] | null;
+
+type ReviewRow = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  company_id: string | null;
+  application_id: string | null;
+  service_order_id: string | null;
+  reviewer_id: string;
+  reviewer_role: string;
+};
+
+type EducationRow = {
+  id: string;
+  school_name: string;
+  field_of_study: string | null;
+  degree: string | null;
+  start_year: number;
+  end_year: number | null;
+  is_current: boolean;
+};
+
+type ProjectRow = {
+  id: string;
+  title: string;
+  summary: string | null;
+  link: string | null;
+  created_at: string;
+  company_id?: string | null;
+  isFromPlatform?: boolean;
+};
+
+type ContractRow = {
+  id: string;
+  created_at: string;
+  status: string;
+  service_order_id: string | null;
+  application_id: string | null;
+  company_id: string | null;
+  application: RelationValue<{ offers: RelationValue<{ tytul: string | null; id: string }> }>;
+  service_order: RelationValue<{ package: RelationValue<{ title: string | null; id: string }> }>;
+};
+
+type CompanyRow = { user_id: string; nazwa: string | null };
 
 function fmtDate(ts?: string | null) {
   if (!ts) return "";
@@ -83,7 +129,7 @@ export default async function StudentProfilePage({
       .order("created_at", { ascending: false }),
     supabase
       .from("education_entries")
-      .select("*")
+      .select("id, school_name, field_of_study, degree, start_year, end_year, is_current")
       .eq("student_id", studentId)
       .order("start_year", { ascending: false }),
     supabase
@@ -97,26 +143,26 @@ export default async function StudentProfilePage({
       .order("created_at", { ascending: false })
   ]);
 
-  const manualProjects = projectsRes.data ?? [];
-  const reviews = reviewsRes.data ?? [];
-  const education = educationRes.data ?? [];
-  const potentialContracts = completedContractsRes.data ?? [];
+  const manualProjects = (projectsRes.data ?? []) as ProjectRow[];
+  const reviews = (reviewsRes.data ?? []) as ReviewRow[];
+  const education = (educationRes.data ?? []) as EducationRow[];
+  const potentialContracts = (completedContractsRes.data ?? []) as ContractRow[];
 
-  const normalizedProjects: any[] = [];
+  const normalizedProjects: ProjectRow[] = [];
 
-  potentialContracts.forEach((c: any) => {
-    const hasReview = reviews.some((r: any) =>
-      (c.application_id && r.application_id === c.application_id) ||
-      (c.service_order_id && r.service_order_id === c.service_order_id)
+  potentialContracts.forEach((contract) => {
+    const hasReview = reviews.some((review) =>
+      (contract.application_id && review.application_id === contract.application_id) ||
+      (contract.service_order_id && review.service_order_id === contract.service_order_id)
     );
-    const isExplicitlyCompleted = ['completed', 'delivered', 'accepted'].includes(c.status);
+    const isExplicitlyCompleted = ['completed', 'delivered', 'accepted'].includes(contract.status);
 
     if (isExplicitlyCompleted || hasReview) {
       let link = null;
       let title = "Zrealizowany Projekt";
 
-      const app = Array.isArray(c.application) ? c.application[0] : c.application;
-      const so = Array.isArray(c.service_order) ? c.service_order[0] : c.service_order;
+      const app = Array.isArray(contract.application) ? contract.application[0] : contract.application;
+      const so = Array.isArray(contract.service_order) ? contract.service_order[0] : contract.service_order;
       const offer = app?.offers ? (Array.isArray(app.offers) ? app.offers[0] : app.offers) : null;
       const pkg = so?.package ? (Array.isArray(so.package) ? so.package[0] : so.package) : null;
 
@@ -127,17 +173,17 @@ export default async function StudentProfilePage({
         title = pkg.title;
         if (pkg.id) link = `/app/offers/${pkg.id}`;
       }
-      if (!link && c.application_id) {
-        link = `/app/deliverables/${c.application_id}`;
+      if (!link && contract.application_id) {
+        link = `/app/deliverables/${contract.application_id}`;
       }
 
       normalizedProjects.push({
-        id: c.id,
+        id: contract.id,
         title,
         summary: "Projekt zakończony sukcesem w ramach platformy Student2Work.",
         link,
-        created_at: c.created_at,
-        company_id: c.company_id,
+        created_at: contract.created_at,
+        company_id: contract.company_id,
         isFromPlatform: true,
       });
     }
@@ -148,16 +194,18 @@ export default async function StudentProfilePage({
 
   const avg =
     reviews.length > 0
-      ? reviews.reduce((s: number, r: any) => s + (Number(r.rating) || 0), 0) / reviews.length
+      ? reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0) / reviews.length
       : null;
 
   const companyIds = Array.from(new Set(
-    reviews.map((r: any) => r.company_id || (r.reviewer_role === 'company' ? r.reviewer_id : null)).filter(Boolean)
+    reviews
+      .map((review) => review.company_id || (review.reviewer_role === 'company' ? review.reviewer_id : null))
+      .filter((companyId): companyId is string => Boolean(companyId))
   ));
   const { data: companies } = companyIds.length
     ? await supabase.from("company_public_profiles").select("user_id, nazwa").in("user_id", companyIds)
-    : { data: [] as any[] };
-  const companyName = new Map((companies ?? []).map((c: any) => [c.user_id, c.nazwa]));
+    : { data: [] as CompanyRow[] };
+  const companyName = new Map((companies ?? []).map((company) => [company.user_id, company.nazwa]));
 
   const publicName = sp.public_name?.trim() || "Student";
   const kompetencje = Array.isArray(sp.kompetencje) ? sp.kompetencje : [];
@@ -289,7 +337,7 @@ export default async function StudentProfilePage({
                 {education.length > 0 ? (
                   <div className="relative space-y-5 pl-2 pt-2">
                     <div className="absolute left-[7px] top-3 bottom-3 w-0.5 bg-indigo-100" />
-                    {education.map((edu: any) => (
+                    {education.map((edu) => (
                       <div key={edu.id} className="relative pl-8">
                         <div className="absolute left-0 top-1.5 h-4 w-4 rounded-full border-4 border-indigo-500 bg-white shadow-sm z-10" />
                         <div className="text-sm font-bold text-slate-800">{edu.school_name}</div>
@@ -367,7 +415,7 @@ export default async function StudentProfilePage({
                   </span>
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {projects.map((project: any) => (
+                  {projects.map((project) => (
                     <div
                       key={project.id}
                       className="group relative rounded-2xl border border-slate-100 bg-slate-50/80 p-5 transition-all hover:-translate-y-0.5 hover:border-indigo-100 hover:bg-white hover:shadow-md"
@@ -425,7 +473,7 @@ export default async function StudentProfilePage({
               </h2>
               {reviews.length > 0 ? (
                 <div className="grid gap-4">
-                  {reviews.map((r: any) => {
+                  {reviews.map((r) => {
                     const cId = r.company_id || r.reviewer_id;
                     const cName = companyName.get(cId) || "Firma";
                     return (
