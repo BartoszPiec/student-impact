@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -154,6 +155,10 @@ export function AppNavbar({
   const [isOpen, setIsOpen] = useState(false);
 
   const mobileNavItems = getMobileNavItems(role);
+  const restartTourFromMobileMenu = () => {
+    setIsOpen(false);
+    window.setTimeout(restartTour, 300);
+  };
 
   return (
     <>
@@ -190,6 +195,9 @@ export function AppNavbar({
                       </span>
                     </div>
                   </SheetTitle>
+                  <SheetDescription className="sr-only">
+                    Nawigacja aplikacji, profil użytkownika i szybkie uruchomienie samouczka.
+                  </SheetDescription>
                 </SheetHeader>
 
                 <div className="flex-1 flex flex-col gap-1 overflow-y-auto py-2">
@@ -256,6 +264,19 @@ export function AppNavbar({
                 <div className="border-t border-white/5 pt-4 mt-auto pb-6 space-y-2">
                   {user ? (
                     <>
+                      {tourAvailable ? (
+                        <button
+                          type="button"
+                          onClick={restartTourFromMobileMenu}
+                          data-testid="restart-app-tour-mobile"
+                          className="flex w-full items-center gap-3 rounded-xl border border-indigo-300/20 bg-indigo-500/10 px-3 py-3 text-left text-sm font-black text-indigo-100 transition-all hover:border-indigo-300/40 hover:bg-indigo-500/20"
+                        >
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-100">
+                            <CircleHelp className="h-4 w-4" />
+                          </div>
+                          Samouczek
+                        </button>
+                      ) : null}
                       <Link
                         href="/app/profile"
                         onClick={() => setIsOpen(false)}
@@ -378,11 +399,12 @@ export function AppNavbar({
                 type="button"
                 onClick={restartTour}
                 data-testid="restart-app-tour"
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-white/50 transition-all hover:bg-white/10 hover:text-white"
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-indigo-300/30 bg-indigo-500/15 px-2.5 text-indigo-100 shadow-sm shadow-indigo-950/20 transition-all hover:border-indigo-200/60 hover:bg-indigo-500/25 hover:text-white sm:px-3"
                 title="Uruchom samouczek"
                 aria-label="Uruchom samouczek"
               >
                 <CircleHelp className="h-4 w-4" />
+                <span className="hidden xl:inline text-xs font-black">Samouczek</span>
               </button>
             ) : null}
 

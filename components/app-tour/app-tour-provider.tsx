@@ -11,18 +11,25 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Building2, Check, GraduationCap, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type TourRole = "company" | "student";
 type TourResult = "completed" | "skipped";
 
+type TourStepAction = {
+  id: "fill-company-offer-example";
+  label: string;
+};
+
 type TourStep = {
   route: string;
+  search?: string;
   target: string;
   title: string;
   description: string;
+  action?: TourStepAction;
 };
 
 type TargetRect = {
@@ -62,6 +69,87 @@ const COMPANY_STEPS: TourStep[] = [
     target: "company-create-offer",
     title: "Opublikuj własne zlecenie",
     description: "Jeśli potrzebujesz niestandardowej realizacji, przygotuj brief, budżet, termin i etapy. Studenci będą mogli aplikować na ogłoszenie.",
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferChoose=1",
+    target: "company-offer-type-micro",
+    title: "Wybierz format zlecenia",
+    description: "Dla jednorazowego zadania wybierz mikrozlecenie. To najprostszy tryb: opisujesz efekt, budżet, termin i materiały, a studenci mogą szybko aplikować.",
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferType=micro&tourOfferStep=2",
+    target: "company-offer-example",
+    title: "Zacznij od przykładowego briefu",
+    description: "Jeśli firma nie wie, jak pisać ogłoszenie, może wypełnić formularz przykładem i potem nadpisać pola własnymi informacjami.",
+    action: {
+      id: "fill-company-offer-example",
+      label: "Wypełnij przykładem",
+    },
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferType=micro&tourOfferStep=2",
+    target: "company-offer-basics",
+    title: "Tytuł, kategoria i narzędzia",
+    description: "Tytuł powinien jasno mówić, co ma powstać. Kategoria pomaga dopasować studentów, a narzędzia filtrują osoby z konkretnymi kompetencjami.",
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferType=micro&tourOfferStep=2",
+    target: "company-offer-description",
+    title: "Opis główny",
+    description: "Tu wpisz kontekst zadania: co jest do zrobienia, jakie materiały startowe istnieją i co student powinien wiedzieć przed aplikowaniem.",
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferType=micro&tourOfferStep=2",
+    target: "company-offer-outcome",
+    title: "Cel i oczekiwany rezultat",
+    description: "Te pola zmniejszają liczbę nieporozumień: po co firma zleca pracę i co konkretnie ma być gotowe na końcu współpracy.",
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferType=micro&tourOfferStep=2",
+    target: "company-offer-acceptance",
+    title: "Kryteria akceptacji",
+    description: "Wpisz mierzalne warunki odbioru. Przykład: sekcje, format plików, poprawność mobile/desktop, podpięty formularz i przekazanie plików źródłowych.",
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferType=micro&tourOfferStep=2",
+    target: "company-offer-contact",
+    title: "Osoba prowadząca",
+    description: "Podaj imię i rolę osoby, która odpowiada na pytania oraz odbiera rezultat. Student wie wtedy, z kim będzie doprecyzowywał zakres.",
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferType=micro&tourOfferStep=3",
+    target: "company-offer-budget-time",
+    title: "Budżet i termin",
+    description: "Budżet wpisuj jako kwotę za całość zadania. Termin możesz podać jako liczbę dni albo konkretną datę graniczną.",
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferType=micro&tourOfferStep=3",
+    target: "company-offer-materials",
+    title: "Materiały od firmy",
+    description: "Dodaj link do Figma, Google Drive, Notion albo innych zasobów. To nie są obowiązki studenta, tylko pliki i kontekst potrzebny do realizacji.",
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferType=micro&tourOfferStep=3",
+    target: "company-offer-plan",
+    title: "Plan realizacji",
+    description: "Firma może pozwolić studentowi zaproponować etapy albo wpisać je z góry. Dla prostych zadań zwykle wystarczy tryb, w którym student rozpisuje etapy po akceptacji.",
+  },
+  {
+    route: "/app/company/jobs/new",
+    search: "tourOfferType=micro&tourOfferStep=4",
+    target: "company-offer-summary",
+    title: "Sprawdź podsumowanie przed publikacją",
+    description: "Na końcu firma widzi ogłoszenie oczami kandydata. To ostatni moment na poprawienie tytułu, budżetu, kryteriów akceptacji i informacji formalnych.",
   },
   {
     route: "/app/company/offers",
@@ -126,6 +214,10 @@ function getStorageKey(userId: string, role: TourRole): string {
   return `student2work:product-tour:${TOUR_VERSION}:${userId}:${role}`;
 }
 
+function getStepHref(step: TourStep): string {
+  return step.search ? `${step.route}?${step.search}` : step.route;
+}
+
 function readTourResult(storageKey: string): TourResult | null {
   try {
     const value = window.localStorage.getItem(storageKey);
@@ -185,6 +277,8 @@ export function AppTourProvider({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentSearch = searchParams.toString();
   const supportedRole = role === "company" || role === "student" ? role : null;
   const available = Boolean(enabled && supportedRole);
   const steps = useMemo(() => (supportedRole ? getSteps(supportedRole) : []), [supportedRole]);
@@ -202,6 +296,14 @@ export function AppTourProvider({
     setTargetRect(null);
     setIsOpen(true);
   }, [available, steps.length]);
+
+  const runStepAction = useCallback((action: TourStepAction) => {
+    window.dispatchEvent(
+      new CustomEvent<{ actionId: TourStepAction["id"] }>("student2work:tour-action", {
+        detail: { actionId: action.id },
+      }),
+    );
+  }, []);
 
   const closeWithResult = useCallback((result: TourResult) => {
     if (storageKey) writeTourResult(storageKey, result);
@@ -224,8 +326,9 @@ export function AppTourProvider({
   useLayoutEffect(() => {
     if (!isOpen || !step) return;
 
-    if (pathname !== step.route) {
-      router.push(step.route);
+    const expectedSearch = step.search ?? "";
+    if (pathname !== step.route || currentSearch !== expectedSearch) {
+      router.push(getStepHref(step));
       return;
     }
 
@@ -242,6 +345,13 @@ export function AppTourProvider({
         }
 
         const rect = element.getBoundingClientRect();
+        const viewportMargin = Math.min(112, Math.max(72, window.innerHeight * 0.14));
+        if (rect.top < viewportMargin || rect.bottom > window.innerHeight - viewportMargin) {
+          element.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+          window.setTimeout(updateTarget, 80);
+          return;
+        }
+
         const nextRect: TargetRect = {
           top: rect.top,
           right: rect.right,
@@ -270,7 +380,7 @@ export function AppTourProvider({
       window.removeEventListener("resize", updateTarget);
       window.removeEventListener("scroll", updateTarget, true);
     };
-  }, [isOpen, pathname, router, step]);
+  }, [currentSearch, isOpen, pathname, router, step]);
 
   useLayoutEffect(() => {
     if (!isOpen) return;
@@ -342,6 +452,9 @@ export function AppTourProvider({
   const isLastStep = stepIndex === steps.length - 1;
   const roleLabel = supportedRole === "company" ? "Panel firmy" : "Panel studenta";
   const RoleIcon = supportedRole === "company" ? Building2 : GraduationCap;
+  const stepAction = step.action;
+  const expectedSearch = step.search ?? "";
+  const isStepLocationReady = pathname === step.route && currentSearch === expectedSearch;
 
   return (
     <AppTourContext.Provider value={contextValue}>
@@ -420,6 +533,17 @@ export function AppTourProvider({
             >
               Pomiń samouczek
             </button>
+            {stepAction ? (
+              <button
+                type="button"
+                onClick={() => runStepAction(stepAction)}
+                data-testid="app-tour-action"
+                disabled={!isStepLocationReady}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 text-sm font-black text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100"
+              >
+                {stepAction.label}
+              </button>
+            ) : null}
             <div className="ml-auto flex items-center gap-2">
               {stepIndex > 0 ? (
                 <button
@@ -437,6 +561,7 @@ export function AppTourProvider({
               <button
                 type="button"
                 data-testid="app-tour-next"
+                disabled={!isStepLocationReady}
                 onClick={() => {
                   if (isLastStep) {
                     closeWithResult("completed");
@@ -446,13 +571,17 @@ export function AppTourProvider({
                   setStepIndex((current) => Math.min(steps.length - 1, current + 1));
                 }}
                 className={cn(
-                  "inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-black text-white shadow-lg transition active:scale-95",
-                  isLastStep
+                  "inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-black text-white shadow-lg transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-60",
+                  !isStepLocationReady
+                    ? "bg-slate-400 shadow-slate-200"
+                    : isLastStep
                     ? "bg-emerald-600 shadow-emerald-200 hover:bg-emerald-700"
                     : "bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700",
                 )}
               >
-                {isLastStep ? (
+                {!isStepLocationReady ? (
+                  <>Ładowanie...</>
+                ) : isLastStep ? (
                   <>
                     Gotowe <Check className="h-4 w-4" />
                   </>

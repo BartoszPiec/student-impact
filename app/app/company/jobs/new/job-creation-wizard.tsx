@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Briefcase, Zap, CheckCircle2, ArrowRight, Building2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,13 +14,20 @@ const NewOfferForm = dynamic(() => import("./new-offer-form"), {
 type OfferType = "job" | "micro" | null;
 
 export default function JobCreationWizard() {
-    const [offerType, setOfferType] = useState<OfferType>(null);
+    const searchParams = useSearchParams();
+    const tourOfferType = searchParams.get("tourOfferType");
+    const isTourChoosingType = searchParams.get("tourOfferChoose") === "1";
+    const [selectedOfferType, setSelectedOfferType] = useState<OfferType>(null);
+    const tourSelectedOfferType: OfferType =
+        tourOfferType === "micro" || tourOfferType === "job" ? tourOfferType : null;
+    const offerType = isTourChoosingType ? null : tourSelectedOfferType ?? selectedOfferType;
 
     return (
         <div className="space-y-8">
             <div className={cn("grid gap-8 md:grid-cols-2 transition-all duration-700", offerType ? "pointer-events-none hidden scale-95 opacity-50 md:grid" : "opacity-100")}>
                 <div
-                    onClick={() => setOfferType("micro")}
+                    data-tour="company-offer-type-micro"
+                    onClick={() => setSelectedOfferType("micro")}
                     className={cn(
                         "group relative cursor-pointer overflow-hidden rounded-[3rem] border-2 bg-white/80 p-8 shadow-xl shadow-slate-200/50 backdrop-blur-md transition-all duration-500 hover:-translate-y-2 hover:border-amber-400/50 hover:shadow-[0_20px_50px_rgba(245,158,11,0.15)]",
                         offerType === "micro"
@@ -69,7 +77,8 @@ export default function JobCreationWizard() {
                 </div>
 
                 <div
-                    onClick={() => setOfferType("job")}
+                    data-tour="company-offer-type-job"
+                    onClick={() => setSelectedOfferType("job")}
                     className={cn(
                         "group relative cursor-pointer overflow-hidden rounded-[3rem] border-2 bg-white/80 p-8 shadow-xl shadow-slate-200/50 backdrop-blur-md transition-all duration-500 hover:-translate-y-2 hover:border-indigo-400/50 hover:shadow-[0_20px_50px_rgba(79,70,229,0.15)]",
                         offerType === "job"
@@ -138,7 +147,7 @@ export default function JobCreationWizard() {
                         </div>
 
                         <button
-                            onClick={() => setOfferType(null)}
+                            onClick={() => setSelectedOfferType(null)}
                             className="group flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/80 px-5 py-2.5 text-sm font-bold text-slate-500 shadow-sm backdrop-blur-sm transition-all hover:border-indigo-200 hover:text-indigo-600 hover:shadow-lg"
                         >
                             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />

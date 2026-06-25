@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createOffer } from "./_actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,11 +115,102 @@ type OfferFormData = {
   company_milestones: CompanyMilestoneDraft[];
 };
 
+function createExampleOfferData(type: OfferFormData["typ"]): OfferFormData {
+  if (type === "job") {
+    return {
+      typ: "job",
+      is_platform_service: false,
+      tytul: "Junior React Developer do projektu SaaS",
+      kategoria: "IT - Rozwoj oprogramowania",
+      opis:
+        "Szukamy studenta lub absolwenta do wsparcia zespolu przy rozwoju panelu klienta w aplikacji SaaS. Zakres obejmuje wdrazanie widokow w React, poprawki UI, podlaczenie prostych integracji API i wspolprace z designerem.",
+      technologies: "React, TypeScript, Tailwind CSS, Git",
+      cel_wspolpracy:
+        "Odciazyc zespol produktowy przy backlogu frontendowym i sprawdzic potencjal do dluzszej wspolpracy.",
+      oczekiwany_rezultat:
+        "Regularnie dostarczane komponenty i poprawki UI zgodne z makietami oraz opisem zadan w backlogu.",
+      kryteria_akceptacji:
+        "- kod przechodzi review\n- widoki sa responsywne\n- brak bledow w konsoli\n- zadania sa opisane w pull requestach",
+      osoba_prowadzaca: "Marta Nowak, Product Manager",
+      stawka: "",
+      salary_range_min: "3500",
+      salary_range_max: "5500",
+      contract_type: "UZ",
+      tryb_pracy: "remote",
+      location: "Zdalnie / Polska / CET",
+      is_remote: true,
+      planowany_start: "",
+      czas_typ: "days",
+      czas_dni: "30",
+      czas_data: "",
+      obligations: "Dostep do repozytorium, makiety Figma i lista zadan w Linear/Jira.",
+      wymagania: "- podstawowe doswiadczenie z React\n- znajomosc TypeScript\n- komunikatywnosc i samodzielnosc",
+      benefits: "- feedback od senior developera\n- elastyczne godziny\n- mozliwosc przedluzenia wspolpracy",
+      wymagana_poufnosc: true,
+      przeniesienie_praw_autorskich: true,
+      portfolio_dozwolone: false,
+      materialy_legalnie_udostepnione: true,
+      realization_mode: "student_defined",
+      company_milestones: [],
+    };
+  }
+
+  return {
+    typ: "micro",
+    is_platform_service: false,
+    tytul: "Landing page do kampanii rekrutacyjnej",
+    kategoria: "Marketing",
+    opis:
+      "Potrzebujemy prostego landing page'a promujacego program stazowy. Mamy logo, podstawowe teksty i brandbook. Student ma przygotowac strone z czytelnym CTA, sekcja benefitow i formularzem kontaktowym.",
+    technologies: "Figma, Webflow lub Next.js, Google Analytics",
+    cel_wspolpracy:
+      "Zebrac zapisy studentow zainteresowanych programem stazowym i szybko przetestowac komunikat kampanii.",
+    oczekiwany_rezultat:
+      "Gotowy landing page z wersja desktop i mobile, podpietym formularzem oraz kompletem plikow zrodlowych.",
+    kryteria_akceptacji:
+      "- strona zawiera hero, benefity, harmonogram, FAQ i CTA\n- formularz wysyla dane do wskazanego arkusza lub narzedzia\n- widok jest poprawny na mobile i desktop\n- firma otrzymuje link produkcyjny oraz pliki robocze",
+    osoba_prowadzaca: "Anna Kowalska, Marketing Manager",
+    stawka: "1200",
+    salary_range_min: "",
+    salary_range_max: "",
+    contract_type: "B2B",
+    tryb_pracy: "remote",
+    location: "Zdalnie / Polska / CET",
+    is_remote: true,
+    planowany_start: "",
+    czas_typ: "days",
+    czas_dni: "10",
+    czas_data: "",
+    obligations: "Link do brandbooka, folderu Google Drive z materialami i przykładowych landing page'y.",
+    wymagania: "",
+    benefits: "",
+    wymagana_poufnosc: false,
+    przeniesienie_praw_autorskich: true,
+    portfolio_dozwolone: true,
+    materialy_legalnie_udostepnione: true,
+    realization_mode: "company_defined",
+    company_milestones: [
+      {
+        title: "Struktura i copy landing page",
+        acceptance_criteria:
+          "- propozycja ukladu sekcji\n- dopracowane naglowki i CTA\n- lista brakujacych materialow po stronie firmy",
+      },
+      {
+        title: "Projekt i wdrozenie strony",
+        acceptance_criteria:
+          "- responsywna strona gotowa do publikacji\n- podpiety formularz\n- przekazane pliki zrodlowe lub dostep do projektu",
+      },
+    ],
+  };
+}
+
 export default function NewOfferForm({
   defaultType,
 }: {
   defaultType?: "micro" | "job" | null;
 }) {
+  const searchParams = useSearchParams();
+  const tourOfferStep = searchParams.get("tourOfferStep");
   const [step, setStep] = useState(defaultType ? 2 : 1);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -161,6 +253,38 @@ export default function NewOfferForm({
   const isJob = formData.typ === "job";
   const showEmploymentWarning =
     isJob && (formData.contract_type === "UoP" || formData.contract_type === "Staz");
+
+  const applyExampleData = useCallback(() => {
+    setFormData(createExampleOfferData(formData.typ));
+    setUploadedFileUrl(null);
+    setError(null);
+    setStep(2);
+
+    window.requestAnimationFrame(() => {
+      wizardTopRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  }, [formData.typ]);
+
+  useEffect(() => {
+    if (!tourOfferStep) return;
+
+    const nextStep = Number(tourOfferStep);
+    if (!Number.isInteger(nextStep) || nextStep < 2 || nextStep > 4) return;
+
+    setStep(nextStep);
+  }, [tourOfferStep]);
+
+  useEffect(() => {
+    const handleTourAction = (event: Event) => {
+      const customEvent = event as CustomEvent<{ actionId?: string }>;
+      if (customEvent.detail?.actionId === "fill-company-offer-example") {
+        applyExampleData();
+      }
+    };
+
+    window.addEventListener("student2work:tour-action", handleTourAction);
+    return () => window.removeEventListener("student2work:tour-action", handleTourAction);
+  }, [applyExampleData]);
 
   useEffect(() => {
     if (step < 3) return;
@@ -724,7 +848,7 @@ export default function NewOfferForm({
 
     return (
       <div className="animate-in slide-in-from-right-8 space-y-8 duration-500">
-        <div className={cn("grid gap-6", formData.czas_typ === "date" ? "md:grid-cols-2" : "md:grid-cols-1")}>
+        <div data-tour="company-offer-budget-time" className={cn("grid gap-6", formData.czas_typ === "date" ? "md:grid-cols-2" : "md:grid-cols-1")}>
           <div className="space-y-2">
             <Label className={fieldLabelClass}>
               Budzet za calosc <span className="text-red-500">*</span>
@@ -800,7 +924,7 @@ export default function NewOfferForm({
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-amber-200 bg-gradient-to-br from-amber-50 via-orange-50/70 to-white p-6 shadow-sm">
+        <div data-tour="company-offer-materials" className="rounded-[2rem] border border-amber-200 bg-gradient-to-br from-amber-50 via-orange-50/70 to-white p-6 shadow-sm">
           <div className="mb-4 flex items-start gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
               <FileText className="h-6 w-6" />
@@ -847,7 +971,7 @@ export default function NewOfferForm({
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-indigo-200 bg-indigo-50/70 p-6">
+        <div data-tour="company-offer-plan" className="rounded-[1.75rem] border border-indigo-200 bg-indigo-50/70 p-6">
           <div className="mb-4 flex items-start gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600">
               <FileText className="h-6 w-6" />
@@ -1039,7 +1163,7 @@ export default function NewOfferForm({
 
   const renderStep4 = () => (
     <div className="animate-in slide-in-from-right-4 space-y-6 duration-300">
-      <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+      <div data-tour="company-offer-summary" className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -1287,28 +1411,47 @@ export default function NewOfferForm({
 
         {step === 2 && (
           <div className="animate-in slide-in-from-right-8 space-y-8 duration-500">
-            <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-              <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900">
-                <Info className={cn("h-4 w-4", isJob ? "text-indigo-500" : "text-amber-500")} />
-                Zadbaj o czytelny brief
+            <div data-tour="company-offer-example" className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900">
+                    <Info className={cn("h-4 w-4", isJob ? "text-indigo-500" : "text-amber-500")} />
+                    Zadbaj o czytelny brief
+                  </div>
+                  Opisz zadanie tak, aby kandydat rozumial kontekst, efekt i oczekiwany zakres jeszcze przed pierwsza
+                  rozmowa. To oszczedza czas po obu stronach.
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={applyExampleData}
+                  className={cn(
+                    "shrink-0 rounded-2xl bg-white px-5 font-semibold shadow-sm",
+                    isJob
+                      ? "border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                      : "border-amber-200 text-amber-700 hover:bg-amber-50",
+                  )}
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  Wypełnij przykładem
+                </Button>
               </div>
-              Opisz zadanie tak, aby kandydat rozumial kontekst, efekt i oczekiwany zakres jeszcze przed pierwsza
-              rozmowa. To oszczedza czas po obu stronach.
             </div>
 
-            <div className="space-y-2">
-              <Label className={fieldLabelClass}>
-                Tytul ogloszenia <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                value={formData.tytul}
-                onChange={(e) => handleChange("tytul", e.target.value)}
-                placeholder={isJob ? "np. Junior React Developer do projektu SaaS" : "np. Landing page do kampanii reklamowej"}
-                className={cn(inputClass, "h-16 text-lg font-semibold", isJob ? "focus-visible:ring-indigo-100" : "focus-visible:ring-amber-100")}
-              />
-            </div>
+            <div data-tour="company-offer-basics" className="space-y-6">
+              <div className="space-y-2">
+                <Label className={fieldLabelClass}>
+                  Tytul ogloszenia <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={formData.tytul}
+                  onChange={(e) => handleChange("tytul", e.target.value)}
+                  placeholder={isJob ? "np. Junior React Developer do projektu SaaS" : "np. Landing page do kampanii reklamowej"}
+                  className={cn(inputClass, "h-16 text-lg font-semibold", isJob ? "focus-visible:ring-indigo-100" : "focus-visible:ring-amber-100")}
+                />
+              </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
+              <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2">
                 <Label className={fieldLabelClass}>
                   Kategoria <span className="text-red-500">*</span>
@@ -1347,9 +1490,10 @@ export default function NewOfferForm({
                   />
                 </div>
               </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
+            <div data-tour="company-offer-description" className="space-y-2">
               <Label className={fieldLabelClass}>
                 Opis glowny <span className="text-red-500">*</span>
               </Label>
@@ -1365,7 +1509,7 @@ export default function NewOfferForm({
               />
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            <div data-tour="company-offer-outcome" className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2">
                 <Label className={fieldLabelClass}>
                   Cel współpracy <span className="text-red-500">*</span>
@@ -1391,7 +1535,7 @@ export default function NewOfferForm({
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div data-tour="company-offer-acceptance" className="space-y-2">
               <Label className={fieldLabelClass}>
                 Kryteria akceptacji <span className="text-red-500">*</span>
               </Label>
@@ -1403,7 +1547,7 @@ export default function NewOfferForm({
               />
             </div>
 
-            <div className="space-y-2">
+            <div data-tour="company-offer-contact" className="space-y-2">
               <Label className={fieldLabelClass}>
                 Osoba prowadzaca po stronie firmy <span className="text-red-500">*</span>
               </Label>
