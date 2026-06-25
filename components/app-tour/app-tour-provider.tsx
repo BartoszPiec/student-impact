@@ -50,6 +50,7 @@ const TOUR_VERSION = "v1";
 const SPOTLIGHT_GAP = 8;
 const TOOLTIP_GAP = 14;
 const TOOLTIP_MAX_WIDTH = 380;
+const SCROLL_TOLERANCE = 6;
 
 const COMPANY_STEPS: TourStep[] = [
   {
@@ -245,6 +246,26 @@ function rectChanged(previous: TargetRect | null, next: TargetRect): boolean {
   );
 }
 
+function getTargetScrollDelta(rect: DOMRect, viewportHeight: number, margin: number): number {
+  const comfortableHeight = viewportHeight - margin * 2;
+  const targetIsTallerThanViewport = rect.height > comfortableHeight;
+
+  if (targetIsTallerThanViewport) {
+    if (Math.abs(rect.top - margin) <= SCROLL_TOLERANCE) return 0;
+    return rect.top - margin;
+  }
+
+  if (rect.top < margin - SCROLL_TOLERANCE) {
+    return rect.top - margin;
+  }
+
+  if (rect.bottom > viewportHeight - margin + SCROLL_TOLERANCE) {
+    return rect.bottom - (viewportHeight - margin);
+  }
+
+  return 0;
+}
+
 function findVisibleTarget(target: string): HTMLElement | null {
   const candidates = document.querySelectorAll<HTMLElement>(`[data-tour="${target}"]`);
 
@@ -346,8 +367,9 @@ export function AppTourProvider({
 
         const rect = element.getBoundingClientRect();
         const viewportMargin = Math.min(112, Math.max(72, window.innerHeight * 0.14));
-        if (rect.top < viewportMargin || rect.bottom > window.innerHeight - viewportMargin) {
-          element.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+        const scrollDelta = getTargetScrollDelta(rect, window.innerHeight, viewportMargin);
+        if (Math.abs(scrollDelta) > SCROLL_TOLERANCE) {
+          window.scrollBy({ top: scrollDelta, left: 0, behavior: "auto" });
           window.setTimeout(updateTarget, 80);
           return;
         }
