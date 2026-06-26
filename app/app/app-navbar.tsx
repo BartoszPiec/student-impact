@@ -88,10 +88,10 @@ function AppNavLink({
       onClick={onClick}
       data-tour={tourId}
       className={cn(
-        "relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200",
+        "relative flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-extrabold transition-all duration-200 xl:px-4",
         active
-          ? "text-white bg-white/15 shadow-sm"
-          : "text-white/60 hover:text-white hover:bg-white/10"
+          ? "bg-white/10 text-white shadow-sm"
+          : "text-white/60 hover:bg-white/10 hover:text-white"
       )}
     >
       {Icon && (
@@ -104,7 +104,7 @@ function AppNavLink({
       )}
       <span>{children}</span>
       {active && (
-        <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-indigo-400 rounded-full" />
+        <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-lime-300" />
       )}
     </Link>
   );
@@ -114,7 +114,7 @@ function getMobileNavItems(role: string | null): MobileNavItem[] {
   if (role === "company") {
     return [
       { href: "/app/company/packages", label: "Katalog", icon: Search, tourId: "company-catalog" },
-      { href: "/app/company/offers", label: "Oferty", icon: LayoutGrid, tourId: "company-offers" },
+      { href: "/app/company/offers", label: "Zlecenia", icon: LayoutGrid, tourId: "company-offers" },
       { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true, tourId: "company-chat" },
       { href: "/app/profile", label: "Profil", icon: User },
     ];
@@ -122,7 +122,7 @@ function getMobileNavItems(role: string | null): MobileNavItem[] {
 
   if (role === "student") {
     return [
-      { href: "/app/jobs", label: "Zlecenia", icon: Search, tourId: "student-jobs" },
+      { href: "/app/jobs", label: "Giełda", icon: Search, tourId: "student-jobs" },
       { href: "/app/applications", label: "Aplikacje", icon: FileText, tourId: "student-applications" },
       { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true, tourId: "student-chat" },
       { href: "/app/profile", label: "Profil", icon: User },
@@ -163,16 +163,16 @@ export function AppNavbar({
 
   return (
     <>
-    <header className="sticky top-0 z-50 w-full bg-slate-950/95 backdrop-blur-xl">
-      <div className="mx-auto w-full max-w-[2000px] px-3 py-2.5 sm:px-4 lg:px-8 xl:px-12">
-        <div className="flex h-14 items-center gap-2 rounded-2xl border border-white/5 bg-slate-950/95 px-2 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.4)] backdrop-blur-xl sm:gap-4 sm:px-3">
-          <div className="flex shrink-0 items-center gap-3">
+    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#07142f] backdrop-blur-xl">
+      <div className="mx-auto w-full max-w-[1380px] px-3 sm:px-4 lg:px-8">
+        <div className="relative flex h-14 items-center gap-2 sm:gap-4">
+          <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
               <SheetTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="lg:hidden text-white/60 hover:text-white hover:bg-white/10 rounded-xl h-9 w-9"
+                  className="absolute right-0 top-1/2 h-9 w-9 -translate-y-1/2 rounded-xl text-white/70 hover:bg-white/10 hover:text-white lg:hidden"
                   suppressHydrationWarning
                 >
                   <Menu className="h-5 w-5" />
@@ -211,7 +211,7 @@ export function AppNavbar({
                         Katalog Usług
                       </AppNavLink>
                       <AppNavLink href="/app/company/offers" icon={LayoutGrid} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-offers">
-                        Moje ogloszenia
+                        Moje ogłoszenia
                       </AppNavLink>
                       <AppNavLink href="/app/company/challenges/new" icon={SearchCheck} onClick={() => setIsOpen(false)} pathname={pathname}>
                         Dodaj wyzwanie
@@ -220,10 +220,10 @@ export function AppNavbar({
                         Dokumenty
                       </AppNavLink>
                       <AppNavLink href="/app/company/orders" icon={Briefcase} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-orders">
-                        Zamowienia usług
+                        Zamówienia usług
                       </AppNavLink>
                       <AppNavLink href="/app/chat" icon={MessageSquare} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-chat">
-                        Wiadomosci
+                        Wiadomości
                         {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
                       </AppNavLink>
                       <AppNavLink href="/app/company/jobs/new" icon={PlusCircle} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-create-offer">
@@ -238,7 +238,7 @@ export function AppNavbar({
                         Panel Studenta
                       </div>
                       <AppNavLink href="/app/jobs" icon={Search} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-jobs">
-                        Gielda Zlecen
+                        Giełda Zleceń
                       </AppNavLink>
                       <AppNavLink href="/app/applications" icon={FileText} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-applications">
                         Aplikacje
@@ -250,7 +250,7 @@ export function AppNavbar({
                         Finanse
                       </AppNavLink>
                       <AppNavLink href="/app/chat" icon={MessageSquare} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-chat">
-                        Wiadomosci
+                        Wiadomości
                         {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
                       </AppNavLink>
                     </>
@@ -327,10 +327,10 @@ export function AppNavbar({
                   width={128}
                   height={32}
                   priority
-                  className="h-7 w-auto relative z-10 transition-transform duration-300 group-hover:scale-110"
-                />
-              </div>
-              <span className="hidden sm:inline-block font-black text-base tracking-tight text-white">
+                className="relative z-10 h-6 w-auto transition-transform duration-300 group-hover:scale-105 sm:h-7"
+              />
+            </div>
+              <span className="inline-block text-xs font-black tracking-normal text-white sm:text-sm">
                 Student<span className="text-indigo-400">2</span>Work
               </span>
             </Link>
@@ -343,7 +343,7 @@ export function AppNavbar({
                   Katalog Usług
                 </AppNavLink>
                 <AppNavLink href="/app/company/offers" icon={LayoutGrid} pathname={pathname} tourId="company-offers">
-                  Moje ogloszenia
+                  Moje ogłoszenia
                 </AppNavLink>
                 <AppNavLink href="/app/company/challenges/new" icon={SearchCheck} pathname={pathname}>
                   Wyzwanie
@@ -352,20 +352,20 @@ export function AppNavbar({
                   Dokumenty
                 </AppNavLink>
                 <AppNavLink href="/app/company/orders" icon={Briefcase} pathname={pathname} tourId="company-orders">
-                  Zamowienia usług
+                  Zamówienia usług
                 </AppNavLink>
                 <AppNavLink href="/app/chat" icon={MessageSquare} pathname={pathname} tourId="company-chat">
-                  Wiadomosci
+                  Wiadomości
                   {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
                 </AppNavLink>
                 <Link
                   href="/app/company/jobs/new"
                   data-tour="company-create-offer"
                   className={cn(
-                    "ml-3 flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-black transition-all active:scale-95",
+                    "ml-3 flex items-center gap-2 rounded-full px-5 py-2 text-sm font-black transition-all active:scale-95",
                     isPathActive(pathname, "/app/company/jobs/new")
-                      ? "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30"
-                      : "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 hover:-translate-y-0.5"
+                      ? "bg-lime-300 text-[#10245f] shadow-lg shadow-lime-300/20"
+                      : "bg-lime-300 text-[#10245f] shadow-md shadow-lime-300/20 hover:-translate-y-0.5 hover:bg-lime-200 hover:shadow-lg hover:shadow-lime-300/30"
                   )}
                 >
                   <PlusCircle className="h-4 w-4" />
@@ -377,7 +377,7 @@ export function AppNavbar({
             {role === "student" && (
               <>
                 <AppNavLink href="/app/jobs" icon={Search} pathname={pathname} tourId="student-jobs">
-                  Gielda Zlecen
+                  Giełda Zleceń
                 </AppNavLink>
                 <AppNavLink href="/app/applications" icon={FileText} pathname={pathname} tourId="student-applications">
                   Aplikacje
@@ -389,7 +389,7 @@ export function AppNavbar({
                   Finanse
                 </AppNavLink>
                 <AppNavLink href="/app/chat" icon={MessageSquare} pathname={pathname} tourId="student-chat">
-                  Wiadomosci
+                  Wiadomości
                   {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
                 </AppNavLink>
               </>
@@ -400,13 +400,13 @@ export function AppNavbar({
             )}
           </nav>
 
-          <div className="ml-auto flex items-center gap-1 border-l border-white/5 pl-2 sm:gap-2 sm:pl-3 lg:ml-2">
+          <div className="ml-auto flex items-center gap-1 border-l border-white/10 pl-2 pr-10 sm:gap-2 sm:pl-3 lg:ml-2 lg:pr-0">
             {tourAvailable ? (
               <button
                 type="button"
                 onClick={restartTour}
                 data-testid="restart-app-tour"
-                className="inline-flex h-9 items-center gap-2 rounded-xl border border-indigo-300/30 bg-indigo-500/15 px-2.5 text-indigo-100 shadow-sm shadow-indigo-950/20 transition-all hover:border-indigo-200/60 hover:bg-indigo-500/25 hover:text-white sm:px-3"
+                className="hidden h-9 items-center gap-2 rounded-full border border-lime-300/25 bg-white/5 px-2.5 text-lime-100 shadow-sm shadow-indigo-950/20 transition-all hover:border-lime-200/60 hover:bg-white/10 hover:text-white sm:px-3 lg:inline-flex"
                 title="Uruchom samouczek"
                 aria-label="Uruchom samouczek"
               >
@@ -426,12 +426,12 @@ export function AppNavbar({
                 <Link
                   href="/app/profile"
                   className={cn(
-                    "flex items-center justify-center h-9 w-9 rounded-xl transition-all",
+                    "hidden h-9 w-9 items-center justify-center rounded-xl transition-all sm:flex",
                     isPathActive(pathname, "/app/profile")
-                      ? "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/25"
+                      ? "bg-white/15 text-white shadow-sm"
                       : "text-white/50 hover:text-white hover:bg-white/10"
                   )}
-                  title="Moj Profil"
+                  title="Mój Profil"
                 >
                   <User className="h-4 w-4" />
                 </Link>
@@ -458,8 +458,8 @@ export function AppNavbar({
       </div>
     </header>
 
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200/70 bg-white/90 px-3 pb-[calc(env(safe-area-inset-bottom)+0.55rem)] pt-2 shadow-[0_-14px_40px_-24px_rgba(15,23,42,0.55)] backdrop-blur-2xl lg:hidden">
-      <div className="mx-auto grid max-w-md grid-cols-4 gap-1 rounded-[1.35rem] border border-slate-200/70 bg-white px-1.5 py-1.5 shadow-lg shadow-slate-200/60">
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200/80 bg-white px-3 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-1.5 shadow-[0_-10px_28px_-24px_rgba(15,23,42,0.55)] lg:hidden">
+      <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
         {mobileNavItems.map(({ href, label, icon: Icon, chat, tourId }) => {
           const active = isPathActive(pathname, href);
 
@@ -469,14 +469,14 @@ export function AppNavbar({
               href={href}
               data-tour={tourId}
               className={cn(
-                "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[10px] font-black transition-all",
+                "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-extrabold transition-all",
                 active
-                  ? "bg-slate-950 text-white shadow-md shadow-slate-400/20"
+                  ? "bg-lime-200 text-[#0b1b47]"
                   : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
               )}
             >
               <span className="relative">
-                <Icon className={cn("h-4 w-4", active ? "text-white" : "text-slate-500")} />
+                <Icon className={cn("h-4 w-4", active ? "text-[#0b1b47]" : "text-slate-500")} />
                 {chat && user && unreadChat > 0 ? (
                   <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-red-500 px-1 text-center text-[9px] leading-4 text-white">
                     {unreadChat > 9 ? "9+" : unreadChat}

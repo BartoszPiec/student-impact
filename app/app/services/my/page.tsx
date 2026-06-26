@@ -46,7 +46,7 @@ export default async function MyServicesPage({
                 badge="Panel Studenta"
                 title="Moje Pakiety Usług"
                 description="Zarządzaj swoimi usługami, edytuj cenniki i monitoruj zainteresowanie Twoją ofertą."
-                icon={<LayoutGrid className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
+                icon={<LayoutGrid className="h-10 w-10 text-lime-200" />}
                 actions={
                     <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
                         <Button asChild variant="outline" className="h-12 w-full rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white sm:w-auto">
@@ -55,7 +55,7 @@ export default async function MyServicesPage({
                                 Panel Zleceń
                             </Link>
                         </Button>
-                        <Button asChild className="h-12 w-full rounded-2xl bg-white px-6 font-black text-slate-900 shadow-xl hover:bg-slate-100 sm:w-auto">
+                        <Button asChild className="h-12 w-full rounded-2xl bg-white px-6 font-black text-[#10245f] shadow-sm hover:bg-lime-50 sm:w-auto">
                             <Link href="/app/services/new">
                                 <Plus className="mr-2 h-4 w-4" />
                                 Dodaj usługę
@@ -65,7 +65,7 @@ export default async function MyServicesPage({
                 }
             />
 
-            <PageContainer className="space-y-8">
+            <PageContainer className="space-y-5">
                 {savedState && (
                     <div className="rounded-[2rem] border border-emerald-200 bg-emerald-50 px-6 py-5 text-emerald-950 shadow-lg shadow-emerald-500/10">
                         <div className="flex items-start gap-4">
@@ -90,15 +90,15 @@ export default async function MyServicesPage({
                 )}
 
                 {/* SERVICES GRID */}
-                <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {services?.map((service: ServicePackage) => (
                         <div
                             key={service.id}
-                            className="group relative flex flex-col rounded-[1.75rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/50 transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10 sm:rounded-[2rem] sm:p-8"
+                            className="group relative flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:border-lime-200 hover:shadow-md"
                         >
                             <div className="mb-5 flex items-start justify-between gap-3 sm:mb-6">
-                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 transition-colors duration-500 group-hover:bg-indigo-600 group-hover:text-white">
-                                    <ShieldCheck className="h-6 w-6" />
+                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-100 text-[#10245f] transition-colors duration-300 group-hover:bg-lime-300">
+                                    <ShieldCheck className="h-5 w-5" />
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <Badge
@@ -116,7 +116,7 @@ export default async function MyServicesPage({
 
                             <div className="mb-6 flex-1 space-y-3 sm:mb-8">
                                 <h3
-                                    className="line-clamp-2 text-xl font-black leading-tight text-slate-900 transition-colors group-hover:text-indigo-600 sm:line-clamp-1"
+                                    className="line-clamp-2 text-lg font-black leading-tight text-[#10245f]"
                                     title={service.title}
                                 >
                                     {service.title}
@@ -131,7 +131,7 @@ export default async function MyServicesPage({
                                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
                                         Cena netto
                                     </p>
-                                    <p className="tabular-nums text-2xl font-black text-slate-900">
+                                <p className="tabular-nums text-2xl font-black text-[#10245f]">
                                         {service.price}{" "}
                                         <span className="ml-1 text-sm font-bold text-slate-400">PLN</span>
                                     </p>
@@ -158,7 +158,7 @@ export default async function MyServicesPage({
                             <p className="mx-auto mb-8 max-w-sm font-medium text-slate-500">
                                 Nie masz jeszcze żadnych opublikowanych ofert. Dodaj pierwszą usługę, aby zacząć zarabiać.
                             </p>
-                            <Button asChild className="rounded-2xl bg-indigo-600 px-6 font-bold text-white hover:bg-indigo-700 h-12">
+                            <Button asChild className="h-12 rounded-2xl bg-[#10245f] px-6 font-bold text-white hover:bg-[#0b1b47]">
                                 <Link href="/app/services/new">
                                     <Plus className="mr-2 h-4 w-4" />
                                     Dodaj nową usługę

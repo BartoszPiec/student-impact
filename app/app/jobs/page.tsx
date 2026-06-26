@@ -159,33 +159,32 @@ export default async function JobsPage({
 
   return (
     <main className="pb-10">
-      <div className="relative bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 py-16 text-white shadow-xl overflow-hidden border-b border-white/10 mb-12">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
+      <div className="relative mb-7 overflow-hidden border-b border-[#243869] bg-[#10245f] py-10 text-white shadow-sm sm:mb-8 sm:py-14">
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(12,30,82,0.95),rgba(18,45,111,0.92))]" />
 
-        <div className="relative z-10 mx-auto w-full max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="max-w-3xl text-center md:text-left">
-            <div className="flex items-center justify-center md:justify-start gap-2 mb-4">
-              <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-md">
+        <div className="relative z-10 mx-auto flex w-full max-w-[1380px] flex-col items-start justify-between gap-8 px-4 sm:px-6 md:flex-row md:items-center lg:px-8">
+          <div className="max-w-2xl text-left">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-extrabold uppercase tracking-normal text-indigo-100 backdrop-blur-md">
                 Giełda zleceń i staży
               </span>
-              <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-md">
+              <span className="rounded-full bg-lime-300 px-3 py-1 text-xs font-extrabold uppercase tracking-normal text-[#0b1b47]">
                 {totalOffersCount ?? offers.length} aktywnych ofert
               </span>
             </div>
-            <h1 className="text-4xl md:text-6xl font-black mb-6 tracking-tight leading-none bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-transparent">
+            <h1 className="mb-5 text-4xl font-black leading-[0.98] tracking-normal text-white sm:text-5xl md:text-6xl">
               Kształtuj swoją <br className="hidden md:block" /> karierę już dziś.
             </h1>
-            <p className="text-indigo-100/70 text-lg md:text-xl font-medium max-w-2xl leading-relaxed">
+            <p className="max-w-xl text-sm font-semibold leading-6 text-indigo-100/80 sm:text-base">
               Odkrywaj mikrozlecenia, staże i projekty systemowe dopasowane do Twoich umiejętności.
               Zdobądź doświadczenie, którego szukają pracodawcy.
             </p>
           </div>
 
           <div className="hidden lg:block relative shrink-0">
-            <div className="w-64 h-64 bg-white/5 backdrop-blur-3xl rounded-3xl border border-white/10 shadow-2xl flex items-center justify-center group hover:scale-105 transition-transform duration-500 overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 opacity-50" />
+            <div className="flex h-56 w-56 items-center justify-center overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-sm backdrop-blur-3xl transition-transform duration-300 group hover:scale-[1.02]">
               <svg
-                className="h-32 w-32 text-indigo-400 drop-shadow-[0_0_15px_rgba(165,180,252,0.4)] relative z-10"
+                className="relative z-10 h-28 w-28 text-indigo-300"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -198,14 +197,12 @@ export default async function JobsPage({
                 />
               </svg>
             </div>
-            <div className="absolute -top-4 -left-4 bg-emerald-500/90 backdrop-blur-md text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xl animate-bounce">
+            <div className="absolute -left-4 -top-4 rounded-full bg-emerald-400 px-4 py-2 text-xs font-extrabold text-white shadow-sm">
               Nowe oferty!
             </div>
           </div>
         </div>
 
-        <div className="absolute right-0 top-0 -mt-20 -mr-20 h-[500px] w-[500px] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none" />
-        <div className="absolute left-1/4 bottom-0 -mb-20 h-64 w-64 rounded-full bg-violet-600/10 blur-[100px] pointer-events-none" />
       </div>
 
       <PageContainer>

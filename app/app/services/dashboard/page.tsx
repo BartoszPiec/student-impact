@@ -57,7 +57,7 @@ export default async function ServiceDashboardPage() {
                 badge="Panel Studenta"
                 title="Pulpit Zleceń"
                 description="Śledź przychodzące zapytania, negocjuj warunki i zarządzaj swoimi projektami."
-                icon={<Inbox className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
+                icon={<Inbox className="h-10 w-10 text-lime-200" />}
                 actions={
                     <Button asChild variant="outline" className="h-12 rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white">
                         <Link href="/app/services/my">

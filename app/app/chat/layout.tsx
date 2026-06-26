@@ -5,14 +5,14 @@ export const dynamic = "force-dynamic";
 
 export default function ChatLayout({ children }: { children: ReactNode }) {
     return (
-        <div className="flex h-[calc(100dvh-4.5rem)] w-full bg-slate-50 lg:h-[calc(100vh-theme(spacing.16))]">
+        <div className="mx-auto flex min-h-[calc(100dvh-3.5rem)] w-full max-w-[1380px] flex-col bg-[#f3f6fb] lg:h-[calc(100vh-3.5rem)] lg:flex-row">
             {/* Sidebar */}
-            <div className="hidden h-full flex-none lg:block">
+            <div className="flex-none border-b border-slate-200 lg:h-full lg:border-b-0">
                 <ChatListSidebar />
             </div>
 
             {/* Main Content */}
-            <main className="flex-1 w-full min-w-0 relative">
+            <main className="relative min-h-[680px] w-full min-w-0 flex-1 lg:min-h-0">
                 {children}
             </main>
         </div>

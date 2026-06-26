@@ -233,24 +233,24 @@ export function JobBoardView({
 
 
     return (
-        <div className="flex flex-col gap-6 sm:gap-10">
+        <div className="flex flex-col gap-4 sm:gap-5">
 
-            <div className="space-y-4 lg:hidden">
-                <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="-mt-24 space-y-4 lg:hidden">
+                <div className="rounded-2xl border border-white/15 bg-[#233a78] p-3 shadow-sm">
+                    <div className="hidden">
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                            <p className="text-[10px] font-black uppercase tracking-normal text-slate-400">
                                 Wyszukiwarka ofert
                             </p>
-                            <h2 className="mt-1 text-xl font-black leading-tight text-slate-900">
+                            <h2 className="mt-1 text-lg font-black leading-tight text-slate-900">
                                 {mode === "micro" ? "Znajdź mikrozlecenie" : "Znajdź pracę lub staż"}
                             </h2>
                         </div>
                         <Badge
                             className={cn(
-                                "shrink-0 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider",
+                                "shrink-0 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-normal",
                                 mode === "micro"
-                                    ? "border-amber-100 bg-amber-50 text-amber-700"
+                                    ? "border-lime-200 bg-lime-100 text-[#0b1b47]"
                                     : "border-indigo-100 bg-indigo-50 text-indigo-700",
                             )}
                         >
@@ -258,25 +258,25 @@ export function JobBoardView({
                         </Badge>
                     </div>
                     <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-100/80" />
                         <Input
-                            placeholder={mode === "micro" ? "Szukaj po zadaniu, kategorii lub firmie" : "Szukaj po stanowisku, firmie lub technologii"}
-                            className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-semibold shadow-inner focus:border-indigo-300 focus:bg-white"
+                            placeholder="Czego dziś szukasz?"
+                            className="h-11 rounded-xl border-white/15 bg-white/10 pl-10 font-semibold text-white shadow-inner placeholder:text-indigo-100/80 focus:border-white/30 focus:bg-white/15"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 rounded-[1.5rem] border border-slate-200 bg-slate-100/80 p-1.5 shadow-inner">
+                <div className="grid grid-cols-1 gap-2">
                     <button
                         type="button"
                         onClick={() => setMode("micro")}
                         className={cn(
-                            "flex min-h-12 items-center justify-center gap-2 rounded-2xl px-3 text-sm font-black transition-all",
+                            "flex min-h-14 items-center justify-start gap-3 rounded-2xl border px-3 text-sm font-black transition-all",
                             mode === "micro"
-                                ? "bg-white text-amber-700 shadow-sm ring-1 ring-amber-100"
-                                : "text-slate-500",
+                                ? "border-lime-200 bg-lime-100 text-[#0b1b47] shadow-sm"
+                                : "border-slate-200 bg-white text-slate-600",
                         )}
                     >
                         <Zap className="h-4 w-4" />
@@ -286,10 +286,10 @@ export function JobBoardView({
                         type="button"
                         onClick={() => setMode("job")}
                         className={cn(
-                            "flex min-h-12 items-center justify-center gap-2 rounded-2xl px-3 text-sm font-black transition-all",
+                            "flex min-h-14 items-center justify-start gap-3 rounded-2xl border px-3 text-sm font-black transition-all",
                             mode === "job"
-                                ? "bg-white text-indigo-700 shadow-sm ring-1 ring-indigo-100"
-                                : "text-slate-500",
+                                ? "border-lime-200 bg-lime-100 text-[#0b1b47] shadow-sm"
+                                : "border-slate-200 bg-white text-slate-600",
                         )}
                     >
                         <Briefcase className="h-4 w-4" />
@@ -299,7 +299,7 @@ export function JobBoardView({
 
                 <Sheet>
                     <SheetTrigger asChild>
-                        <Button variant="outline" className="h-12 w-full justify-between rounded-2xl border-slate-200 bg-white px-4 font-black shadow-sm">
+                        <Button variant="outline" className="h-11 w-full justify-between rounded-full border-slate-200 bg-white px-4 font-black shadow-sm">
                             <span className="inline-flex items-center gap-2">
                                 <Filter className="h-4 w-4" />
                                 Filtry
@@ -434,30 +434,29 @@ export function JobBoardView({
                 </Sheet>
             </div>
 
-            <div className="hidden grid-cols-1 gap-4 lg:grid lg:grid-cols-2 lg:gap-6">
+            <div className="hidden grid-cols-1 gap-4 lg:grid lg:grid-cols-2">
                 <div
                     onClick={() => setMode("micro")}
                     className={cn(
-                        "cursor-pointer group relative overflow-hidden rounded-[2rem] border-2 transition-all duration-300 p-5 sm:p-6 flex flex-col gap-5 sm:gap-6",
+                        "group relative flex cursor-pointer items-center gap-4 overflow-hidden rounded-2xl border p-4 transition-all duration-300",
                         mode === "micro"
-                            ? "border-amber-500 bg-amber-50 shadow-xl shadow-amber-500/10"
-                            : "border-slate-100 bg-white hover:border-amber-200 hover:shadow-lg"
+                            ? "border-lime-200 bg-lime-100 shadow-sm"
+                            : "border-slate-200 bg-white hover:border-lime-200 hover:shadow-sm"
                     )}
                 >
                     <div className="flex items-start justify-between">
                         <div className={cn(
-                            "h-12 w-12 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 sm:h-14 sm:w-14",
-                            mode === "micro" ? "bg-amber-500 text-white shadow-lg shadow-amber-200" : "bg-amber-50 text-amber-500"
+                            "flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-300",
+                            mode === "micro" ? "bg-lime-300 text-[#0b1b47]" : "bg-slate-50 text-[#0b1b47]"
                         )}>
-                            <Zap className="h-7 w-7 fill-current" />
+                            <Zap className="h-5 w-5 fill-current" />
                         </div>
-                        {mode === "micro" && <Badge className="bg-amber-500 text-white border-none py-1">Aktywny tryb</Badge>}
                     </div>
                     <div>
-                        <h3 className={cn("mb-1 text-xl font-extrabold sm:text-2xl", mode === "micro" ? "text-amber-900" : "text-slate-900")}>
+                        <h3 className={cn("mb-1 text-base font-extrabold", mode === "micro" ? "text-[#0b1b47]" : "text-slate-900")}>
                             Mikrozlecenia
                         </h3>
-                        <p className="text-slate-500 font-medium">
+                        <p className="text-xs font-semibold leading-5 text-slate-500">
                             Szybkie zadania z konkretną wyceną, płatne od ręki po realizacji.
                         </p>
                     </div>
@@ -466,43 +465,42 @@ export function JobBoardView({
                 <div
                     onClick={() => setMode("job")}
                     className={cn(
-                        "cursor-pointer group relative overflow-hidden rounded-[2rem] border-2 transition-all duration-300 p-5 sm:p-6 flex flex-col gap-5 sm:gap-6",
+                        "group relative flex cursor-pointer items-center gap-4 overflow-hidden rounded-2xl border p-4 transition-all duration-300",
                         mode === "job"
-                            ? "border-indigo-600 bg-indigo-50 shadow-xl shadow-indigo-500/10"
-                            : "border-slate-100 bg-white hover:border-indigo-200 hover:shadow-lg"
+                            ? "border-lime-200 bg-lime-100 shadow-sm"
+                            : "border-slate-200 bg-white hover:border-lime-200 hover:shadow-sm"
                     )}
                 >
                     <div className="flex items-start justify-between">
                         <div className={cn(
-                            "h-12 w-12 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:-rotate-3 sm:h-14 sm:w-14",
-                            mode === "job" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200" : "bg-indigo-50 text-indigo-600"
+                            "flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-300",
+                            mode === "job" ? "bg-lime-300 text-[#0b1b47]" : "bg-slate-50 text-[#0b1b47]"
                         )}>
-                            <Briefcase className="h-7 w-7 fill-current" />
+                            <Briefcase className="h-5 w-5" />
                         </div>
-                        {mode === "job" && <Badge className="bg-indigo-600 text-white border-none py-1">Aktywny tryb</Badge>}
                     </div>
                     <div>
-                        <h3 className={cn("mb-1 text-xl font-extrabold sm:text-2xl", mode === "job" ? "text-indigo-900" : "text-slate-900")}>
+                        <h3 className={cn("mb-1 text-base font-extrabold", mode === "job" ? "text-[#0b1b47]" : "text-slate-900")}>
                             Praca i Staże
                         </h3>
-                        <p className="text-slate-500 font-medium">
+                        <p className="text-xs font-semibold leading-5 text-slate-500">
                             Długofalowa współpraca, rozwój kompetencji i pewna ścieżka zawodowa.
                         </p>
                     </div>
                 </div>
             </div>
 
-            <div className="flex flex-col items-start gap-8 lg:flex-row lg:gap-12">
+            <div className="flex flex-col items-start gap-4 lg:flex-row lg:gap-6">
 
-                <div className="hidden lg:block w-72 flex-shrink-0 space-y-10 sticky top-24">
-                    <div className="space-y-10 animate-in fade-in slide-in-from-left-4 duration-500">
+                <div className="sticky top-20 hidden w-72 flex-shrink-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:block">
+                    <div className="animate-in space-y-6 fade-in slide-in-from-left-4 duration-500">
                         <div className="space-y-3">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Szukaj</label>
+                            <label className="text-xs font-bold uppercase tracking-normal text-slate-400">Szukaj</label>
                             <div className="relative group">
                                 <Search className="absolute left-3 top-3.5 h-5 w-5 text-slate-300 group-focus-within:text-indigo-500 transition-colors" />
                                 <Input
                                     placeholder={mode === "job" ? "Stanowisko, firma..." : "Czego szukasz?"}
-                                    className="pl-11 h-12 bg-white border-slate-200 focus:bg-white focus:border-indigo-500 rounded-2xl transition-all shadow-sm group-hover:shadow-md"
+                                    className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-10 transition-all focus:border-indigo-500 focus:bg-white"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                 />
@@ -511,11 +509,11 @@ export function JobBoardView({
 
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Lokalizacja</label>
+                                <label className="text-xs font-bold uppercase tracking-normal text-slate-400">Lokalizacja</label>
                                 {locationFilter && <span className="text-[10px] font-bold text-red-500 cursor-pointer hover:underline" onClick={() => setLocationFilter("")}>WYCZYŚĆ</span>}
                             </div>
                             <Select value={locationFilter || "all_locations"} onValueChange={handleLocationChange}>
-                                <SelectTrigger className="h-12 bg-white border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all">
+                                <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-slate-50 transition-all">
                                     <SelectValue placeholder="Wybierz miasto" />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-2xl border-slate-100 shadow-2xl">
@@ -527,7 +525,7 @@ export function JobBoardView({
 
                         {mode === "micro" && (
                             <div className="space-y-3 animate-in zoom-in-95 duration-300">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Rodzaj zlecenia</label>
+                                <label className="text-xs font-bold uppercase tracking-normal text-slate-400">Rodzaj zlecenia</label>
                                 <Tabs value={subFilter} onValueChange={(value) => setSubFilter(value as "all" | "platform" | "regular")} className="w-full">
                                     <TabsList className="grid w-full grid-cols-1 gap-2 bg-transparent h-auto p-0">
                                         {[
@@ -538,7 +536,7 @@ export function JobBoardView({
                                             <TabsTrigger
                                                 key={tab.id}
                                                 value={tab.id}
-                                                className="justify-start px-4 py-3 rounded-xl border border-slate-100 bg-white shadow-sm data-[state=active]:bg-amber-50 data-[state=active]:border-amber-300 data-[state=active]:text-amber-700 data-[state=active]:shadow-md font-bold transition-all text-sm"
+                                                className="justify-start rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold transition-all data-[state=active]:border-lime-200 data-[state=active]:bg-lime-100 data-[state=active]:text-[#0b1b47]"
                                             >
                                                 {tab.label}
                                             </TabsTrigger>
@@ -550,13 +548,13 @@ export function JobBoardView({
 
                         {categories.length > 0 && (
                             <div className="space-y-4">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Kategorie</label>
+                                <label className="text-xs font-bold uppercase tracking-normal text-slate-400">Kategorie</label>
                                 <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                                     {categories.map(c => (
                                         <div key={c} className="flex items-center space-x-3 group cursor-pointer" onClick={() => toggleCategory(c)}>
                                             <div className={cn(
                                                 "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
-                                                categoryFilter.includes(c) ? "bg-indigo-600 border-indigo-600 shadow-sm" : "border-slate-200 bg-white group-hover:border-indigo-300"
+                                                categoryFilter.includes(c) ? "border-[#10245f] bg-[#10245f] shadow-sm" : "border-slate-200 bg-white group-hover:border-[#10245f]"
                                             )}>
                                                 {categoryFilter.includes(c) && <CheckCircle2 className="h-3 w-3 text-white" />}
                                             </div>
@@ -601,7 +599,7 @@ export function JobBoardView({
                             </div>
                         </div>
 
-                        <div className="pt-6 border-t border-slate-100 flex flex-col gap-4">
+                        <div className="flex flex-col gap-4 border-t border-slate-100 pt-5">
                             <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => setShowApplied(!showApplied)}>
                                 <Checkbox
                                     id="show-applied-desktop"
@@ -609,7 +607,7 @@ export function JobBoardView({
                                     onCheckedChange={(c) => setShowApplied(c === true)}
                                     className="rounded-md"
                                 />
-                                <Label htmlFor="show-applied-desktop" className="text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer group-hover:text-indigo-600 transition-colors">
+                                <Label htmlFor="show-applied-desktop" className="cursor-pointer text-xs font-bold uppercase tracking-normal text-slate-500 transition-colors group-hover:text-indigo-600">
                                     Pokaż aplikowane
                                 </Label>
                             </div>
@@ -621,12 +619,12 @@ export function JobBoardView({
                     </div>
                 </div>
 
-                <div className="flex-1 w-full space-y-6">
-                    <div className="flex flex-col items-stretch justify-between gap-4 rounded-3xl border border-slate-100 bg-slate-50/50 p-3 sm:flex-row sm:items-center sm:p-4">
+                <div className="w-full flex-1 space-y-4">
+                    <div className="flex flex-col items-stretch justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                             <div className={cn(
-                                "h-10 px-4 rounded-2xl flex items-center font-bold text-sm shadow-sm",
-                                mode === "job" ? "bg-indigo-600 text-white" : "bg-amber-500 text-white"
+                                "flex h-9 items-center rounded-full px-4 text-sm font-extrabold shadow-sm",
+                                mode === "job" ? "bg-lime-300 text-[#0b1b47]" : "bg-lime-300 text-[#0b1b47]"
                             )}>
                                 {mode === "job" ? "💼 Praca & Staże" : "⚡ Mikrozlecenia"}
                             </div>
@@ -669,7 +667,7 @@ export function JobBoardView({
                         <div className="space-y-5 pb-16 sm:space-y-8 sm:pb-20">
                             <div className="grid grid-cols-1 gap-3 sm:gap-6">
                                 {filtered.map((offer, idx) => (
-                                    <div key={offer.id} className="content-auto animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
+                                    <div key={offer.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
                                         <JobCard
                                             offer={offer}
                                             isApplied={appliedOfferIds?.has(offer.id)}

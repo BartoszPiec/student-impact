@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
-import { PremiumPageHeader } from "@/components/ui/premium-page-header";
+import { CompanyHero } from "../_components/company-dashboard-ui";
 import OffersTabs from "./offers-tabs";
-import { CheckCircle2, FileText, Plus, SearchCheck } from "lucide-react";
+import { CheckCircle2, LayoutGrid, Plus } from "lucide-react";
 import { getRequestContext } from "@/lib/auth/request-context";
 
 export const dynamic = "force-dynamic";
@@ -246,30 +245,23 @@ export default async function CompanyOffersPage({
 
   return (
     <main className="min-h-screen bg-slate-50/60 pb-12">
-      <PremiumPageHeader
+      <CompanyHero
         badge="Panel Pracodawcy"
-        title="Moje zlecenia"
-        description="Ogłoszenia i zamówione usługi w jednym widoku: decyzje, kandydaci, realizacje i archiwum."
-        icon={<FileText className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
+        title="Moje ogłoszenia"
+        description="Ogłoszenia, kandydaci i realizacje w jednym widoku: decyzje do podjęcia, prace w toku i archiwum."
+        icon={LayoutGrid}
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            <Button asChild className="h-12 rounded-2xl border-0 bg-emerald-500 px-6 font-bold text-white shadow-lg shadow-emerald-950/20 hover:bg-emerald-400">
-              <Link href="/app/company/challenges/new">
-                <SearchCheck className="mr-2 h-4 w-4" />
-                Dodaj wyzwanie
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="h-12 rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white">
-              <Link href="/app/company/jobs/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Dodaj ogłoszenie
-              </Link>
-            </Button>
-          </div>
+          <Link
+            href="/app/company/jobs/new"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-lime-300 px-5 text-sm font-extrabold text-[#10245f] shadow-lg shadow-lime-300/20 transition hover:bg-lime-200"
+          >
+            <Plus className="h-4 w-4" />
+            Dodaj ogłoszenie
+          </Link>
         }
       />
 
-      <PageContainer className="py-8">
+      <PageContainer className="py-5">
         {offerCreated ? (
           <div className="mb-8 rounded-[2rem] border border-emerald-200 bg-emerald-50 px-6 py-5 text-emerald-950 shadow-lg shadow-emerald-500/10">
             <div className="flex items-start gap-4">
@@ -301,12 +293,7 @@ export default async function CompanyOffersPage({
           </div>
         ) : null}
 
-        <OffersTabs
-          jobs={jobs}
-          systemServices={systemServices}
-          studentServices={studentServices}
-          statsMap={statsMap}
-        />
+        <OffersTabs jobs={jobs} systemServices={systemServices} studentServices={studentServices} statsMap={statsMap} />
       </PageContainer>
     </main>
   );

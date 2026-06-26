@@ -81,8 +81,8 @@ export function ChallengeForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <Card className="overflow-hidden rounded-[2rem] border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+    <form onSubmit={handleSubmit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
         <CardContent className="flex flex-col gap-8 p-5 sm:p-8">
           {error ? (
             <Alert variant="destructive" className="rounded-2xl">
@@ -92,21 +92,17 @@ export function ChallengeForm() {
             </Alert>
           ) : null}
 
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-amber-700 hover:bg-amber-100">
-                Formularz wyzwania
-              </Badge>
-              <Badge variant="outline" className="rounded-full border-slate-200 px-3 py-1 text-xs font-bold text-slate-500">
-                Publikacja na gieldzie wycen
+          <div className="-mx-5 -mt-5 rounded-t-2xl bg-[#10245f] p-5 text-white sm:-mx-8 sm:-mt-8 sm:p-6">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Badge className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-black uppercase text-white hover:bg-white/10">
+                Nowe wyzwanie
               </Badge>
             </div>
-            <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
-              Opisz jedno zalegle zadanie, ktore ma dostac szybkie kontroferty.
+            <h2 className="text-2xl font-black tracking-tight sm:text-3xl">
+              Opisz, czego potrzebujesz
             </h2>
-            <p className="max-w-2xl text-sm font-medium leading-6 text-slate-500">
-              Nie wybierasz kategorii ani pakietu. Wystarczy problem, miejsce problemu i orientacyjny budzet.
-              Studenci zobacza brief i odpowiedza pitchem z wycena.
+            <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-white/75">
+              Im więcej szczegółów, tym trafniejsza wycena i lepiej dobrany wykonawca.
             </p>
           </div>
 
@@ -217,7 +213,7 @@ export function ChallengeForm() {
             <Button
               type="submit"
               disabled={isPending}
-              className="h-14 rounded-[1.25rem] bg-slate-950 px-6 text-sm font-black text-white shadow-xl shadow-slate-300 transition-all hover:bg-amber-600"
+              className="h-12 rounded-full bg-lime-300 px-6 text-sm font-black text-[#10245f] shadow-lg shadow-lime-300/20 transition-all hover:bg-lime-200"
             >
               {isPending ? (
                 <>
@@ -226,7 +222,7 @@ export function ChallengeForm() {
                 </>
               ) : (
                 <>
-                  Opublikuj wyzwanie
+              Wyślij wyzwanie
                   <ArrowRight data-icon="inline-end" />
                 </>
               )}

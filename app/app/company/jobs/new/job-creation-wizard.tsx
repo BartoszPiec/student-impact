@@ -26,54 +26,50 @@ export default function JobCreationWizard() {
 
     return (
         <div className="space-y-8">
-            <div className={cn("grid gap-8 md:grid-cols-2 lg:grid-cols-3 transition-all duration-700", offerType ? "pointer-events-none hidden scale-95 opacity-50 md:grid" : "opacity-100")}>
+            <div className={cn("grid gap-4 md:grid-cols-3 transition-all duration-300", offerType ? "pointer-events-none hidden scale-95 opacity-50 md:grid" : "opacity-100")}>
                 <div
                     data-tour="company-offer-type-micro"
                     onClick={() => setSelectedOfferType("micro")}
                     className={cn(
-                        "group relative cursor-pointer overflow-hidden rounded-[3rem] border-2 bg-white/80 p-8 shadow-xl shadow-slate-200/50 backdrop-blur-md transition-all duration-500 hover:-translate-y-2 hover:border-amber-400/50 hover:shadow-[0_20px_50px_rgba(245,158,11,0.15)]",
+                        "group relative cursor-pointer overflow-hidden rounded-2xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-lg",
                         offerType === "micro"
-                            ? "border-amber-500 bg-amber-50/50 ring-4 ring-amber-500/10"
-                            : "border-slate-100"
+                            ? "border-amber-300 bg-amber-50 ring-2 ring-amber-100"
+                            : "border-slate-200"
                     )}
                 >
-                    <div className="absolute right-0 top-0 p-8 opacity-[0.03] transition-opacity duration-700 group-hover:opacity-[0.08]">
-                        <Zap className="h-48 w-48 -translate-y-12 translate-x-12 -rotate-12 transform text-amber-600" />
-                    </div>
-
                     <div className="relative z-10">
-                        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-amber-500/30 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3">
-                            <Zap className="h-8 w-8" />
+                        <div className="mb-5 flex items-start justify-between gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                                <Zap className="h-5 w-5" />
+                            </div>
+                            <Badge className="border-none bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-700 hover:bg-amber-100">
+                                Najszybsze
+                            </Badge>
                         </div>
 
                         <div className="mb-4">
-                            <Badge className="mb-3 border-none bg-amber-100 px-3 py-1 font-bold text-amber-700 hover:bg-amber-200">Rapid Work</Badge>
-                            <h3 className="text-2xl font-black tracking-tight text-slate-900 transition-colors group-hover:text-amber-600">Dodaj mikrozlecenie</h3>
+                            <h3 className="text-lg font-black tracking-tight text-[#10245f]">Mikrozlecenie</h3>
                         </div>
 
-                        <p className="mb-6 text-base font-medium leading-relaxed text-slate-600">
-                            Krotkie zadania, jednorazowe realizacje i projekty z konkretnym efektem. Dobre do szybkiego dowiezienia jednego celu.
+                        <p className="mb-5 text-sm font-medium leading-6 text-slate-600">
+                            Krótkie, jasno wycenione zadanie z jednym konkretnym efektem.
                         </p>
 
-                        <div className="mb-8 rounded-2xl border border-slate-100 bg-white/40 p-5 backdrop-blur-sm transition-colors group-hover:bg-amber-50/30">
-                            <ul className="space-y-4">
-                                <li className="flex items-center text-sm font-semibold text-slate-700">
-                                    <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                                        <CheckCircle2 className="h-4 w-4" />
-                                    </div>
+                        <div className="mb-5">
+                            <ul className="space-y-2">
+                                <li className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                                     <span>Prosty brief i szybka publikacja</span>
                                 </li>
-                                <li className="flex items-center text-sm font-semibold text-slate-700">
-                                    <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                                        <CheckCircle2 className="h-4 w-4" />
-                                    </div>
+                                <li className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                                     <span>Skoncentrowane na jednym rezultacie</span>
                                 </li>
                             </ul>
                         </div>
 
-                        <div className="flex items-center text-base font-black text-amber-600 transition-transform duration-500 group-hover:translate-x-3">
-                            Wybierz ten typ <ArrowRight className="ml-2 h-5 w-5" />
+                        <div className="flex items-center text-sm font-black text-[#10245f]">
+                            Wybierz <ArrowRight className="ml-2 h-4 w-4" />
                         </div>
                     </div>
                 </div>
@@ -82,94 +78,86 @@ export default function JobCreationWizard() {
                     data-tour="company-offer-type-job"
                     onClick={() => setSelectedOfferType("job")}
                     className={cn(
-                        "group relative cursor-pointer overflow-hidden rounded-[3rem] border-2 bg-white/80 p-8 shadow-xl shadow-slate-200/50 backdrop-blur-md transition-all duration-500 hover:-translate-y-2 hover:border-indigo-400/50 hover:shadow-[0_20px_50px_rgba(79,70,229,0.15)]",
+                        "group relative cursor-pointer overflow-hidden rounded-2xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-lg",
                         offerType === "job"
-                            ? "border-indigo-500 bg-indigo-50/50 ring-4 ring-indigo-500/10"
-                            : "border-slate-100"
+                            ? "border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100"
+                            : "border-slate-200"
                     )}
                 >
-                    <div className="absolute right-0 top-0 p-8 opacity-[0.03] transition-opacity duration-700 group-hover:opacity-[0.08]">
-                        <Briefcase className="h-48 w-48 -translate-y-12 translate-x-12 -rotate-12 transform text-indigo-600" />
-                    </div>
-
                     <div className="relative z-10">
-                        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-3">
-                            <Building2 className="h-8 w-8" />
+                        <div className="mb-5 flex items-start justify-between gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                                <Building2 className="h-5 w-5" />
+                            </div>
+                            <Badge className="border-none bg-indigo-100 px-2.5 py-1 text-[10px] font-black uppercase text-indigo-700 hover:bg-indigo-100">
+                                Długofalowo
+                            </Badge>
                         </div>
 
                         <div className="mb-4">
-                            <Badge className="mb-3 border-none bg-indigo-100 px-3 py-1 font-bold text-indigo-700 hover:bg-indigo-200">Long Term</Badge>
-                            <h3 className="text-2xl font-black tracking-tight text-slate-900 transition-colors group-hover:text-indigo-600">Oferta pracy lub stazu</h3>
+                            <h3 className="text-lg font-black tracking-tight text-[#10245f]">Praca / Staż</h3>
                         </div>
 
-                        <p className="mb-6 text-base font-medium leading-relaxed text-slate-600">
-                            Dluzsza wspolpraca, staż, praktyka lub rola projektowa. Dobre, gdy szukasz osoby do stalej odpowiedzialnosci lub rozwoju.
+                        <p className="mb-5 text-sm font-medium leading-6 text-slate-600">
+                            Dłuższa współpraca lub staż. Zbuduj zespół na zlecenie bez stałej rekrutacji.
                         </p>
 
-                        <div className="mb-8 rounded-2xl border border-slate-100 bg-white/40 p-5 backdrop-blur-sm transition-colors group-hover:bg-indigo-50/30">
-                            <ul className="space-y-4">
-                                <li className="flex items-center text-sm font-semibold text-slate-700">
-                                    <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                                        <CheckCircle2 className="h-4 w-4" />
-                                    </div>
-                                    <span>Pelniejszy profil kandydata</span>
+                        <div className="mb-5">
+                            <ul className="space-y-2">
+                                <li className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                    <span>Cykliczne rozliczenia</span>
                                 </li>
-                                <li className="flex items-center text-sm font-semibold text-slate-700">
-                                    <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                                        <CheckCircle2 className="h-4 w-4" />
-                                    </div>
-                                    <span>Lepszy kontekst dla współpracy dlugiej</span>
+                                <li className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                    <span>Współpraca wieloetapowa</span>
                                 </li>
                             </ul>
                         </div>
 
-                        <div className="flex items-center text-base font-black text-indigo-600 transition-transform duration-500 group-hover:translate-x-3">
-                            Wybierz ten typ <ArrowRight className="ml-2 h-5 w-5" />
+                        <div className="flex items-center text-sm font-black text-[#10245f]">
+                            Wybierz <ArrowRight className="ml-2 h-4 w-4" />
                         </div>
                     </div>
                 </div>
 
                 <Link
                     href="/app/company/challenges/new"
-                    className="group relative overflow-hidden rounded-[3rem] border-2 border-slate-100 bg-white/80 p-8 shadow-xl shadow-slate-200/50 backdrop-blur-md transition-all duration-500 hover:-translate-y-2 hover:border-emerald-400/50 hover:shadow-[0_20px_50px_rgba(16,185,129,0.15)]"
+                    className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg"
                 >
-                    <div className="absolute right-0 top-0 p-8 opacity-[0.03] transition-opacity duration-700 group-hover:opacity-[0.08]">
-                        <SearchCheck className="h-48 w-48 -translate-y-12 translate-x-12 -rotate-12 transform text-emerald-600" />
-                    </div>
-
                     <div className="relative z-10">
-                        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-lg shadow-emerald-500/30 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3">
-                            <SearchCheck className="h-8 w-8" />
+                        <div className="mb-5 flex items-start justify-between gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                                <SearchCheck className="h-5 w-5" />
+                            </div>
+                            <Badge className="border-none bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-700 hover:bg-emerald-100">
+                                Nietypowe
+                            </Badge>
                         </div>
 
                         <div className="mb-4">
-                            <Badge className="mb-3 border-none bg-emerald-100 px-3 py-1 font-bold text-emerald-700 hover:bg-emerald-200">Wycena</Badge>
-                            <h3 className="text-2xl font-black tracking-tight text-slate-900 transition-colors group-hover:text-emerald-600">Dodaj wyzwanie</h3>
+                            <h3 className="text-lg font-black tracking-tight text-[#10245f]">Wyzwanie</h3>
                         </div>
 
-                        <p className="mb-6 text-base font-medium leading-relaxed text-slate-600">
-                            Opisz problem bez wybierania pakietu. Studenci odpisza pitchem, rozwiazaniem i proponowana cena.
+                        <p className="mb-5 text-sm font-medium leading-6 text-slate-600">
+                            Nie wiesz, jak zdefiniować zadanie? Opisz problem, a my dobierzemy wykonawcę i przygotujemy wycenę.
                         </p>
 
-                        <div className="mb-8 rounded-2xl border border-slate-100 bg-white/40 p-5 backdrop-blur-sm transition-colors group-hover:bg-emerald-50/30">
-                            <ul className="space-y-4">
-                                <li className="flex items-center text-sm font-semibold text-slate-700">
-                                    <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                                        <CheckCircle2 className="h-4 w-4" />
-                                    </div>
+                        <div className="mb-5">
+                            <ul className="space-y-2">
+                                <li className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                                     <span>Minimum formularza, maksimum kontekstu</span>
                                 </li>
-                                <li className="flex items-center text-sm font-semibold text-slate-700">
-                                    <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                                        <CheckCircle2 className="h-4 w-4" />
-                                    </div>
+                                <li className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                                     <span>Pitch i wycena od studenta</span>
                                 </li>
                             </ul>
                         </div>
 
-                        <div className="flex items-center text-base font-black text-emerald-600 transition-transform duration-500 group-hover:translate-x-3">
-                            Przejdz do formularza <ArrowRight className="ml-2 h-5 w-5" />
+                        <div className="flex items-center text-sm font-black text-[#10245f]">
+                            Wybierz <ArrowRight className="ml-2 h-4 w-4" />
                         </div>
                     </div>
                 </Link>

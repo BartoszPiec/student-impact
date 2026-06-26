@@ -239,16 +239,14 @@
     }
 
     .mobile-sticky-actions {
-      position: sticky;
-      bottom: calc(5.75rem + env(safe-area-inset-bottom));
-      z-index: 35;
-      margin-left: -1.25rem;
-      margin-right: -1.25rem;
+      position: static;
+      margin-left: 0;
+      margin-right: 0;
       padding: 0.75rem 1.25rem;
       border-top: 1px solid rgb(226 232 240 / 0.9);
-      background: rgb(255 255 255 / 0.94);
-      box-shadow: 0 -16px 32px -28px rgb(15 23 42 / 0.45);
-      backdrop-filter: blur(18px);
+      background: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
     }
 
     .mobile-sticky-actions [data-slot="button"] {
@@ -364,6 +362,66 @@
   }
 }
 
+@keyframes landingEnterUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landingEnterRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes floatingPhone {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes subtlePulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.95;
+    transform: scale(1.03);
+  }
+}
+
+@keyframes studentMarquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
@@ -386,6 +444,102 @@
 
 .animate-star-bounce {
   animation: starBounce 0.5s ease infinite;
+}
+
+.landing-enter-up {
+  animation: landingEnterUp 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-enter-right {
+  animation: landingEnterRight 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-float-slow {
+  animation: floatingPhone 4.8s ease-in-out infinite;
+}
+
+.landing-subtle-pulse {
+  animation: subtlePulse 3.8s ease-in-out infinite;
+}
+
+.student-marquee-track {
+  animation: studentMarquee 22s linear infinite;
+}
+
+.student-marquee:hover .student-marquee-track {
+  animation-play-state: paused;
+}
+
+.student-marquee-mask {
+  mask-image: linear-gradient(90deg, transparent 0%, black 12%, black 88%, transparent 100%);
+}
+
+.landing-hover-lift {
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease, background-color 220ms ease;
+}
+
+.landing-hover-lift:hover {
+  transform: translateY(-4px);
+}
+
+.landing-nav {
+  transition: background-color 250ms ease, box-shadow 250ms ease, backdrop-filter 250ms ease;
+}
+
+@media (max-width: 640px) {
+
+  .landing-page .landing-enter-up,
+  .landing-page .landing-enter-right,
+  .landing-page .landing-float-slow,
+  .landing-page .landing-subtle-pulse,
+  .landing-page .student-marquee-track {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .landing-page .landing-hover-lift {
+    transition: none !important;
+  }
+
+  .landing-page .landing-hover-lift:hover {
+    transform: none !important;
+  }
+
+  .landing-page .landing-nav {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .landing-page .student-marquee-mask {
+    mask-image: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .landing-enter-up,
+  .landing-enter-right,
+  .landing-float-slow,
+  .landing-subtle-pulse,
+  .student-marquee-track,
+  .animate-float,
+  .animate-float-reverse,
+  .animate-rotate-slow,
+  .animate-rotate-slow-reverse,
+  .animate-form-fill,
+  .animate-star-bounce {
+    animation: none !important;
+  }
+
+  .student-marquee-track {
+    transform: none !important;
+  }
+
+  .landing-hover-lift,
+  * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Scrollbar hide utility for horizontal pill navigation */

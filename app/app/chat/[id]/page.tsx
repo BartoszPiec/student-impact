@@ -138,14 +138,14 @@ export default async function ChatPage({
     appRow?.status === "cancelled";
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[1920px] flex-col gap-2 p-2 sm:gap-4 sm:p-4 lg:flex-row">
-      <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white bg-white shadow-xl shadow-slate-200/60 sm:rounded-[2.5rem]">
+    <div className="mx-auto flex h-full w-full flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:flex-row">
+      <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
         {/* Decorative elements */}
-        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-slate-50/80 to-transparent pointer-events-none -z-10" />
+        <div className="pointer-events-none absolute left-0 right-0 top-0 -z-10 h-24 bg-gradient-to-b from-slate-50/80 to-transparent" />
 
         {/* Header */}
-        <div className="sticky top-0 z-20 flex flex-none items-start justify-between gap-3 border-b border-slate-50 bg-white/80 px-4 py-4 backdrop-blur-md sm:items-center sm:gap-4 sm:px-8 sm:py-5">
+        <div className="sticky top-0 z-20 flex flex-none items-start justify-between gap-3 border-b border-slate-100 bg-white/90 px-4 py-3 backdrop-blur-md sm:items-center sm:gap-4 sm:px-5 sm:py-4">
           <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
             <div className="md:hidden">
               <ChatBackBtn />
@@ -153,13 +153,13 @@ export default async function ChatPage({
             <div>
               {headerLink ? (
                 <Link href={headerLink} className="group flex items-center gap-2">
-                  <h2 className="line-clamp-2 text-base font-black tracking-tight text-slate-800 transition-colors group-hover:text-indigo-600 sm:text-xl sm:line-clamp-1">{chatTitle}</h2>
+                  <h2 className="line-clamp-2 text-base font-black tracking-normal text-[#10245f] transition-colors group-hover:text-indigo-600 sm:text-lg sm:line-clamp-1">{chatTitle}</h2>
                   <div className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-indigo-500">
                     <Sparkles className="h-4 w-4" />
                   </div>
                 </Link>
               ) : (
-                <h2 className="line-clamp-2 text-base font-black tracking-tight text-slate-800 sm:text-xl sm:line-clamp-1">{chatTitle}</h2>
+                <h2 className="line-clamp-2 text-base font-black tracking-normal text-[#10245f] sm:text-lg sm:line-clamp-1">{chatTitle}</h2>
               )}
               {studentName && (
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">Rozmowa z: <span className="text-indigo-500">{studentName}</span></p>
@@ -199,7 +199,7 @@ export default async function ChatPage({
         </div>
 
         {/* Input */}
-        <div className="z-20 border-t border-slate-50 bg-white p-3 sm:p-6">
+        <div className="z-20 border-t border-slate-100 bg-white p-3 sm:p-4">
           <div className="mx-auto max-w-3xl">
             <ChatInput
               conversationId={conv.id}

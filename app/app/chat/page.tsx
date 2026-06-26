@@ -1,23 +1,18 @@
 import { MessageSquare, Sparkles } from "lucide-react";
-import ChatListSidebar from "./_components/ChatList-Sidebar";
 
 export default function ChatPage() {
   return (
     <>
-      <div className="md:hidden h-full">
-        <ChatListSidebar />
-      </div>
-
-      <div className="hidden md:flex h-full flex-col items-center justify-center p-8 text-center bg-slate-50/50">
+      <div className="flex h-full flex-col items-center justify-center bg-slate-50/50 p-8 text-center">
         <div className="relative mb-6 group cursor-default">
-          <div className="absolute inset-0 bg-indigo-500 rounded-[2rem] blur-2xl opacity-20 group-hover:opacity-30 transition-opacity duration-500" />
+          <div className="absolute inset-0 rounded-[2rem] bg-[#10245f] blur-2xl opacity-15 transition-opacity duration-500 group-hover:opacity-25" />
           <div className="relative bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white">
-            <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-white shadow-lg transform group-hover:scale-110 transition-transform duration-500">
+            <div className="flex h-16 w-16 transform items-center justify-center rounded-2xl bg-[#10245f] text-white shadow-lg transition-transform duration-500 group-hover:scale-110">
               <MessageSquare className="h-8 w-8" />
             </div>
           </div>
-          <div className="absolute -top-2 -right-2 bg-white p-2 rounded-xl shadow-md animate-bounce delay-700">
-            <Sparkles className="h-4 w-4 text-amber-500" />
+          <div className="absolute -top-2 -right-2 animate-bounce rounded-xl bg-white p-2 shadow-md delay-700">
+            <Sparkles className="h-4 w-4 text-lime-400" />
           </div>
         </div>
 

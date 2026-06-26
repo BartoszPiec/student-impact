@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { Briefcase } from "lucide-react";
+import { Plus } from "lucide-react";
 import JobCreationWizard from "./job-creation-wizard";
-import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { PageContainer } from "@/components/ui/page-container";
 import { getRequestContext } from "@/lib/auth/request-context";
+import { CompanyHero } from "../../_components/company-dashboard-ui";
 
 export default async function NewJobPage() {
     const { user, role } = await getRequestContext();
@@ -13,15 +13,15 @@ export default async function NewJobPage() {
 
     return (
         <main className="pb-20">
-            <PremiumPageHeader
+            <CompanyHero
                 tourId="company-create-offer"
-                title="Dodaj ogloszenie"
-                description="Wybierz typ współpracy i przygotuj brief, który ułatwi aplikowanie, negocjacje i dalsza współpracę."
-                badge="Strefa Rekrutera"
-                icon={<Briefcase className="w-10 h-10" />}
+                title="Dodaj ofertę"
+                description="Wybierz, jak chcesz delegować zadanie. Każda ścieżka jest objęta escrow i kontrolą jakości."
+                badge="Panel firmy"
+                icon={Plus}
             />
 
-            <PageContainer>
+            <PageContainer className="py-5">
                 <JobCreationWizard />
             </PageContainer>
         </main>

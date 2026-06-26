@@ -99,7 +99,7 @@ function StatusBadge({ status, stage }: { status: string; stage: ApplicationStag
 
   if (stage === "in_progress") {
     return (
-      <Badge className="gap-1 rounded-full border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100">
+      <Badge className="gap-1 rounded-full border-blue-100 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-[#10245f] hover:bg-blue-100">
         <Clock className="h-3 w-3" /> W realizacji
       </Badge>
     );
@@ -138,7 +138,7 @@ function StatusBadge({ status, stage }: { status: string; stage: ApplicationStag
   return (
     <Badge
       variant="outline"
-      className="gap-1 rounded-full border-indigo-100 bg-indigo-50/30 px-2 py-0.5 text-[11px] font-medium text-indigo-600"
+      className="gap-1 rounded-full border-blue-100 bg-blue-50/60 px-2 py-0.5 text-[11px] font-medium text-[#10245f]"
     >
       <FileText className="h-3 w-3" /> Wyslane
     </Badge>
@@ -164,8 +164,8 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
           : isInProgress
             ? "border-emerald-200 ring-1 ring-emerald-100 hover:shadow-lg hover:shadow-emerald-100/50"
             : isSent
-              ? "border-indigo-100 ring-1 ring-indigo-50 hover:shadow-lg hover:shadow-indigo-100/40"
-              : "hover:border-indigo-100/50 hover:shadow-lg",
+              ? "border-blue-100 ring-1 ring-blue-50 hover:shadow-lg hover:shadow-blue-100/40"
+              : "hover:border-lime-100/80 hover:shadow-lg",
       )}
     >
       <CardContent className="p-0">
@@ -180,7 +180,7 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                   : isDone
                     ? "bg-slate-300 group-hover:bg-slate-400"
                 : isJobOffer
-                  ? "bg-indigo-500 group-hover:bg-indigo-600"
+                  ? "bg-[#10245f] group-hover:bg-[#0b1b47]"
                   : "bg-amber-500 group-hover:bg-amber-600",
             )}
           />
@@ -222,14 +222,14 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
             )}
 
             {stage === "sent" && (
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 bg-indigo-50 px-4 py-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5">
                 <div className="flex items-center gap-2">
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-indigo-600" />
-                  <span className="text-xs font-bold text-indigo-950">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-[#10245f]" />
+                  <span className="text-xs font-bold text-[#10245f]">
                     Zgłoszenie wysłane - czekasz na decyzję firmy.
                   </span>
                 </div>
-                <span className="rounded-full border border-indigo-200 bg-white px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-indigo-600">
+                <span className="rounded-full border border-blue-200 bg-white px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-[#10245f]">
                   Czeka na firmę
                 </span>
               </div>
@@ -246,7 +246,7 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
 
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
                   <div className="flex items-center gap-1.5 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1 font-medium text-slate-500">
-                    <Clock className="h-3.5 w-3.5 text-indigo-500" />
+                    <Clock className="h-3.5 w-3.5 text-[#10245f]" />
                     <span>Złożono: {formatDate(app.created_at)}</span>
                   </div>
 
@@ -289,7 +289,7 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                         ? "border-emerald-200 bg-emerald-50"
                         : isDone
                           ? "border-slate-200 bg-slate-50"
-                          : "border-indigo-100 bg-indigo-50",
+                          : "border-blue-100 bg-blue-50",
                   )}
                 >
                   <span className="mb-0.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">
@@ -301,7 +301,7 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                     ) : isCountered && app.counter_stawka ? (
                       <span className="text-amber-600">{formatMoney(app.counter_stawka)}</span>
                     ) : app.proposed_stawka ? (
-                      <span className="text-indigo-600">{formatMoney(app.proposed_stawka)}</span>
+                      <span className="text-[#10245f]">{formatMoney(app.proposed_stawka)}</span>
                     ) : (
                       <span>{formatMoney(offer?.stawka)}</span>
                     )}
@@ -364,12 +364,12 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                           name="proposed_stawka"
                           type="number"
                           placeholder="Kwota PLN"
-                          className="h-8 w-24 rounded-lg border-none bg-white text-xs shadow-sm placeholder:text-slate-300 focus-visible:ring-indigo-200"
+                          className="h-8 w-24 rounded-lg border-none bg-white text-xs shadow-sm placeholder:text-slate-300 focus-visible:ring-lime-200"
                         />
                         <Button
                           type="submit"
                           size="sm"
-                          className="h-8 rounded-lg bg-indigo-600 px-3 text-xs font-bold text-white transition-all hover:bg-indigo-700"
+                          className="h-8 rounded-lg bg-[#10245f] px-3 text-xs font-bold text-white transition-all hover:bg-[#0b1b47]"
                         >
                           Wyślij
                         </Button>
@@ -380,7 +380,7 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                     <>
                       <Button
                         asChild
-                        className="h-10 w-full rounded-xl bg-slate-900 px-4 text-sm font-bold text-white transition-all duration-300 hover:bg-indigo-600"
+                        className="h-10 w-full rounded-xl bg-slate-900 px-4 text-sm font-bold text-white transition-all duration-300 hover:bg-[#10245f]"
                       >
                         <Link href={`/app/review/${app.id}`}>
                           <Star className="mr-2 h-3.5 w-3.5" />
@@ -400,7 +400,7 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                       <Button
                         asChild
                         variant="outline"
-                        className="h-10 w-full rounded-xl border-indigo-200 bg-white px-4 text-sm font-bold text-indigo-700 transition-all hover:bg-indigo-50"
+                        className="h-10 w-full rounded-xl border-blue-200 bg-white px-4 text-sm font-bold text-[#10245f] transition-all hover:bg-blue-50"
                       >
                         <Link href={`/app/offers/${offer?.id}`}>Szczegóły</Link>
                       </Button>
@@ -438,14 +438,14 @@ function SavedOfferCard({ offer }: { offer: OfferSummary | null }) {
     offer?.typ === "job" || offer?.typ === "Praca" || offer?.typ === "praca";
 
   return (
-    <Card className="group overflow-hidden rounded-2xl border-transparent bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-100/50 hover:shadow-lg">
+    <Card className="group overflow-hidden rounded-2xl border-transparent bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-lime-100/80 hover:shadow-lg">
       <CardContent className="p-0">
         <div className="flex flex-col gap-0 md:flex-row md:items-stretch">
           <div
             className={cn(
               "h-1.5 w-full shrink-0 transition-colors duration-300 md:h-auto md:w-1.5 md:self-stretch",
               isJobOffer
-                ? "bg-indigo-500 group-hover:bg-indigo-600"
+                ? "bg-[#10245f] group-hover:bg-[#0b1b47]"
                 : "bg-amber-500 group-hover:bg-amber-600",
             )}
           />
@@ -488,7 +488,7 @@ function SavedOfferCard({ offer }: { offer: OfferSummary | null }) {
                 <Button
                   asChild
                   variant="outline"
-                  className="h-9 rounded-xl border-indigo-100 px-4 text-sm font-bold text-indigo-700 transition-all hover:border-indigo-200 hover:bg-indigo-50/50"
+                  className="h-9 rounded-xl border-blue-100 px-4 text-sm font-bold text-[#10245f] transition-all hover:border-blue-200 hover:bg-blue-50/50"
                 >
                   <Link href={`/app/offers/${offer?.id}`}>Pokaz oferte</Link>
                 </Button>
@@ -546,23 +546,23 @@ function ClientApplicationFilter({
 
   return (
     <div className="animate-in space-y-4 fade-in duration-500">
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/60 p-2.5 shadow-sm backdrop-blur-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:p-3">
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:p-3">
         <div className="flex items-center gap-2 sm:ml-1">
-          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" />
+          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-lime-300" />
           <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
             Filtruj zestawienie
           </span>
         </div>
 
-        <div className="grid w-full grid-cols-3 gap-1 rounded-xl border border-slate-200/50 bg-slate-100/80 p-1 sm:w-auto sm:flex">
+        <div className="scrollbar-hide flex w-full gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:w-auto">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setFilter("all")}
             className={cn(
-              "h-8 justify-center rounded-lg px-2 text-[11px] font-bold transition-all duration-300 sm:px-4",
+              "h-8 shrink-0 justify-center rounded-full px-3 text-[11px] font-bold transition-all duration-300 sm:px-4",
               filter === "all"
-                ? "bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200"
+                ? "bg-[#10245f] text-white shadow-sm"
                 : "text-slate-500 hover:text-slate-700",
             )}
           >
@@ -573,9 +573,9 @@ function ClientApplicationFilter({
             size="sm"
             onClick={() => setFilter("standard")}
             className={cn(
-              "h-8 justify-center gap-1.5 rounded-lg px-2 text-[11px] font-bold transition-all duration-300 sm:px-4",
+              "h-8 shrink-0 justify-center gap-1.5 rounded-full px-3 text-[11px] font-bold transition-all duration-300 sm:px-4",
               filter === "standard"
-                ? "bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200"
+                ? "bg-[#10245f] text-white shadow-sm"
                 : "text-slate-500 hover:text-slate-700",
             )}
           >
@@ -586,9 +586,9 @@ function ClientApplicationFilter({
             size="sm"
             onClick={() => setFilter("micro")}
             className={cn(
-              "h-8 justify-center gap-1.5 rounded-lg px-2 text-[11px] font-bold transition-all duration-300 sm:px-4",
+              "h-8 shrink-0 justify-center gap-1.5 rounded-full px-3 text-[11px] font-bold transition-all duration-300 sm:px-4",
               filter === "micro"
-                ? "bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200"
+                ? "bg-lime-300 text-[#0b1b47] shadow-sm"
                 : "text-slate-500 hover:text-slate-700",
             )}
           >

@@ -27,19 +27,19 @@ export function PremiumPageHeader({
 }: PremiumPageHeaderProps) {
     return (
         <div data-tour={tourId} className={cn(
-            "relative mb-6 overflow-hidden border-b border-white/5 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 pb-10 pt-8 text-white shadow-xl sm:mb-8 sm:pb-12 sm:pt-10",
+            "relative mb-5 overflow-hidden border-b border-[#203a72] bg-[#10245f] pb-8 pt-7 text-white shadow-sm sm:mb-6 sm:pb-10 sm:pt-9",
             className
         )}>
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
+            <div className="absolute inset-0 bg-[#10245f]" />
 
-            <div className="container mx-auto max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
+            <div className="container relative z-10 mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8">
                 <div className="flex flex-col items-stretch justify-between gap-6 md:flex-row md:items-center md:gap-8">
                 <div className="flex min-w-0 flex-col items-start gap-5 text-left md:flex-row md:items-center md:gap-6">
                     {icon && (
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 shadow-2xl backdrop-blur-xl transition-transform duration-500 group hover:scale-105 sm:h-20 sm:w-20">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-lime-300/20 bg-lime-300/10 text-lime-200 shadow-sm backdrop-blur-xl transition-transform duration-300 sm:h-14 sm:w-14 [&_svg]:text-lime-200">
                             {/* Clone icon to enforce sizing/styling if needed, but usually passing it tailored is better. 
                    We assume the passed icon has appropriate classes or we wrap it. */}
-                            <div className="text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]">
+                            <div className="text-lime-200">
                                 {icon}
                             </div>
                         </div>
@@ -47,16 +47,16 @@ export function PremiumPageHeader({
                     <div className="min-w-0">
                         {badge && (
                             <div className="mb-2 flex items-center gap-2">
-                                <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-md">
+                                <span className="rounded-full border border-lime-300/20 bg-lime-300/10 px-3 py-1 text-xs font-bold uppercase tracking-normal text-lime-200 backdrop-blur-md">
                                     {badge}
                                 </span>
                             </div>
                         )}
-                        <h1 className="break-words bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent sm:text-3xl md:text-4xl">
+                        <h1 className="break-words text-3xl font-extrabold leading-tight tracking-normal text-white sm:text-4xl">
                             {title}
                         </h1>
                         {description && (
-                            <p className="mt-2 max-w-xl text-sm font-medium leading-6 text-indigo-100/70 sm:text-lg">
+                            <p className="mt-2 max-w-xl text-sm font-semibold leading-6 text-white/75 sm:text-base">
                                 {description}
                             </p>
                         )}
@@ -71,10 +71,6 @@ export function PremiumPageHeader({
                 )}
                 </div>
             </div>
-
-            {/* Decorative elements */}
-            <div className="absolute right-0 top-0 -mt-20 -mr-20 h-80 w-80 rounded-full bg-indigo-500/10 blur-[100px] pointer-events-none"></div>
-            <div className="absolute left-1/4 bottom-0 -mb-20 h-60 w-60 rounded-full bg-violet-500/10 blur-[80px] pointer-events-none"></div>
         </div>
     );
 }

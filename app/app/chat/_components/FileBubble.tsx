@@ -33,14 +33,14 @@ export function FileBubble({
                     href={downloadUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className={`flex max-w-full items-center gap-3 p-3 rounded-xl border shadow-sm transition-colors hover:bg-opacity-90 ${isMine ? "bg-indigo-600/10 border-indigo-200" : "bg-white border-slate-200 hover:bg-slate-50"
+                    className={`flex max-w-full items-center gap-3 p-3 rounded-xl border shadow-sm transition-colors hover:bg-opacity-90 ${isMine ? "bg-blue-50 border-blue-100" : "bg-white border-slate-200 hover:bg-slate-50"
                         }`}
                 >
-                    <div className={`p-2 rounded-lg ${isMine ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    <div className={`p-2 rounded-lg ${isMine ? "bg-[#10245f] text-white" : "bg-slate-100 text-slate-500"}`}>
                         <FileIcon className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium truncate ${isMine ? "text-indigo-900" : "text-slate-700"}`}>
+                        <p className={`text-sm font-medium truncate ${isMine ? "text-[#10245f]" : "text-slate-700"}`}>
                             {name || "Plik"}
                         </p>
                         <p className="text-xs text-slate-400 uppercase">Załącznik</p>

@@ -90,13 +90,13 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer; isApplied?: boo
   return (
     <Card
       className={cn(
-        "group overflow-hidden rounded-2xl border-none transition-all duration-300 sm:rounded-[2rem]",
+        "group overflow-hidden rounded-2xl border transition-all duration-300",
         isApplied
-          ? "bg-emerald-50/30 ring-1 ring-emerald-100 shadow-sm"
-          : "bg-white shadow-sm ring-1 ring-slate-200/70 hover:shadow-xl hover:shadow-indigo-500/5 hover:ring-indigo-100/50 sm:shadow-none",
+          ? "border-emerald-100 bg-emerald-50/30 shadow-sm"
+          : "border-slate-200 bg-white shadow-sm hover:border-indigo-100 hover:shadow-md",
       )}
     >
-      <CardContent className="flex flex-col items-start gap-3 p-4 sm:gap-6 sm:p-6 md:flex-row">
+      <CardContent className="flex flex-col items-start gap-3 p-4 sm:gap-5 sm:p-5 md:flex-row">
         <div className="flex w-full items-start justify-between gap-3 md:block md:w-auto">
           <div className="relative">
             <div
@@ -121,7 +121,7 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer; isApplied?: boo
 
           <div
             className={cn(
-              "rounded-xl px-2.5 py-1.5 text-right md:hidden",
+              "hidden rounded-xl px-2.5 py-1.5 text-right",
               isChallenge ? "bg-emerald-50 text-emerald-700" : isMicro ? "bg-amber-50 text-amber-700" : "bg-indigo-50 text-indigo-700",
             )}
           >
@@ -150,7 +150,7 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer; isApplied?: boo
               {isMicro && !isChallenge ? (
                 <Badge
                   variant="secondary"
-                  className="h-5 border-none bg-amber-50 px-2 text-[9px] font-bold uppercase tracking-wider text-amber-600 tabular-nums hover:bg-amber-100 sm:text-[10px]"
+              className="h-5 border-none bg-orange-50 px-2 text-[9px] font-bold uppercase tracking-normal text-orange-600 tabular-nums hover:bg-orange-100 sm:text-[10px]"
                 >
                   <Zap className="mr-1 h-3 w-3 fill-amber-500" />
                   Mikrozlecenie
@@ -216,8 +216,8 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer; isApplied?: boo
         </div>
 
         <div className="flex w-full flex-shrink-0 flex-col gap-2.5 sm:gap-4 md:w-auto md:min-w-[180px] md:items-end">
-          <div className="hidden text-left md:block md:text-right">
-            <div className="text-xl font-extrabold text-slate-900 tabular-nums">{formatSalary(offer)}</div>
+          <div className="text-left md:text-right">
+            <div className="text-2xl font-black text-[#10245f] tabular-nums md:text-xl">{formatSalary(offer)}</div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{budgetLabel}</div>
           </div>
 
@@ -231,8 +231,8 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer; isApplied?: boo
                   : isChallenge
                     ? "border-none bg-emerald-600 text-white shadow-lg shadow-emerald-200 hover:bg-emerald-700"
                     : isMicro
-                      ? "border-none bg-amber-500 text-white shadow-lg shadow-amber-200 hover:bg-amber-600"
-                      : "gradient-primary border-none text-white shadow-lg shadow-indigo-200",
+                      ? "border-none bg-lime-300 text-[#0b1b47] shadow-lg shadow-lime-100 hover:bg-lime-200"
+                      : "border-none bg-lime-300 text-[#0b1b47] shadow-lg shadow-lime-100 hover:bg-lime-200",
               )}
             >
               <Link href={`/app/offers/${offer.id}`}>

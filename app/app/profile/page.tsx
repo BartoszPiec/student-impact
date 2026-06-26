@@ -18,6 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import TaxDataSection from "./tax-data-section";
 import { StripeOnboardingButton } from "./stripe-onboarding-button";
 import { getRequestContext } from "@/lib/auth/request-context";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +102,7 @@ export default async function ProfilePage({
     : studentStripeAccountId
       ? "pending"
       : "missing";
+  const profileDisplayName = role === "company" ? company?.nazwa || displayName : displayName;
 
   // ===== STATYSTYKI & CALCULATIONS =====
   let stats: ProfileStats | null = null;
@@ -193,41 +195,44 @@ export default async function ProfilePage({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-20">
+    <div className="min-h-screen bg-[#f3f6fb] pb-20">
       {/* PREMIUM HEADER */}
-      <div className="relative overflow-hidden bg-slate-900 pb-24 pt-12 md:pb-32 md:pt-16">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
-        <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/20 rounded-full blur-[100px]" />
-        <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-purple-500/20 rounded-full blur-[80px]" />
+      <div className={cn("relative overflow-hidden pb-20 pt-9 md:pb-24 md:pt-12", role === "company" ? "bg-[#10245f]" : "bg-[#35176f]")}>
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-0 bg-gradient-to-br",
+            role === "company" ? "from-[#10245f] via-[#10245f] to-[#0b1b47]" : "from-[#4b2390] via-[#35176f] to-[#241156]",
+          )}
+        />
 
-        <div className="w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 relative z-10 text-white">
-          <div className="flex flex-col md:flex-row items-center md:items-end gap-8">
+        <div className="relative z-10 mx-auto w-full max-w-[1380px] px-4 text-white sm:px-6 lg:px-8">
+          <div className="flex flex-col items-start gap-5 md:flex-row md:items-end">
             {/* Avatar */}
-            <div className="h-32 w-32 md:h-40 md:w-40 rounded-[2.5rem] bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-2 shadow-2xl ring-1 ring-white/20">
-              <div className="h-full w-full rounded-[2rem] bg-indigo-500 flex items-center justify-center text-5xl font-black text-white shadow-inner">
-                {displayName.charAt(0)}
+            <div className="h-20 w-20 rounded-2xl bg-white/10 p-1.5 shadow-sm ring-1 ring-white/15 md:h-24 md:w-24">
+              <div className={cn("flex h-full w-full items-center justify-center rounded-xl text-4xl font-black shadow-inner", role === "company" ? "bg-lime-300 text-[#10245f]" : "bg-[#8b68ff] text-white")}>
+                {profileDisplayName.charAt(0)}
               </div>
             </div>
 
-            <div className="flex-1 text-center md:text-left space-y-2 mb-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-[11px] font-black uppercase tracking-widest backdrop-blur-md">
+            <div className="mb-2 flex-1 space-y-2 text-left">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-normal text-white/80 backdrop-blur-md">
                 {role === "student" ? <GraduationCap className="w-3 h-3" /> : <Building className="w-3 h-3" />}
                 {role === "student" ? "Twój Profil Studenta" : "Profil Firmowy"}
               </div>
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight break-all">{displayName}</h1>
-              <p className="text-lg text-indigo-200/80 font-medium max-w-2xl">
+              <h1 className="break-words text-3xl font-black tracking-normal md:text-4xl">{profileDisplayName}</h1>
+              <p className="max-w-2xl text-sm font-semibold text-white/75 md:text-base">
                 {role === "student" ? (student?.sciezka || "Nie zdefiniowano ścieżki kariery") : (company?.branza || "Branża nieznana")}
               </p>
             </div>
 
             {/* Progress Card */}
-            <div className="hidden md:block w-72 bg-white/5 backdrop-blur-md border border-white/10 p-5 rounded-3xl">
+            <div className="hidden w-72 rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-md md:block">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-bold text-indigo-200 uppercase tracking-wide">Uzupełnienie Profilu</span>
-                <span className="text-sm font-black text-white">{completionPercentage}%</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-white/70">Uzupełnienie Profilu</span>
+                <span className="text-sm font-black text-lime-300">{completionPercentage}%</span>
               </div>
-              <Progress value={completionPercentage} className="h-2.5 bg-white/10" indicatorClassName="bg-gradient-to-r from-indigo-400 to-purple-400" />
-              <p className="text-[10px] text-indigo-300 mt-2 leading-tight">
+              <Progress value={completionPercentage} className="h-2.5 bg-white/10" indicatorClassName="bg-lime-300" />
+              <p className="mt-2 text-[10px] leading-tight text-white/65">
                 {completionPercentage < 100 ? "Uzupełnij brakujące dane, aby zwiększyć widoczność." : "Świetnie! Twój profil jest kompletny."}
               </p>
             </div>
@@ -235,7 +240,7 @@ export default async function ProfilePage({
         </div>
       </div>
 
-      <div className="w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 -mt-12 relative z-10 pb-12">
+      <div className="relative z-10 mx-auto -mt-10 w-full max-w-[1380px] px-4 pb-12 sm:px-6 lg:px-8">
         {savedProfileType && (
           <div className="mb-8 rounded-[2rem] border border-emerald-200 bg-emerald-50 px-6 py-5 text-emerald-900 shadow-lg shadow-emerald-500/10">
             <div className="flex items-start gap-4">
@@ -260,22 +265,22 @@ export default async function ProfilePage({
         )}
 
         {/* Mobile Progress Bar (visible only on small screens) */}
-        <div className="md:hidden mb-8 bg-white p-5 rounded-3xl shadow-lg shadow-indigo-500/10 border border-indigo-50">
+        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:hidden">
           <div className="flex justify-between items-center mb-2">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Poziom Profilu</span>
-            <span className="text-sm font-black text-indigo-600">{completionPercentage}%</span>
+            <span className="text-sm font-black text-[#10245f]">{completionPercentage}%</span>
           </div>
-          <Progress value={completionPercentage} className="h-3" />
+          <Progress value={completionPercentage} className="h-3" indicatorClassName="bg-lime-300" />
         </div>
 
 
-        <div className="grid gap-8 lg:grid-cols-3 items-start">
+        <div className="grid items-start gap-5 lg:grid-cols-3">
           {/* LEWA KOLUMNA */}
-          <div className="space-y-6 lg:col-span-1 lg:sticky lg:top-8">
+          <div className="space-y-5 lg:sticky lg:top-20 lg:col-span-1">
 
             {/* KARTA DANYCH */}
-            <Card className="border-none shadow-xl shadow-slate-200/40 bg-white rounded-[2rem] overflow-hidden">
-              <div className="h-2 bg-gradient-to-r from-indigo-500 to-purple-600" />
+            <Card className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="h-2 bg-[#8b68ff]" />
               <CardContent className="pt-8 px-6 pb-8 space-y-6">
                 {role === "student" && (
                   <>
@@ -286,11 +291,11 @@ export default async function ProfilePage({
 
                     <div className="space-y-4">
                       <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                        <div className="p-2 bg-white rounded-xl shadow-sm"><Globe className="w-4 h-4 text-indigo-500" /></div>
+                        <div className="p-2 bg-white rounded-xl shadow-sm"><Globe className="w-4 h-4 text-[#10245f]" /></div>
                         <div className="min-w-0">
                           <div className="text-[10px] uppercase font-bold text-slate-400">Portfolio</div>
                           {student?.portfolio_url ? (
-                            <a href={student.portfolio_url} rel="noopener noreferrer" target="_blank" className="text-sm font-bold text-indigo-600 hover:underline truncate block">Link do portfolio</a>
+                            <a href={student.portfolio_url} rel="noopener noreferrer" target="_blank" className="block truncate text-sm font-bold text-[#10245f] hover:underline">Link do portfolio</a>
                           ) : <span className="text-sm text-slate-500 font-medium">Brak</span>}
                         </div>
                       </div>
@@ -312,7 +317,7 @@ export default async function ProfilePage({
                       <Label className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-3 block">Kompetencje</Label>
                       <div className="flex flex-wrap gap-2">
                         {(student?.kompetencje ?? []).slice(0, 12).map((k: string) => (
-                          <Badge key={k} variant="secondary" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-100 rounded-lg px-2.5 py-1">
+                          <Badge key={k} variant="secondary" className="rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-violet-700 hover:bg-violet-50">
                             {k}
                           </Badge>
                         ))}
@@ -379,7 +384,7 @@ export default async function ProfilePage({
             </Card>
 
             {/* STATYSTYKI */}
-            <Card className="border-none shadow-xl shadow-slate-200/40 bg-white rounded-[2rem] overflow-hidden">
+            <Card className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <CardHeader className="bg-slate-50 border-b border-slate-100 pb-4 pt-5">
                 <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
                   Statystyki
@@ -417,20 +422,20 @@ export default async function ProfilePage({
           </div>
 
           {/* PRAWA KOLUMNA: EDYCJA */}
-          <div className="space-y-8 lg:col-span-2">
+          <div className="space-y-5 lg:col-span-2">
 
             {role === "student" && (
-              <div className="space-y-8">
+              <div className="space-y-5">
                 {/* EDUKACJA */}
                 <EducationSection entries={educationEntries} />
 
                 {/* DOSWIADCZENIE (PROJEKTY) */}
-                <div className="rounded-[2rem] bg-white shadow-xl shadow-slate-200/40 overflow-hidden border border-slate-100">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <ExperienceSection />
                 </div>
 
                 {/* EDIT FORM */}
-                <Card className="rounded-[2rem] border-none shadow-xl shadow-slate-200/40 bg-white overflow-hidden">
+                <Card className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <CardHeader className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 py-6">
                     <CardTitle className="flex items-center gap-3 text-lg font-black text-slate-800">
                       <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
@@ -481,13 +486,13 @@ export default async function ProfilePage({
 
                         <div className="md:col-span-2 pt-2">
                           <Label className="uppercase text-xs font-bold text-slate-400 tracking-wider mb-3 block">Twoje Kompetencje (Skillset)</Label>
-                          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200/60">
+                          <div className="min-w-0 rounded-2xl border border-slate-200/60 bg-slate-50 p-3 sm:p-6">
                             <SkillsInput initial={student?.kompetencje ?? []} />
                           </div>
                         </div>
                       </div>
                       <div className="mobile-sticky-actions flex justify-end pt-4 border-t border-slate-100">
-                        <Button type="submit" size="lg" className="px-8 h-12 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold shadow-lg shadow-indigo-200/50 border border-indigo-500/30 transition-all duration-300 hover:-translate-y-0.5">
+                        <Button type="submit" size="lg" className="h-12 rounded-xl border border-[#10245f] bg-[#10245f] px-8 font-bold text-white shadow-sm transition-all duration-300 hover:bg-[#0b1b47]">
                           Zapisz Zmiany
                         </Button>
                       </div>
@@ -602,7 +607,7 @@ export default async function ProfilePage({
                       </div>
                     </div>
                     <div className="mobile-sticky-actions flex justify-end pt-6 border-t border-slate-100">
-                      <Button type="submit" size="lg" className="px-8 h-12 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold shadow-lg shadow-indigo-200/50 border border-indigo-500/30 transition-all duration-300 hover:-translate-y-0.5">Zapisz Zmiany</Button>
+                      <Button type="submit" size="lg" className="h-12 rounded-xl border border-[#10245f] bg-[#10245f] px-8 font-bold text-white shadow-sm transition-all duration-300 hover:bg-[#0b1b47]">Zapisz Zmiany</Button>
                     </div>
                   </form>
                 </CardContent>

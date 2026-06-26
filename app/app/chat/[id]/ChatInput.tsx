@@ -120,11 +120,11 @@ export function ChatInput({
       {attachment ? (
         <div className="flex w-full max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 p-2 text-xs sm:w-fit">
           {attachment.type === "image" ? (
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-indigo-100 text-indigo-600">
+            <div className="flex h-8 w-8 items-center justify-center rounded bg-lime-100 text-[#10245f]">
               <Paperclip className="h-4 w-4" />
             </div>
           ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-indigo-100 text-indigo-600">
+            <div className="flex h-8 w-8 items-center justify-center rounded bg-lime-100 text-[#10245f]">
               <Paperclip className="h-4 w-4" />
             </div>
           )}
@@ -185,7 +185,7 @@ export function ChatInput({
                 void handleSend();
               }
             }}
-            className="h-auto rounded-xl border-transparent bg-slate-50 py-4 pl-4 pr-12 shadow-sm transition-all placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 sm:py-6"
+            className="h-auto rounded-xl border-transparent bg-slate-50 py-4 pl-4 pr-12 shadow-sm transition-all placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-lime-200/60 sm:py-6"
             autoComplete="off"
             disabled={locked || isUploading}
             readOnly={locked}
@@ -194,7 +194,7 @@ export function ChatInput({
             onClick={() => void handleSend()}
             size="icon"
             aria-label="Wyślij wiadomość"
-            className="absolute right-2 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-200/50 transition-all hover:scale-105 hover:bg-indigo-700 active:scale-95"
+            className="absolute right-2 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-xl bg-lime-300 text-[#0b1b47] shadow-lg shadow-lime-200/60 transition-all hover:scale-105 hover:bg-lime-200 active:scale-95"
             disabled={locked || isUploading || (!message.trim() && !attachment)}
           >
             <Send className="ml-0.5 h-5 w-5" />
@@ -222,7 +222,7 @@ export function ChatInput({
             <Button variant="outline" onClick={() => setRateOpen(false)} className="rounded-xl border-slate-200">
               Anuluj
             </Button>
-            <Button disabled={isSendingEvent} onClick={() => void submitRate()} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
+            <Button disabled={isSendingEvent} onClick={() => void submitRate()} className="rounded-xl bg-[#10245f] text-white hover:bg-[#0b1b47]">
               {isSendingEvent ? "Wysyłanie..." : "Wyślij propozycję"}
             </Button>
           </DialogFooter>
@@ -248,7 +248,7 @@ export function ChatInput({
             <Button variant="outline" onClick={() => setDeadlineOpen(false)} className="rounded-xl border-slate-200">
               Anuluj
             </Button>
-            <Button disabled={isSendingEvent} onClick={() => void submitDeadline()} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
+            <Button disabled={isSendingEvent} onClick={() => void submitDeadline()} className="rounded-xl bg-[#10245f] text-white hover:bg-[#0b1b47]">
               {isSendingEvent ? "Wysyłanie..." : "Wyślij propozycję"}
             </Button>
           </DialogFooter>

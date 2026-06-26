@@ -232,25 +232,25 @@ export default async function StudentApplicationsPage() {
         className="mb-5 pb-7 pt-6 sm:mb-6 sm:pb-8 sm:pt-7"
       />
 
-      <PageContainer className="max-w-7xl space-y-5">
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <PageContainer className="max-w-7xl space-y-4">
+        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm sm:px-5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <h2 className="text-xl font-black tracking-tight text-slate-950">Centrum aplikacji</h2>
-              <p className="mt-1 text-xs font-semibold text-slate-500 sm:text-sm">
+              <h2 className="text-base font-black tracking-tight text-[#10245f] sm:text-lg">Centrum aplikacji</h2>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
                 {doAkcji.length > 0
                   ? `${doAkcji.length} elementów wymaga Twojej uwagi`
                   : "Aktualne aplikacje, zapisane oferty i archiwum w jednym miejscu."}
               </p>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="scrollbar-hide flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible sm:pb-0">
               <Badge className="rounded-full border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-black text-slate-700 hover:bg-slate-50">
                 Wszystkie {applications.length}
               </Badge>
               <Badge className="rounded-full border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-black text-amber-700 hover:bg-amber-50">
                 Wymagają akcji {doAkcji.length}
               </Badge>
-              <Badge className="rounded-full border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-black text-indigo-700 hover:bg-indigo-50">
+              <Badge className="rounded-full border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-black text-[#10245f] hover:bg-blue-50">
                 Czeka na firmę {oczekujeNaFirme.length}
               </Badge>
               <Badge className="rounded-full border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 hover:bg-emerald-50">
@@ -268,16 +268,17 @@ export default async function StudentApplicationsPage() {
 
         <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
           <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-2xl border border-slate-200/50 bg-slate-100/80 p-1 shadow-inner backdrop-blur-sm sm:grid-cols-3 md:w-auto md:grid-cols-6 md:gap-0">
+            <div className="scrollbar-hide w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:w-auto">
+            <TabsList className="flex h-auto min-w-max justify-start gap-1 bg-transparent p-0">
               <TabsTrigger
                 value="action"
-                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md sm:px-4"
+                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
               >
                 Akcja{" "}
                 {doAkcji.length > 0 ? (
                   <Badge
                     variant="secondary"
-                    className="ml-2 bg-indigo-100 text-indigo-700 border-indigo-200"
+                    className="ml-2 border-lime-200 bg-lime-100 text-[#0b1b47]"
                   >
                     {doAkcji.length}
                   </Badge>
@@ -285,34 +286,37 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="waiting"
-                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md sm:px-4"
+                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
               >
-                Czeka na firmę{" "}
+                <span className="sm:hidden">Czeka</span>
+                <span className="hidden sm:inline">Czeka na firmę</span>{" "}
                 <span className="ml-2 text-slate-400 font-medium tracking-tighter">
                   ({oczekujeNaFirme.length})
                 </span>
               </TabsTrigger>
               <TabsTrigger
                 value="progress"
-                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-emerald-600 data-[state=active]:shadow-md sm:px-4"
+                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
               >
-                W realizacji{" "}
+                <span className="sm:hidden">W toku</span>
+                <span className="hidden sm:inline">W realizacji</span>{" "}
                 <span className="ml-2 text-slate-400 font-medium tracking-tighter">
                   ({wRealizacji.length})
                 </span>
               </TabsTrigger>
               <TabsTrigger
                 value="review"
-                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md sm:px-4"
+                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
               >
-                Do oceny{" "}
+                <span className="sm:hidden">Ocena</span>
+                <span className="hidden sm:inline">Do oceny</span>{" "}
                 <span className="ml-2 text-slate-400 font-medium tracking-tighter">
                   ({czekaNaOcene.length})
                 </span>
               </TabsTrigger>
               <TabsTrigger
                 value="saved"
-                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md sm:px-4"
+                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
               >
                 Zapisane{" "}
                 {savedOffers.length > 0 ? (
@@ -326,16 +330,17 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="archive"
-                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md sm:px-4"
+                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
               >
                 Archiwum
               </TabsTrigger>
             </TabsList>
+            </div>
 
-            <div className="hidden rounded-full border border-indigo-100/50 bg-indigo-50 px-4 py-2 md:block">
-              <p className="text-xs font-bold text-indigo-700">
+            <div className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 md:block">
+              <p className="text-xs font-bold text-slate-500">
                 Filtr:{" "}
-                <span className="text-indigo-900 ml-1">
+                <span className="ml-1 text-[#10245f]">
                   {activeFilterLabel}
                 </span>
               </p>

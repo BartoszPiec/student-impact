@@ -1,9 +1,9 @@
 import { FileText } from "lucide-react";
 import { redirect } from "next/navigation";
-import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { PageContainer } from "@/components/ui/page-container";
 import { createClient } from "@/lib/supabase/server";
 import { CompanyDocumentsPanel } from "./company-documents-panel";
+import { CompanyHero } from "../_components/company-dashboard-ui";
 
 export const dynamic = "force-dynamic";
 
@@ -25,15 +25,15 @@ export default async function CompanyDocumentsPage() {
   }
 
   return (
-    <main className="space-y-8 pb-12">
-      <PremiumPageHeader
+    <main className="min-h-screen bg-slate-50/60 pb-12">
+      <CompanyHero
         badge="Panel Pracodawcy"
-        title="Dokumenty firmy"
-        description="W jednym miejscu zobaczysz umowy A i faktury firmowe wygenerowane dla Twoich kontraktów."
-        icon={<FileText className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
+        title="Dokumenty"
+        description="Umowy i faktury powiązane z Twoimi zleceniami, gotowe do pobrania i kontroli rozliczeń."
+        icon={FileText}
       />
 
-      <PageContainer className="pb-12">
+      <PageContainer className="py-5">
         <CompanyDocumentsPanel />
       </PageContainer>
     </main>

@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, BriefcaseBusiness } from "lucide-react";
+import { BriefcaseBusiness, Search } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
-import { PremiumPageHeader } from "@/components/ui/premium-page-header";
+import { CompanyHero } from "../_components/company-dashboard-ui";
 import { createClient } from "@/lib/supabase/server";
 import { getRequestContext } from "@/lib/auth/request-context";
 
@@ -64,31 +63,24 @@ export default async function CompanyOrdersPage() {
 
   return (
     <main className="min-h-screen bg-slate-50/60 pb-12">
-      <PremiumPageHeader
+      <CompanyHero
         tourId="company-orders"
         badge="Panel Pracodawcy"
-        title="Zamowienia usług"
-        description="Wszystkie zamowione usługi studentow, negocjacje, realizacje i archiwum w jednym operacyjnym widoku."
-        icon={<BriefcaseBusiness className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
+        title="Zamówienia usług"
+        description="Usługi systemowe zamówione w katalogu: statusy realizacji, płatności i dokumenty w jednym widoku."
+        icon={BriefcaseBusiness}
         actions={
-          <Button asChild variant="outline" className="h-12 rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white">
-            <Link href="/app/company/packages">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Katalog usług
-            </Link>
-          </Button>
+          <Link
+            href="/app/company/packages"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-lime-300 px-5 text-sm font-extrabold text-[#10245f] shadow-lg shadow-lime-300/20 transition hover:bg-lime-200"
+          >
+            <Search className="h-4 w-4" />
+            Przeglądaj katalog
+          </Link>
         }
       />
 
-      <PageContainer className="py-8">
-        <div className="mb-6 rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 px-6 py-5 text-white shadow-xl">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-indigo-300">Wymagana akcja</p>
-          <h2 className="mt-2 text-2xl font-black tracking-tight">Zamowienia usług w tym samym systemie kart</h2>
-          <p className="mt-2 max-w-3xl text-sm font-medium text-indigo-100/75">
-            Decyzje, negocjacje i realizacje korzystaja teraz z tego samego jezyka wizualnego co ogloszenia i aplikacje.
-          </p>
-        </div>
-
+      <PageContainer className="py-5">
         <CompanyOrdersClient initialOrders={orders ?? []} studentData={studentData} />
       </PageContainer>
     </main>

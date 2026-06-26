@@ -50,7 +50,7 @@ const navLinks = [
   { label: "Bezpieczenstwo", href: "#bezpieczenstwo" },
   { label: "Pakiety", href: "#pakiety" },
   { label: "Cennik", href: "#cennik" },
-  { label: "Dla studentow", href: "/auth?role=student" },
+  { label: "Dla studentów", href: "/dla-studentow" },
 ];
 
 const trustPills = [
@@ -266,7 +266,7 @@ function SectionBadge({ children, dark = false }: { children: string; dark?: boo
 
 function HomeNav() {
   return (
-    <nav className="sticky top-0 z-50 border-b border-slate-100 bg-white/95 backdrop-blur-xl">
+    <nav className="landing-nav sticky top-0 z-50 border-b border-slate-100 bg-white/95 shadow-[0_8px_30px_-28px_rgba(15,36,96,0.35)] backdrop-blur-xl">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="shrink-0">
           <LogoMark />
@@ -284,7 +284,7 @@ function HomeNav() {
           <Button asChild variant="ghost" className="rounded-full px-5 font-black text-[#0f2460] hover:bg-slate-50">
             <Link href="/auth">Zaloguj sie</Link>
           </Button>
-          <Button asChild className="h-12 rounded-full bg-[#c5fb37] px-7 font-black text-[#0f2460] shadow-[0_16px_42px_-18px_rgba(197,251,55,0.9)] hover:bg-[#b7f22b]">
+          <Button asChild className="landing-hover-lift h-12 rounded-full bg-[#c5fb37] px-7 font-black text-[#0f2460] shadow-[0_16px_42px_-18px_rgba(197,251,55,0.9)] hover:bg-[#b7f22b] hover:shadow-[0_20px_45px_-20px_rgba(197,251,55,1)]">
             <Link href="/auth?role=company">Deleguj zadanie</Link>
           </Button>
         </div>
@@ -295,7 +295,7 @@ function HomeNav() {
             <Menu className="h-6 w-6 group-open:hidden" />
             <X className="hidden h-6 w-6 group-open:block" />
           </summary>
-          <div className="fixed left-0 right-0 top-20 border-t border-slate-100 bg-white px-4 py-5 shadow-2xl">
+          <div className="fixed inset-x-3 top-20 hidden rounded-2xl border border-slate-100 bg-white px-4 py-5 shadow-2xl group-open:block">
             <div className="grid gap-1">
               {navLinks.map((link) => (
                 <a key={link.href} href={link.href} className="rounded-xl px-3 py-3 text-sm font-black text-slate-600 hover:bg-slate-50">
@@ -318,7 +318,7 @@ function HeroMockup() {
 
   return (
     <div className="relative">
-      <div className="absolute -right-5 -top-5 rounded-full bg-emerald-500 px-5 py-2 text-xs font-black text-white shadow-xl shadow-emerald-200">
+      <div className="landing-subtle-pulse absolute -right-5 -top-5 rounded-full bg-emerald-500 px-5 py-2 text-xs font-black text-white shadow-xl shadow-emerald-200">
         Platnosc po akceptacji
       </div>
       <div className="rounded-[1.65rem] border border-slate-100 bg-white p-6 shadow-[0_28px_80px_-44px_rgba(15,36,96,0.75)]">
@@ -375,7 +375,7 @@ function HeroMockup() {
         </div>
       </div>
 
-      <div className="absolute -bottom-5 -left-5 rounded-full border border-slate-100 bg-white px-4 py-2 text-xs font-black text-[#0f2460] shadow-xl">
+      <div className="landing-subtle-pulse absolute -bottom-5 -left-5 rounded-full border border-slate-100 bg-white px-4 py-2 text-xs font-black text-[#0f2460] shadow-xl">
         ★ 4,9 - kontrola jakosci
       </div>
     </div>
@@ -388,35 +388,35 @@ function HomeHero() {
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,36,96,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(15,36,96,0.025)_1px,transparent_1px)] bg-[size:52px_52px]" />
       <div className="relative mx-auto grid min-h-[580px] max-w-7xl items-center gap-12 px-4 py-10 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:px-8 lg:py-12">
         <div>
-          <div className="mb-7 inline-flex items-center gap-2 rounded-full bg-[#eaffae] px-4 py-2 text-sm font-black text-[#0f2460]">
+          <div className="landing-enter-up mb-7 inline-flex max-w-full items-center gap-2 rounded-full bg-[#eaffae] px-4 py-2 text-sm font-black text-[#0f2460] max-[390px]:text-xs">
             <Zap className="h-4 w-4" />
             Dla malych i srednich firm w Polsce
           </div>
-          <h1 className="max-w-3xl text-5xl font-black leading-[1.04] text-[#0f2460] sm:text-6xl lg:text-[4.25rem]">
+          <h1 className="landing-enter-up max-w-3xl text-[clamp(2.45rem,12vw,3.25rem)] font-black leading-[1.04] text-[#0f2460] sm:text-6xl lg:text-[4.25rem]" style={{ animationDelay: "100ms" }}>
             Deleguj zadania tam, gdzie nie oplaca sie{" "}
             <span className="relative inline-block">
               <span className="relative z-10">zatrudniac.</span>
               <span className="absolute bottom-1 left-0 right-0 z-0 h-5 bg-[#c5fb37]" />
             </span>
           </h1>
-          <p className="mt-6 max-w-2xl text-lg font-semibold leading-8 text-slate-600">
+          <p className="landing-enter-up mt-6 max-w-2xl text-base font-semibold leading-7 text-slate-600 sm:text-lg sm:leading-8" style={{ animationDelay: "200ms" }}>
             Wybierasz gotowy pakiet w stalej cenie, zweryfikowany student realizuje go pod kontrola jakosci, a Ty placisz dopiero po akceptacji efektu. Umowy, fakture i podatki bierzemy na siebie.
           </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <Button asChild className="h-14 rounded-full bg-[#c5fb37] px-7 text-base font-black text-[#0f2460] shadow-xl shadow-lime-200/70 hover:bg-[#b7f22b]">
+          <div className="landing-enter-up mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap" style={{ animationDelay: "300ms" }}>
+            <Button asChild className="landing-hover-lift h-14 rounded-full bg-[#c5fb37] px-7 text-base font-black text-[#0f2460] shadow-xl shadow-lime-200/70 hover:bg-[#b7f22b]">
               <Link href="/auth?role=company">
                 Deleguj pierwsze zadanie
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <Button asChild variant="outline" className="h-14 rounded-full border-slate-200 bg-white px-7 text-base font-black text-[#0f2460] hover:bg-slate-50">
+            <Button asChild variant="outline" className="landing-hover-lift h-14 rounded-full border-slate-200 bg-white px-7 text-base font-black text-[#0f2460] hover:bg-slate-50">
               <a href="#bezpieczenstwo">
                 <ShieldCheck className="mr-2 h-5 w-5" />
                 Jak chronimy Twoje pieniadze
               </a>
             </Button>
           </div>
-          <div className="mt-7 grid gap-3 text-sm font-black text-slate-500 sm:grid-cols-2">
+          <div className="landing-enter-up mt-7 grid gap-3 text-sm font-black text-slate-500 sm:grid-cols-2" style={{ animationDelay: "400ms" }}>
             {["Platnosc dopiero po akceptacji", "Zweryfikowani studenci", "Start w 24 godziny"].map((item) => (
               <div key={item} className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
@@ -426,8 +426,10 @@ function HomeHero() {
           </div>
         </div>
 
-        <div className="hidden lg:block">
-          <HeroMockup />
+        <div className="landing-enter-right hidden lg:block" style={{ animationDelay: "480ms" }}>
+          <div className="landing-float-slow">
+            <HeroMockup />
+          </div>
         </div>
       </div>
     </section>
@@ -462,15 +464,15 @@ function MarketSection() {
   ];
 
   return (
-    <section className="bg-[#f4f7ef] px-4 py-20 sm:px-6 lg:px-8">
+    <section className="bg-[#f4f7ef] px-3 py-16 sm:px-6 sm:py-20 lg:px-8">
       <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
         <div>
           <SectionBadge>Rynek freelancingu 2025</SectionBadge>
-          <h2 className="mt-7 max-w-xl text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+          <h2 className="mt-7 max-w-xl text-3xl font-black leading-tight text-[#0f2460] sm:text-5xl">
             Polskie firmy juz zlecaja na zewnatrz. Trzy rzeczy je powstrzymuja.
           </h2>
-          <div className="mt-6 flex items-end gap-3">
-            <span className="text-7xl font-black leading-none text-[#0f2460]">56%</span>
+          <div className="mt-6 flex flex-col gap-2 min-[380px]:flex-row min-[380px]:items-end min-[380px]:gap-3">
+            <span className="text-5xl font-black leading-none text-[#0f2460] sm:text-7xl">56%</span>
             <span className="mb-2 max-w-[14rem] text-sm font-bold leading-5 text-slate-500">
               firm zleca freelancerom co najmniej raz w miesiacu
             </span>
@@ -481,18 +483,18 @@ function MarketSection() {
           <p className="mt-6 text-sm font-bold text-slate-400">Dane: Useme - raport o rynku freelancingu w Polsce, 2025.</p>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5">
           {pains.map((pain) => (
-            <div key={pain.label} className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
-              <div className="flex items-center gap-5">
-                <span className="min-w-[7rem] text-4xl font-black text-[#0f2460]">{pain.value}</span>
-                <div className="flex-1">
-                  <p className="mb-2 text-lg font-black text-[#0f2460]">{pain.label}</p>
+            <div key={pain.label} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+              <div className="grid min-w-0 grid-cols-[minmax(5.6rem,auto)_1fr] gap-x-4 gap-y-3 sm:flex sm:items-center sm:gap-5">
+                <span className="self-center whitespace-nowrap text-[clamp(2.15rem,10vw,3.1rem)] font-black leading-none text-[#0f2460] sm:min-w-[7rem] sm:text-4xl">{pain.value}</span>
+                <div className="min-w-0">
+                  <p className="mb-2 break-normal text-lg font-black leading-tight text-[#0f2460] [overflow-wrap:normal] sm:text-lg">{pain.label}</p>
                   <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                     <div className="h-full w-[86%] rounded-full bg-[#2e49a3]" />
                   </div>
                 </div>
-                <span className="text-sm font-black text-emerald-500">rozwiazujemy</span>
+                <span className="col-span-2 justify-self-start rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-600 sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm">rozwiazujemy</span>
               </div>
             </div>
           ))}
@@ -809,7 +811,7 @@ function FinalCTA() {
             </Link>
           </Button>
           <Button asChild variant="outline" className="h-14 rounded-full border-[#0f2460] bg-transparent px-9 text-base font-black text-[#0f2460] hover:bg-[#0f2460]/5">
-            <Link href="/auth?role=student">Zacznij jako student</Link>
+            <Link href="/dla-studentow">Zacznij jako student</Link>
           </Button>
         </div>
         <p className="mt-8 text-base font-black text-[#0f2460]/55">
@@ -836,7 +838,7 @@ function HomeFooter() {
             {[
               { title: "Platforma", links: [["Jak to dziala", "#jak-dziala"], ["Bezpieczenstwo", "#bezpieczenstwo"], ["Katalog pakietow", "#pakiety"], ["Cennik", "#cennik"]] },
               { title: "Dla firm", links: [["Deleguj zadanie", "/auth?role=company"], ["Jak dziala escrow", "#bezpieczenstwo"], ["Wystaw ogloszenie", "/app/company/jobs/new"]] },
-              { title: "Dla studentow", links: [["Gielda zlecen", "/auth?role=student"], ["Jak zaczac", "/auth?role=student"], ["Wyplaty i PIT", "/auth?role=student"]] },
+              { title: "Dla studentów", links: [["Gielda zlecen", "/dla-studentow#zlecenia"], ["Jak zaczac", "/dla-studentow#jak-zaczac"], ["Wyplaty i PIT", "/dla-studentow#wyplata"]] },
             ].map((group) => (
               <div key={group.title}>
                 <p className="mb-6 text-sm font-black uppercase tracking-[0.22em] text-white/35">{group.title}</p>
@@ -871,19 +873,9 @@ function HomeFooter() {
   );
 }
 
-function MobileCTA() {
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-16px_40px_-24px_rgba(15,23,42,0.55)] backdrop-blur-xl md:hidden">
-      <Button asChild className="h-12 w-full rounded-full bg-[#c5fb37] font-black text-[#0f2460] hover:bg-[#b7f22b]">
-        <Link href="/auth?role=company">Deleguj pierwsze zadanie</Link>
-      </Button>
-    </div>
-  );
-}
-
 export default function LandingPage() {
   return (
-    <div className="min-h-screen overflow-x-hidden bg-white font-sans text-slate-950">
+    <div className="landing-page min-h-screen overflow-x-hidden bg-white font-sans text-slate-950">
       <HomeNav />
       <main>
         <HomeHero />
@@ -898,7 +890,6 @@ export default function LandingPage() {
         <FinalCTA />
       </main>
       <HomeFooter />
-      <MobileCTA />
     </div>
   );
 }
