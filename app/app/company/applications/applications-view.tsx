@@ -171,7 +171,7 @@ export default async function CompanyApplicationsPage({
   const nowe = rows.filter((row) => row.status === "sent" || row.status === "countered");
   const wRealizacji = rows.filter((row) => row.status === "accepted" || row.status === "in_progress");
   const zakonczone = rows.filter((row) => row.status === "completed" || row.status === "rejected" || row.status === "cancelled");
-  const defaultTab = wRealizacji.length > 0 ? "realizacja" : nowe.length > 0 ? "nowe" : "zakonczone";
+  const defaultTab = nowe.length > 0 ? "nowe" : wRealizacji.length > 0 ? "realizacja" : "zakonczone";
 
   const renderNewCard = (row: ApplicationRow) => {
     const offer = unwrapRelation(row.offers);
@@ -490,7 +490,33 @@ export default async function CompanyApplicationsPage({
           </div>
         ) : null}
 
-        {!embedded ? (
+        <div className="mb-6 rounded-[2rem] border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <h2 className="text-2xl font-black tracking-tight text-slate-950">
+                {embedded ? "Zgloszenia do tej oferty" : "Aplikacje do moich ofert"}
+              </h2>
+              <p className="mt-1 text-sm font-semibold text-slate-500">
+                {nowe.length > 0
+                  ? `${nowe.length} zgloszen czeka na decyzje firmy`
+                  : "Najpilniejsze decyzje sa sortowane nad spokojniejszymi stanami."}
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex flex-wrap gap-2">
+                <CompanyStatePill tone="slate">Wszystkie {rows.length}</CompanyStatePill>
+                <CompanyStatePill tone="amber">Wymagaja akcji {nowe.length}</CompanyStatePill>
+                <CompanyStatePill tone="emerald">W realizacji {wRealizacji.length}</CompanyStatePill>
+                <CompanyStatePill tone="slate">Zakonczone {zakonczone.length}</CompanyStatePill>
+              </div>
+              <div className="rounded-full bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white shadow-sm">
+                Sortuj: wymagajace akcji
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {embedded && !embedded ? (
           <div className="mb-6 rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 px-6 py-5 text-white shadow-xl">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-indigo-300">Wymagana akcja</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight">Karty aplikacji z sygnalem decyzji po stronie firmy</h2>
@@ -510,7 +536,7 @@ export default async function CompanyApplicationsPage({
         <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className="mb-8 grid h-auto w-full grid-cols-3 gap-2 rounded-[2rem] border border-slate-200 bg-white p-2 shadow-sm">
             <TabsTrigger value="nowe" className="h-12 rounded-full border border-transparent font-bold data-[state=active]:border-indigo-200 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
-              Nowe ({nowe.length})
+              Wymagaja akcji ({nowe.length})
             </TabsTrigger>
             <TabsTrigger value="realizacja" className="h-12 rounded-full border border-transparent font-bold data-[state=active]:border-emerald-200 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
               W realizacji ({wRealizacji.length})

@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import CompanyApplicationsView from "./applications-view";
 
 export const dynamic = "force-dynamic";
 
@@ -7,11 +7,5 @@ export default async function CompanyApplicationsRoute({
 }: {
   searchParams: Promise<{ offerId?: string }>;
 }) {
-  const { offerId } = await searchParams;
-
-  if (offerId) {
-    redirect(`/app/company/offers/${offerId}`);
-  }
-
-  redirect("/app/company/offers");
+  return <CompanyApplicationsView searchParams={searchParams} />;
 }

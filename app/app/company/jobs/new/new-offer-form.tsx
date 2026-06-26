@@ -210,7 +210,8 @@ export default function NewOfferForm({
   defaultType?: "micro" | "job" | null;
 }) {
   const searchParams = useSearchParams();
-  const tourOfferStep = searchParams.get("tourOfferStep");
+  const isAppTour = searchParams.get("appTour") === "1";
+  const tourOfferStep = isAppTour ? searchParams.get("tourOfferStep") : null;
   const [step, setStep] = useState(defaultType ? 2 : 1);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);

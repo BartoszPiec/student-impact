@@ -12,6 +12,7 @@ type OfferQueryRow = {
   id: string;
   tytul: string | null;
   typ: string | null;
+  opis: string | null;
   stawka: number | null;
   status: string | null;
   created_at: string | null;
@@ -24,7 +25,7 @@ type OfferQueryRow = {
   is_platform_service: boolean | null;
   salary_range_min: number | null;
   salary_range_max: number | null;
-  obligations?: string[] | null;
+  obligations?: string | string[] | null;
 };
 
 type UserApplicationRow = {
@@ -143,6 +144,7 @@ export default async function JobsPage({
       stawka: offer.stawka ?? undefined,
       salary_range_min: offer.salary_range_min ?? undefined,
       salary_range_max: offer.salary_range_max ?? undefined,
+      opis: offer.opis ?? undefined,
       location: offer.location ?? undefined,
       is_remote: offer.is_remote ?? undefined,
       contract_type: offer.contract_type ?? undefined,
@@ -151,7 +153,7 @@ export default async function JobsPage({
       category: offer.kategoria ?? undefined,
       created_at: offer.created_at ?? new Date(0).toISOString(),
       is_platform_service: offer.is_platform_service ?? undefined,
-      obligations: Array.isArray(offer.obligations) ? offer.obligations.join(", ") : undefined,
+      obligations: Array.isArray(offer.obligations) ? offer.obligations.join(", ") : offer.obligations ?? undefined,
     };
   });
 

@@ -17,6 +17,7 @@ import {
   MessageSquare,
   PlusCircle,
   Search,
+  SearchCheck,
   Sparkles,
   User,
   type LucideIcon,
@@ -212,6 +213,9 @@ export function AppNavbar({
                       <AppNavLink href="/app/company/offers" icon={LayoutGrid} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-offers">
                         Moje ogloszenia
                       </AppNavLink>
+                      <AppNavLink href="/app/company/challenges/new" icon={SearchCheck} onClick={() => setIsOpen(false)} pathname={pathname}>
+                        Dodaj wyzwanie
+                      </AppNavLink>
                       <AppNavLink href="/app/company/documents" icon={FileText} onClick={() => setIsOpen(false)} pathname={pathname}>
                         Dokumenty
                       </AppNavLink>
@@ -340,6 +344,9 @@ export function AppNavbar({
                 </AppNavLink>
                 <AppNavLink href="/app/company/offers" icon={LayoutGrid} pathname={pathname} tourId="company-offers">
                   Moje ogloszenia
+                </AppNavLink>
+                <AppNavLink href="/app/company/challenges/new" icon={SearchCheck} pathname={pathname}>
+                  Wyzwanie
                 </AppNavLink>
                 <AppNavLink href="/app/company/documents" icon={FileText} pathname={pathname}>
                   Dokumenty

@@ -47,10 +47,16 @@ export default function ApplyCard({
   companyMilestones?: CompanyMilestoneTemplate[];
 }) {
   const [message, setMessage] = useState("");
-  const [negotiating, setNegotiating] = useState(false);
+  const [negotiating, setNegotiating] = useState(
+    (offerTyp?.toLocaleLowerCase("pl-PL") ?? "").includes("challenge") ||
+      (offerTyp?.toLocaleLowerCase("pl-PL") ?? "").includes("wyzwan"),
+  );
   const [cvFile, setCvFile] = useState<File | null>(null);
 
   // Logic: Disable negotiation if it's a standard Job or Internship
+  const normalizedOfferType = offerTyp?.toLocaleLowerCase("pl-PL") ?? "";
+  const isChallenge =
+    normalizedOfferType.includes("challenge") || normalizedOfferType.includes("wyzwan");
   const isJobOrInternship = offerTyp && (offerTyp.toLowerCase().includes("job") || offerTyp.toLowerCase().includes("praca") || offerTyp.toLowerCase().includes("staż"));
   const canNegotiate = !isJobOrInternship && !isPlatformService;
 
@@ -134,11 +140,11 @@ export default function ApplyCard({
 
   // --- STANADARD JOB APPLICATION LOGIC BELOW ---
 
-  function parseRate(v: string): number | null {
+  function parseRate(v: string, minValue = 0): number | null {
     const s = v.trim();
     if (!s) return null;
     const n = Number(s);
-    if (!Number.isFinite(n) || n < 0) return null;
+    if (!Number.isFinite(n) || n < minValue) return null;
     return n;
   }
 
@@ -157,10 +163,21 @@ export default function ApplyCard({
         let proposed: number | null = null;
         let cvUrl: string | null = null;
 
-        // 1. Validate Negotiation
-        if (negotiating) {
-          proposed = parseRate(rate);
+        const trimmedMessage = message.trim();
+
+        if (isChallenge && trimmedMessage.length < 20) {
+          setErr("Napisz krotki pitch: pomysl, zakres i uzasadnienie wyceny.");
+          return;
+        }
+
+        // 1. Validate Negotiation / Challenge pitch
+        if (isChallenge || negotiating) {
+          proposed = parseRate(rate, isChallenge ? 1 : 0);
           if (proposed == null) {
+            if (isChallenge) {
+              setErr("Podaj proponowana wycene w PLN.");
+              return;
+            }
             setErr("Podaj poprawną proponowaną stawkę (liczba ≥ 0).");
             return;
           }
@@ -179,7 +196,7 @@ export default function ApplyCard({
         }
 
         // 3. Submit Application
-        const result = await applyToOffer(offerId, message.trim(), proposed, cvUrl);
+        const result = await applyToOffer(offerId, trimmedMessage, proposed, cvUrl);
 
         if (result?.error) throw new Error(result.error);
         if (result?.redirectUrl) {
@@ -225,9 +242,17 @@ export default function ApplyCard({
           <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Szybki proces</span>
         </div>
-        <CardTitle className="text-2xl font-black text-slate-900 leading-none">Aplikuj teraz</CardTitle>
+        <CardTitle className="text-2xl font-black text-slate-900 leading-none">
+          {isChallenge ? "Zloz pitch" : "Aplikuj teraz"}
+        </CardTitle>
         <CardDescription className="text-slate-500 font-medium">
+          {isChallenge ? (
+            "Odpowiedz kontroferta: zakres, cena, termin i szybki pomysl na rozwiazanie."
+          ) : (
+            <>
           Prześlij zgłoszenie bezpośrednio do rekrutera.
+            </>
+          )}
         </CardDescription>
       </CardHeader>
 
@@ -237,7 +262,9 @@ export default function ApplyCard({
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl -mr-16 -mt-16 group-hover:bg-indigo-500/10 transition-colors" />
 
           <div className="flex flex-col gap-1 relative z-10">
-            <Label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Wynagrodzenie</Label>
+            <Label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">
+              {isChallenge ? "Budzet orientacyjny" : "Wynagrodzenie"}
+            </Label>
             <div className="text-4xl font-black text-slate-900 tabular-nums">
               {formattedSalary ? formattedSalary : (offerStawka != null ? `${offerStawka} PLN` : "Stawka niepodana")}
             </div>
@@ -246,9 +273,14 @@ export default function ApplyCard({
                 {canNegotiate ? "Możliwość negocjacji" : "Stawka sztywna"}
               </p>
             )}
+            {isChallenge && (
+              <p className="mt-2 text-xs font-bold uppercase tracking-widest text-amber-600">
+                Wycena studenta jest wymagana
+              </p>
+            )}
           </div>
 
-          {canNegotiate && (
+          {canNegotiate && !isChallenge && (
             <div className="flex items-center space-x-3 pt-4 border-t border-slate-200 mt-2 relative z-10">
               <Checkbox
                 id="negotiate"
@@ -269,13 +301,15 @@ export default function ApplyCard({
 
           {negotiating && canNegotiate && (
             <div className="animate-in fade-in zoom-in-95 duration-300 pt-4 space-y-3 relative z-10">
-              <Label htmlFor="rate" className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Twoja oferta (PLN)</Label>
+              <Label htmlFor="rate" className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {isChallenge ? "Twoja wycena (PLN)" : "Twoja oferta (PLN)"}
+              </Label>
               <div className="relative">
                 <Input
                   id="rate"
                   value={rate}
                   onChange={(e) => setRate(e.target.value)}
-                  placeholder="np. 4500"
+                  placeholder={isChallenge ? "np. 1200" : "np. 4500"}
                   inputMode="numeric"
                   className="pl-4 font-black text-2xl h-16 bg-white border-2 border-indigo-100 rounded-2xl focus-visible:ring-indigo-500 focus-visible:border-indigo-500 shadow-inner"
                 />
@@ -364,6 +398,11 @@ export default function ApplyCard({
         {!isPlatformService && (
           <div className="space-y-4">
             <Label htmlFor="message" className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Wiadomość (opcjonalnie)</Label>
+            {isChallenge && (
+              <p className="text-sm font-semibold leading-6 text-amber-700">
+                Przy wyzwaniu wpisz pitch: diagnoze, proponowany zakres, termin i uzasadnienie wyceny.
+              </p>
+            )}
             <Textarea
               id="message"
               value={message}

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import OffersTabs from "./offers-tabs";
-import { CheckCircle2, FileText, Plus } from "lucide-react";
+import { CheckCircle2, FileText, Plus, SearchCheck } from "lucide-react";
 import { getRequestContext } from "@/lib/auth/request-context";
 
 export const dynamic = "force-dynamic";
@@ -92,7 +92,8 @@ export default async function CompanyOffersPage({
   const createdParam = Array.isArray(resolvedSearchParams.created)
     ? resolvedSearchParams.created[0]
     : resolvedSearchParams.created;
-  const offerCreated = createdParam === "1";
+  const challengeCreated = createdParam === "challenge";
+  const offerCreated = createdParam === "1" || challengeCreated;
 
   const { user, role } = await getRequestContext();
   if (!user) redirect("/auth");
@@ -251,12 +252,20 @@ export default async function CompanyOffersPage({
         description="Ogłoszenia i zamówione usługi w jednym widoku: decyzje, kandydaci, realizacje i archiwum."
         icon={<FileText className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
         actions={
-          <Button asChild variant="outline" className="h-12 rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white">
-            <Link href="/app/company/jobs/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Dodaj ogłoszenie
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button asChild className="h-12 rounded-2xl border-0 bg-emerald-500 px-6 font-bold text-white shadow-lg shadow-emerald-950/20 hover:bg-emerald-400">
+              <Link href="/app/company/challenges/new">
+                <SearchCheck className="mr-2 h-4 w-4" />
+                Dodaj wyzwanie
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-12 rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white">
+              <Link href="/app/company/jobs/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Dodaj ogłoszenie
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -269,11 +278,17 @@ export default async function CompanyOffersPage({
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">
-                  Oferta opublikowana
+                  {challengeCreated ? "Wyzwanie opublikowane" : "Oferta opublikowana"}
                 </p>
-                <h2 className="text-lg font-black">Nowe ogłoszenie jest już widoczne na Twojej liście.</h2>
+                <h2 className="text-lg font-black">
+                  {challengeCreated
+                    ? "Nowe wyzwanie jest juz widoczne dla studentow."
+                    : "Nowe ogłoszenie jest już widoczne na Twojej liście."}
+                </h2>
                 <p className="text-sm font-medium text-emerald-800/80">
-                  Możesz teraz przejrzeć zgłoszenia, edytować ofertę albo dodać kolejne ogłoszenie.
+                  {challengeCreated
+                    ? "Mozesz teraz zbierac pitche, porownac wyceny i wybrac najlepsza propozycje."
+                    : "Możesz teraz przejrzeć zgłoszenia, edytować ofertę albo dodać kolejne ogłoszenie."}
                 </p>
               </div>
             </div>

@@ -90,7 +90,21 @@ function getBudgetLabel(offer: CompanyOffer, stats: CompanyOfferStats, isInProgr
         : "+";
     return `${offer.salary_range_min.toLocaleString("pl-PL")}${max} PLN`;
   }
+  if (offer.salary_range_max && offer.salary_range_max > 0) {
+    return `do ${offer.salary_range_max.toLocaleString("pl-PL")} PLN`;
+  }
   return formatMoney(offer.stawka);
+}
+
+function isChallengeOffer(offer: Pick<CompanyOffer, "typ">) {
+  const normalizedType = offer.typ?.toLocaleLowerCase("pl-PL") ?? "";
+  return normalizedType.includes("challenge") || normalizedType.includes("wyzwan");
+}
+
+function getOfferTypeLabel(offer: CompanyOffer, isServiceOrder: boolean) {
+  if (isServiceOrder) return "Usluga systemowa";
+  if (isChallengeOffer(offer)) return "Wyzwanie do wyceny";
+  return offer.typ || "Ogloszenie";
 }
 
 function getDetailHref(offer: CompanyOffer) {
@@ -193,6 +207,7 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
   const hasAccepted = stats.accepted > 0;
   const detailHref = getDetailHref(offer);
   const acceptedHref = stats.acceptedAppId ? `/app/deliverables/${stats.acceptedAppId}` : detailHref;
+  const isChallenge = isChallengeOffer(offer);
 
   if (isClosed) {
     return {
@@ -246,7 +261,7 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
       actionRequired: true,
       actionLabel: "Przejrzyj kandydatow",
       actionHref: detailHref,
-      note: `${stats.sent} kandydatow czeka na decyzje.`,
+      note: isChallenge ? `${stats.sent} pitchy czeka na decyzje.` : `${stats.sent} kandydatow czeka na decyzje.`,
     };
   }
 
@@ -273,7 +288,13 @@ export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferSt
     actionRequired: false,
     actionLabel: "Szczegoly",
     actionHref: detailHref,
-    note: stats.total > 0 ? `${stats.total} aplikacji lacznie.` : "Ogloszenie jest widoczne dla studentow.",
+    note: isChallenge
+      ? stats.total > 0
+        ? `${stats.total} pitchy lacznie.`
+        : "Wyzwanie jest widoczne dla studentow i czeka na kontroferty."
+      : stats.total > 0
+        ? `${stats.total} aplikacji lacznie.`
+        : "Ogloszenie jest widoczne dla studentow.",
   };
 }
 
@@ -291,7 +312,7 @@ export default function OfferCard({
   const chatAction = stats.acceptedAppId ? openChatForApplication.bind(null, stats.acceptedAppId) : null;
   const detailHref = getDetailHref(offer);
   const isServiceOrder = offer.itemType === "service_order";
-  const itemLabel = offer.itemLabel || (isServiceOrder ? "Usługa" : "Ogloszenie");
+  const itemLabel = offer.itemLabel || (isServiceOrder ? "Usluga" : isChallengeOffer(offer) ? "Wyzwanie" : "Ogloszenie");
   const performerFallback =
     isServiceOrder && ["pending_selection", "pending"].includes(offer.status ?? "")
       ? "Do wyboru wykonawcy"
@@ -399,7 +420,7 @@ export default function OfferCard({
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Briefcase className="h-3.5 w-3.5" />
-                  {isServiceOrder ? "Usługa systemowa" : offer.typ || "Ogloszenie"}
+                  {getOfferTypeLabel(offer, isServiceOrder)}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Eye className="h-3.5 w-3.5" />

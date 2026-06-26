@@ -159,6 +159,17 @@ function serviceOrderToOffer(order: ServiceOrderForList): CompanyOffer {
 }
 
 function offerWithLabel(offer: CompanyOffer): CompanyOffer {
+  const normalizedType = offer.typ?.toLocaleLowerCase("pl-PL") ?? "";
+  const isChallenge = normalizedType.includes("challenge") || normalizedType.includes("wyzwan");
+
+  if (isChallenge) {
+    return {
+      ...offer,
+      itemType: "offer",
+      itemLabel: "Wyzwanie",
+    };
+  }
+
   return {
     ...offer,
     itemType: "offer",

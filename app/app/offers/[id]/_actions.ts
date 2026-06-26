@@ -184,6 +184,23 @@ export async function applyToOffer(
 
 
     const proposed = proposedStawka == null ? null : toNumber(proposedStawka);
+    const normalizedOfferType = offer.typ?.toLocaleLowerCase("pl-PL") ?? "";
+    const isChallengeOffer =
+      normalizedOfferType.includes("challenge") || normalizedOfferType.includes("wyzwan");
+
+    if (isChallengeOffer && (message ?? "").trim().length < 20) {
+      return {
+        error: "Wyzwanie wymaga krotkiego pitcha: opisz pomysl, zakres i dlaczego ta wycena ma sens.",
+        debug: logs,
+      };
+    }
+
+    if (isChallengeOffer && (proposed == null || proposed <= 0)) {
+      return {
+        error: "Wyzwanie wymaga proponowanej wyceny w PLN.",
+        debug: logs,
+      };
+    }
 
     const isNegotiation = proposed != null && (offer.stawka == null || Number(proposed) !== Number(offer.stawka));
 

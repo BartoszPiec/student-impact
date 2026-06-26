@@ -51,6 +51,7 @@ const SPOTLIGHT_GAP = 8;
 const TOOLTIP_GAP = 14;
 const TOOLTIP_MAX_WIDTH = 380;
 const SCROLL_TOLERANCE = 6;
+const TOUR_SEARCH_KEYS = ["appTour", "tourOfferChoose", "tourOfferType", "tourOfferStep"] as const;
 
 const COMPANY_STEPS: TourStep[] = [
   {
@@ -215,17 +216,17 @@ function getStorageKey(userId: string, role: TourRole): string {
   return `student2work:product-tour:${TOUR_VERSION}:${userId}:${role}`;
 }
 
-function getStepHref(step: TourStep): string {
-  return step.search ? `${step.route}?${step.search}` : step.route;
+function getStepSearch(step: TourStep): string {
+  if (!step.search) return "";
+
+  const params = new URLSearchParams(step.search);
+  params.set("appTour", "1");
+  return params.toString();
 }
 
-function readTourResult(storageKey: string): TourResult | null {
-  try {
-    const value = window.localStorage.getItem(storageKey);
-    return value === "completed" || value === "skipped" ? value : null;
-  } catch {
-    return null;
-  }
+function getStepHref(step: TourStep): string {
+  const search = getStepSearch(step);
+  return search ? `${step.route}?${search}` : step.route;
 }
 
 function writeTourResult(storageKey: string, result: TourResult): void {
@@ -234,6 +235,20 @@ function writeTourResult(storageKey: string, result: TourResult): void {
   } catch {
     // Prywatny tryb przeglądarki może blokować localStorage.
   }
+}
+
+function removeTourSearchParams(search: string): string | null {
+  const params = new URLSearchParams(search);
+  let changed = false;
+
+  TOUR_SEARCH_KEYS.forEach((key) => {
+    if (params.has(key)) {
+      params.delete(key);
+      changed = true;
+    }
+  });
+
+  return changed ? params.toString() : null;
 }
 
 function rectChanged(previous: TargetRect | null, next: TargetRect): boolean {
@@ -330,24 +345,27 @@ export function AppTourProvider({
     if (storageKey) writeTourResult(storageKey, result);
     setIsOpen(false);
     setTargetRect(null);
-  }, [storageKey]);
+    const cleanSearch = removeTourSearchParams(currentSearch);
+    if (cleanSearch !== null) {
+      router.replace(cleanSearch ? `${pathname}?${cleanSearch}` : pathname, { scroll: false });
+    }
+  }, [currentSearch, pathname, router, storageKey]);
 
   useEffect(() => {
-    if (!available || !storageKey || readTourResult(storageKey)) return;
+    if (isOpen) return;
 
-    const timer = window.setTimeout(() => {
-      setIsOpen(true);
-    }, 700);
-
-    return () => window.clearTimeout(timer);
-  }, [available, storageKey]);
+    const cleanSearch = removeTourSearchParams(currentSearch);
+    if (cleanSearch !== null) {
+      router.replace(cleanSearch ? `${pathname}?${cleanSearch}` : pathname, { scroll: false });
+    }
+  }, [currentSearch, isOpen, pathname, router]);
 
   const step = steps[stepIndex] ?? null;
 
   useLayoutEffect(() => {
     if (!isOpen || !step) return;
 
-    const expectedSearch = step.search ?? "";
+    const expectedSearch = getStepSearch(step);
     if (pathname !== step.route || currentSearch !== expectedSearch) {
       router.push(getStepHref(step));
       return;
@@ -475,7 +493,7 @@ export function AppTourProvider({
   const roleLabel = supportedRole === "company" ? "Panel firmy" : "Panel studenta";
   const RoleIcon = supportedRole === "company" ? Building2 : GraduationCap;
   const stepAction = step.action;
-  const expectedSearch = step.search ?? "";
+  const expectedSearch = getStepSearch(step);
   const isStepLocationReady = pathname === step.route && currentSearch === expectedSearch;
 
   return (

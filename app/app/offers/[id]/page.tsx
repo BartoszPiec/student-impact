@@ -400,6 +400,8 @@ export default async function OfferDetailsPage({
     salaryDisplay = `${offer.salary_range_min} - ${offer.salary_range_max} PLN`;
   } else if (offer.salary_range_min) {
     salaryDisplay = `od ${offer.salary_range_min} PLN`;
+  } else if (offer.salary_range_max) {
+    salaryDisplay = `do ${offer.salary_range_max} PLN`;
   } else if (offer.stawka) {
     salaryDisplay = `${offer.stawka} PLN`;
   } else {
@@ -407,8 +409,13 @@ export default async function OfferDetailsPage({
   }
 
   const companyName = getCompanyName(companyProfile);
+  const normalizedOfferType = String(offer.typ ?? "").toLocaleLowerCase("pl-PL");
+  const isChallenge = normalizedOfferType.includes("challenge") || normalizedOfferType.includes("wyzwan");
+  if (isChallenge && salaryDisplay === "-") {
+    salaryDisplay = "Do wyceny";
+  }
   const isJob = (offer.typ === "job" || offer.typ === "Praca" || offer.typ === "praca");
-  const periodLabel = offer.salary_period === "hourly" ? "godz." : (isJob ? "mies." : "projekt");
+  const periodLabel = offer.salary_period === "hourly" ? "godz." : isJob ? "mies." : isChallenge ? "wycena" : "projekt";
 
   // --- PARSING DESCRIPTION FOR SYSTEM SERVICES ---
   const separator = "--- SZCZEGÓŁY ZAMÓWIENIA ---";
@@ -524,7 +531,11 @@ export default async function OfferDetailsPage({
                 <div className="flex flex-wrap items-center gap-3">
                   <Badge className="bg-white/10 backdrop-blur-md border border-white/10 text-white text-sm font-medium px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.05)]">
                     <Briefcase className="w-4 h-4 mr-1.5 opacity-80" />
+                    {isChallenge ? "Wyzwanie do wyceny" : (
+                      <>
                     {isJob ? "Praca & Staż" : "Mikrozlecenie"}
+                      </>
+                    )}
                   </Badge>
                   {isPlatformService && (
                     <Badge className="bg-amber-500/20 backdrop-blur-md border border-amber-400/20 text-amber-100 text-sm font-medium px-4 py-1.5 rounded-full pb-1 pt-1.5">
@@ -963,7 +974,9 @@ export default async function OfferDetailsPage({
                       </div>
                       <span className="text-sm font-bold text-slate-500">Typ oferty</span>
                     </div>
-                    <span className="text-sm font-black text-slate-900 uppercase tracking-wider">{offer.typ}</span>
+                    <span className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                      {isChallenge ? "Wyzwanie do wyceny" : offer.typ}
+                    </span>
                   </li>
                   <li className="flex items-center justify-between group">
                     <div className="flex items-center gap-3">

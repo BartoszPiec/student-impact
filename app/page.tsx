@@ -1,667 +1,904 @@
+import type { ComponentType } from "react";
 import Link from "next/link";
 import {
-  Star,
-  Globe,
-  Video,
-  Code,
-  BarChart,
-  Palette,
-  Languages,
-  Clipboard,
-  PenTool,
-  Bot,
-  Database,
   ArrowRight,
-  Shield,
-  Zap,
-  Users,
-  TrendingUp,
-  Clock,
-  BadgeCheck,
+  Banknote,
+  BarChart3,
+  BriefcaseBusiness,
+  Check,
+  CheckCircle2,
+  ClipboardCheck,
+  FileCheck2,
+  LockKeyhole,
+  MessageSquare,
   Menu,
+  PenLine,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Users,
+  Video,
+  WandSparkles,
   X,
+  Zap,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { HowItWorksSwitcher, ServiceDetailsModal } from "./landing-interactive";
 
-// --- Types ---
-interface ServiceData {
-  icon: React.ComponentType<{ className?: string }>;
+type IconComponent = ComponentType<{ className?: string }>;
+
+type PackageCard = {
+  title: string;
   description: string;
-  stats: { price: string; time: string; scope: string; mode: string };
-  examples: string[];
-  funFact: string;
-}
-
-// Task categories — 3 pillars: Growth / Ops / Admin
-const SERVICE_DATA: Record<string, ServiceData> = {
-  "Lead research": {
-    icon: TrendingUp,
-    description: "Budujesz pipeline, ale nie masz kto szukać kontaktów? Deleguj research leadów i wróć do sprzedaży.",
-    stats: { price: "200-800 zł", time: "1-3 dni", scope: "bazy leadów", mode: "pilot" },
-    examples: ["Listy firm wg ICP z LinkedIn", "Weryfikacja danych kontaktowych", "Research decydentów", "Budowanie baz w CRM", "Analiza konkurencji"],
-    funFact: "Średnio 3 dni wystarczą na zbudowanie listy 200 kwalifikowanych leadów.",
-  },
-  "Prospecting i outreach": {
-    icon: Users,
-    description: "Przygotowanie materiałów do cold outreach, personalizacja wiadomości, sekwencje mailowe. Robota, której nikt nie lubi robić — ale musi być zrobiona.",
-    stats: { price: "300-1200 zł", time: "2-5 dni", scope: "outreach", mode: "pilot" },
-    examples: ["Personalizowane wiadomości cold mail", "Skrypty do cold calla", "Sekwencje follow-up", "Przygotowanie ofert handlowych", "Analiza odpowiedzi i optymalizacja"],
-    funFact: "Dobrze przygotowany outreach otwiera 3× więcej rozmów niż szablonowe wiadomości.",
-  },
-  "Prezentacje i materiały": {
-    icon: Palette,
-    description: "Pitch deck, oferta handlowa, prezentacja dla zarządu. Masz treść, potrzebujesz kogoś kto to złoży profesjonalnie.",
-    stats: { price: "300-1500 zł", time: "2-7 dni", scope: "prezentacje", mode: "pilot" },
-    examples: ["Pitch deck dla inwestorów", "Prezentacje sprzedażowe", "Oferty handlowe PDF", "One-pagery produktowe", "Materiały onboardingowe"],
-    funFact: "Profesjonalna prezentacja zwiększa szansę na zamknięcie deala o 35%.",
-  },
-  "Data entry i CRM": {
-    icon: Database,
-    description: "CRM zarasta, arkusze są chaotyczne, baza danych nieaktualna. To zadanie, które wraca do Ciebie co tydzień — i nie powinno.",
-    stats: { price: "100-600 zł", time: "1-5 dni", scope: "CRM i dane", mode: "pilot" },
-    examples: ["Czyszczenie i uzupełnianie CRM", "Import danych z arkuszy", "Deduplikacja bazy klientów", "Tagowanie i segmentacja", "Raportowanie z danych"],
-    funFact: "Firmy tracą średnio 12h tygodniowo na ręczne zarządzanie danymi.",
-  },
-  "Content i social media": {
-    icon: PenTool,
-    description: "Potrzebujesz postów, artykułów, opisów. Regularny content — bez zatrudniania na etat.",
-    stats: { price: "200-1000 zł", time: "2-10 dni", scope: "treści", mode: "pilot" },
-    examples: ["Posty na LinkedIn / Instagram", "Artykuły blogowe SEO", "Newsletter firmowy", "Opisy produktów", "Skrypty do rolek i wideo"],
-    funFact: "Firmy publikujące regularnie na LinkedIn generują 7× więcej zapytań.",
-  },
-  "Wsparcie operacyjne": {
-    icon: Clipboard,
-    description: "Zadania administracyjne, które blokują Twój czas. Wprowadź dane, odpisz na maile, przygotuj dokumenty — bez angażowania kluczowych ludzi.",
-    stats: { price: "80-400 zł", time: "1-3 dni", scope: "operacje", mode: "pilot" },
-    examples: ["Obsługa skrzynki mailowej", "Wprowadzanie danych i faktur", "Organizacja dokumentacji", "Transkrypcja i protokoły", "Zarządzanie kalendarzem"],
-    funFact: "Właściciele firm odzyskują średnio 8h tygodniowo po delegowaniu zadań admin.",
-  },
-  "Strony i CMS": {
-    icon: Globe,
-    description: "Aktualizacje strony, uploady produktów, poprawki treści, nowe podstrony. Nie potrzebujesz agencji — potrzebujesz kogoś kto to ogarnie.",
-    stats: { price: "200-1500 zł", time: "1-7 dni", scope: "CMS", mode: "pilot" },
-    examples: ["Aktualizacje treści na stronie", "Upload produktów do sklepu", "Optymalizacja SEO on-page", "Tworzenie podstron w CMS", "Migracja treści"],
-    funFact: "Strony aktualizowane co miesiąc generują 6× więcej ruchu organicznego.",
-  },
-  "Analiza i raporty": {
-    icon: BarChart,
-    description: "Masz dane, ale nikt ich nie czyta. Potrzebujesz dashboardu, raportu tygodniowego lub analizy rynku — bez angażowania analityka na etat.",
-    stats: { price: "300-2000 zł", time: "2-7 dni", scope: "raporty", mode: "pilot" },
-    examples: ["Dashboardy w Google Sheets / Excel", "Raporty sprzedażowe", "Analiza rynku i konkurencji", "Segmentacja klientów", "Wizualizacje danych"],
-    funFact: "Firmy podejmujące decyzje na danych rosną 2× szybciej.",
-  },
-  "Wideo i multimedia": {
-    icon: Video,
-    description: "Masz nagrania, potrzebujesz efektu. Montaż, obróbka, reels, animacje — bez agencji kreatywnej.",
-    stats: { price: "300-2000 zł", time: "3-10 dni", scope: "multimedia", mode: "pilot" },
-    examples: ["Montaż wideo promocyjnych", "Reels i shorty na social", "Animacje prezentacji", "Obróbka zdjęć produktowych", "Napisy i subtitles"],
-    funFact: "Posty wideo generują 49% więcej interakcji niż statyczne grafiki.",
-  },
-  "Programowanie i IT": {
-    icon: Code,
-    description: "Skrypt, integracja, automatyzacja, mały serwis. Zadania IT które nie uzasadniają zatrudniania dewelopera — ale muszą być zrobione.",
-    stats: { price: "500-5000 zł", time: "3-14 dni", scope: "automatyzacje", mode: "pilot" },
-    examples: ["Automatyzacja powtarzalnych procesów", "Integracje API / Zapier", "Skrypty w Python / Excel", "Małe aplikacje webowe", "Poprawki na stronie"],
-    funFact: "Automatyzacja jednego powtarzalnego procesu oszczędza średnio 5h tygodniowo.",
-  },
-  "Tłumaczenia": {
-    icon: Languages,
-    description: "Materiały do wysyłki za granicę, umowy, strona w obcym języku. Szybko, bez agencji tłumaczeniowej.",
-    stats: { price: "50-500 zł", time: "1-5 dni", scope: "lokalizacja", mode: "pilot" },
-    examples: ["Tłumaczenia ofert i umów", "Lokalizacja strony www", "Materiały marketingowe EN/DE/ES", "Korespondencja handlowa", "Podtytuły do wideo"],
-    funFact: "Materiały w języku klienta zwiększają konwersję o 70%.",
-  },
-  "Automatyzacje AI": {
-    icon: Bot,
-    description: "Chcesz wdrożyć AI ale nie wiesz od czego zacząć? Chatbot, automatyczny raport, asystent mailowy — konkretne wdrożenia, nie konsulting.",
-    stats: { price: "500-3000 zł", time: "3-14 dni", scope: "AI w ops", mode: "pilot" },
-    examples: ["Chatbot na stronie / w CRM", "Automatyzacja z GPT w procesach", "Asystent mailowy AI", "Generowanie raportów AI", "Skróty i automatyczne podsumowania"],
-    funFact: "Firmy wdrażające AI w Ops oszczędzają średnio 15h/tydzień.",
-  },
+  price: string;
+  label: string;
+  icon: IconComponent;
+  color: string;
 };
 
-function RevealOnScroll({ children, className }: { children: React.ReactNode; className?: string; delay?: number }) {
+type PricingCard = {
+  label: string;
+  value: string;
+  sub: string;
+  points: string[];
+  featured?: boolean;
+};
+
+const navLinks = [
+  { label: "Jak to dziala", href: "#jak-dziala" },
+  { label: "Bezpieczenstwo", href: "#bezpieczenstwo" },
+  { label: "Pakiety", href: "#pakiety" },
+  { label: "Cennik", href: "#cennik" },
+  { label: "Dla studentow", href: "/auth?role=student" },
+];
+
+const trustPills = [
+  { label: "Escrow", icon: ShieldCheck },
+  { label: "Umowy A/B online", icon: FileCheck2 },
+  { label: "Kontrola jakosci", icon: Users },
+  { label: "Faktura VAT + PIT", icon: ClipboardCheck },
+  { label: "Tryb sporu", icon: MessageSquare },
+  { label: "Platnosci: Stripe", icon: LockKeyhole },
+];
+
+const safetyCards = [
+  {
+    title: "Escrow",
+    description: "Platnosc zablokowana do czasu, az zaakceptujesz efekt. Zero placenia w ciemno.",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Zweryfikowani studenci",
+    description: "Zadanie probne, portfolio i wlasciwy kierunek studiow. Wykonawca nie jest przypadkowy.",
+    icon: Users,
+  },
+  {
+    title: "Dwie umowy A/B",
+    description: "Firma i student akceptuja umowy online, zanim w ogole ruszy platnosc.",
+    icon: FileCheck2,
+  },
+  {
+    title: "Kontrola jakosci",
+    description: "Operator sprawdza prace checklista jakosci, zanim trafi do Ciebie. Nie loteria.",
+    icon: Sparkles,
+  },
+  {
+    title: "Placic za efekt",
+    description: "Akceptujesz kazdy etap. Auto-akceptacja po terminie chroni tez wykonawce.",
+    icon: Banknote,
+  },
+  {
+    title: "Spor i oceny",
+    description: "Zglos problem do panelu admina. Po zleceniu publiczne oceny obu stron.",
+    icon: MessageSquare,
+  },
+];
+
+const steps = [
+  {
+    number: "1",
+    title: "Wybierasz pakiet lub wystawiasz zlecenie",
+    description: "Gotowy pakiet ze stala cena, jasnym zakresem i terminem. Albo opisujesz wlasne zadanie w 5 minut.",
+    icon: PenLine,
+  },
+  {
+    number: "2",
+    title: "Student realizuje pod kontrola jakosci",
+    description: "Przydzielamy zweryfikowanego wykonawce wlasciwego kierunku. Praca idzie przez czat i modul dostaw.",
+    icon: Users,
+  },
+  {
+    number: "3",
+    title: "Akceptujesz efekt - platnosc z escrow",
+    description: "Zadowolony? Srodki trafiaja do studenta. Fakture, rachunek i PIT rozliczamy my.",
+    icon: Check,
+  },
+];
+
+const packages: PackageCard[] = [
+  {
+    title: "Grafiki social media (komplet)",
+    description: "Spojny zestaw postow i stories pod Twoja marke.",
+    price: "od 299 zl",
+    label: "Grafika",
+    icon: WandSparkles,
+    color: "from-violet-500 to-purple-500",
+  },
+  {
+    title: "Prezentacja / pitch deck (PPT)",
+    description: "Profesjonalne slajdy gotowe na spotkanie albo inwestora.",
+    price: "od 399 zl",
+    label: "Prezentacje",
+    icon: BarChart3,
+    color: "from-blue-500 to-indigo-500",
+  },
+  {
+    title: "Montaz Reels / krotkie wideo",
+    description: "Dynamiczny montaz pod social media - ciecia i napisy.",
+    price: "od 349 zl",
+    label: "Wideo",
+    icon: Video,
+    color: "from-cyan-500 to-sky-500",
+  },
+  {
+    title: "Retusz zdjec produktowych",
+    description: "Czyste tlo, rowne kolory - sklepowy standard.",
+    price: "od 199 zl",
+    label: "Grafika",
+    icon: Sparkles,
+    color: "from-pink-500 to-rose-500",
+  },
+  {
+    title: "Wizytowka Google (Business Profile)",
+    description: "Pelny setup, zeby klienci znalezli Cie w mapach.",
+    price: "od 249 zl",
+    label: "Marketing",
+    icon: BriefcaseBusiness,
+    color: "from-amber-500 to-orange-500",
+  },
+  {
+    title: "Korekta i redakcja tekstu (PL)",
+    description: "Tekst bez literowek i kalek - strona, oferta, regulamin.",
+    price: "od 149 zl",
+    label: "Copywriting",
+    icon: PenLine,
+    color: "from-teal-600 to-emerald-500",
+  },
+];
+
+const pricingCards: PricingCard[] = [
+  {
+    label: "Pakiet z katalogu",
+    value: "25%",
+    sub: "prowizji, wliczonej w stala cene",
+    points: ["Cena z katalogu = cena, ktora placisz", "Pelne finansowanie z gory w escrow", "Bez negocjacji i niespodzianek"],
+  },
+  {
+    label: "Wlasne zlecenie / gielda",
+    value: "15%",
+    sub: "prowizji - minimum 39 zl",
+    points: ["Wlasne ogloszenia i zlecenia potorne", "Mozliwa negocjacja i podzial na etapy", "Escrow na kazdym etapie pracy"],
+  },
+  {
+    label: "Abonament",
+    value: "0 zl",
+    sub: "miesiecznie - zawsze",
+    points: ["Brak oplat za samo posiadanie konta", "Placisz tylko za realne, udane zlecenia", "Interes platformy = Twoj interes"],
+    featured: true,
+  },
+];
+
+const testimonials = [
+  {
+    name: "Marek K.",
+    role: "wlasciciel sklepu e-commerce",
+    initials: "MK",
+    text: "Wrzucilem zalegly backlog grafik na social media - komplet dostalem w cztery dni i bez sciagania kogokolwiek na etat.",
+  },
+  {
+    name: "Anna B.",
+    role: "biuro rachunkowe, 6 osob",
+    initials: "AB",
+    text: "Najbardziej przekonalo mnie, ze place dopiero po akceptacji. Pierwszy raz zlecilam cos online zupelnie bez stresu.",
+  },
+  {
+    name: "Tomasz L.",
+    role: "founder, startup B2B",
+    initials: "TL",
+    text: "Prezentacja dla inwestorow gotowa w trzy dni i w stalej cenie. Kontrola jakosci wylapala literowki, ktorych nie zauwazylem.",
+  },
+];
+
+const faqs = [
+  {
+    question: "Czy wspolpraca jest legalna i bezpieczna?",
+    answer:
+      "Tak. Kazde zlecenie obejmuja dwie umowy, ktore obie strony akceptuja online. Wystawiamy fakture VAT firmie, rachunek studentowi, a podatek PIT rozliczamy po naszej stronie. Platnosci obsluguje Stripe.",
+  },
+  {
+    question: "Kiedy faktycznie place za zlecenie?",
+    answer: "Srodki trafiaja do escrow przed startem, ale student otrzymuje wyplate dopiero po akceptacji efektu lub po auto-akceptacji po terminie.",
+  },
+  {
+    question: "Co, jesli student nie dowiezie albo efekt jest slaby?",
+    answer: "Mozesz poprosic o poprawki albo zglosic spor. Do czasu rozstrzygniecia platnosc pozostaje zablokowana.",
+  },
+  {
+    question: "Jak weryfikujecie studentow?",
+    answer: "Sprawdzamy profil, kierunek, portfolio, jakosc komunikacji i dopasowanie do kategorii zadania.",
+  },
+  {
+    question: "Czy dostane fakture VAT?",
+    answer: "Tak. Firma rozlicza sie z platforma, a formalnosci po stronie studenta przejmuje Student Impact.",
+  },
+  {
+    question: "Ile to kosztuje?",
+    answer: "Pakiety maja stale ceny, a wlasne zlecenia dzialaja prowizyjnie. Nie ma abonamentu za samo konto.",
+  },
+];
+
+function LogoMark({ dark = false }: { dark?: boolean }) {
   return (
-    <div className={className}>
+    <div className="flex items-center gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0f2460] shadow-sm ring-1 ring-white/15">
+        <span className="text-sm font-black text-[#c5fb37]">S2</span>
+      </div>
+      <span className={`text-xl font-black tracking-tight ${dark ? "text-white" : "text-[#0f2460]"}`}>
+        Student<span className="text-[#25d49f]">2</span>Work
+      </span>
+    </div>
+  );
+}
+
+function SectionBadge({ children, dark = false }: { children: string; dark?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-black ${
+        dark ? "border-lime-300/20 bg-lime-300/10 text-lime-200" : "border-slate-200 bg-white text-[#0f2460]"
+      }`}
+    >
+      <Zap className="h-3.5 w-3.5" />
       {children}
+    </span>
+  );
+}
+
+function HomeNav() {
+  return (
+    <nav className="sticky top-0 z-50 border-b border-slate-100 bg-white/95 backdrop-blur-xl">
+      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <Link href="/" className="shrink-0">
+          <LogoMark />
+        </Link>
+
+        <div className="hidden items-center gap-8 lg:flex">
+          {navLinks.map((link) => (
+            <a key={link.href} href={link.href} className="text-sm font-black text-slate-500 transition hover:text-[#0f2460]">
+              {link.label}
+            </a>
+          ))}
+        </div>
+
+        <div className="hidden items-center gap-3 md:flex">
+          <Button asChild variant="ghost" className="rounded-full px-5 font-black text-[#0f2460] hover:bg-slate-50">
+            <Link href="/auth">Zaloguj sie</Link>
+          </Button>
+          <Button asChild className="h-12 rounded-full bg-[#c5fb37] px-7 font-black text-[#0f2460] shadow-[0_16px_42px_-18px_rgba(197,251,55,0.9)] hover:bg-[#b7f22b]">
+            <Link href="/auth?role=company">Deleguj zadanie</Link>
+          </Button>
+        </div>
+
+        <details className="group md:hidden">
+          <summary className="flex cursor-pointer list-none rounded-xl p-2 text-[#0f2460] hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+            <span className="sr-only">Otworz menu</span>
+            <Menu className="h-6 w-6 group-open:hidden" />
+            <X className="hidden h-6 w-6 group-open:block" />
+          </summary>
+          <div className="fixed left-0 right-0 top-20 border-t border-slate-100 bg-white px-4 py-5 shadow-2xl">
+            <div className="grid gap-1">
+              {navLinks.map((link) => (
+                <a key={link.href} href={link.href} className="rounded-xl px-3 py-3 text-sm font-black text-slate-600 hover:bg-slate-50">
+                  {link.label}
+                </a>
+              ))}
+            </div>
+            <Button asChild className="mt-4 h-12 w-full rounded-full bg-[#c5fb37] font-black text-[#0f2460] hover:bg-[#b7f22b]">
+              <Link href="/auth?role=company">Deleguj zadanie</Link>
+            </Button>
+          </div>
+        </details>
+      </div>
+    </nav>
+  );
+}
+
+function HeroMockup() {
+  const candidates = ["AK", "MB", "PW", "KN"];
+
+  return (
+    <div className="relative">
+      <div className="absolute -right-5 -top-5 rounded-full bg-emerald-500 px-5 py-2 text-xs font-black text-white shadow-xl shadow-emerald-200">
+        Platnosc po akceptacji
+      </div>
+      <div className="rounded-[1.65rem] border border-slate-100 bg-white p-6 shadow-[0_28px_80px_-44px_rgba(15,36,96,0.75)]">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-black text-[#0f2460]">Nowe zlecenie - #4821</p>
+          </div>
+          <div className="flex gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-rose-300" />
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {[
+            ["Tytul projektu", "w-4/5"],
+            ["Kategoria uslugi", "w-1/2"],
+            ["Budzet (PLN)", "w-1/3"],
+          ].map(([label, width]) => (
+            <div key={label}>
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+              <div className="rounded-xl bg-[#f4f7ef] p-3">
+                <div className={`h-2.5 rounded-full bg-slate-300 ${width}`} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 border-t border-slate-100 pt-5">
+          <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+            Kandydaci - 4 zweryfikowanych
+          </p>
+          <div className="grid grid-cols-4 gap-3">
+            {candidates.map((candidate, index) => (
+              <div key={candidate} className={`rounded-xl border p-3 text-center ${index === 0 ? "border-lime-200 bg-lime-100" : "border-slate-100 bg-white"}`}>
+                <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-[#0f2460] text-xs font-black text-white">
+                  {candidate}
+                </div>
+                <p className="mt-2 text-xs font-black text-amber-500">★ 4,{9 - index}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-0.5 h-5 w-5 text-emerald-500" />
+            <div>
+              <p className="text-sm font-black text-[#0f2460]">Escrow aktywne - umowy A/B podpisane</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">2 400 PLN zablokowane do akceptacji</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="absolute -bottom-5 -left-5 rounded-full border border-slate-100 bg-white px-4 py-2 text-xs font-black text-[#0f2460] shadow-xl">
+        ★ 4,9 - kontrola jakosci
+      </div>
+    </div>
+  );
+}
+
+function HomeHero() {
+  return (
+    <section className="relative overflow-hidden bg-[linear-gradient(105deg,#ffffff_0%,#ffffff_57%,#f3ffd6_100%)]">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,36,96,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(15,36,96,0.025)_1px,transparent_1px)] bg-[size:52px_52px]" />
+      <div className="relative mx-auto grid min-h-[580px] max-w-7xl items-center gap-12 px-4 py-10 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:px-8 lg:py-12">
+        <div>
+          <div className="mb-7 inline-flex items-center gap-2 rounded-full bg-[#eaffae] px-4 py-2 text-sm font-black text-[#0f2460]">
+            <Zap className="h-4 w-4" />
+            Dla malych i srednich firm w Polsce
+          </div>
+          <h1 className="max-w-3xl text-5xl font-black leading-[1.04] text-[#0f2460] sm:text-6xl lg:text-[4.25rem]">
+            Deleguj zadania tam, gdzie nie oplaca sie{" "}
+            <span className="relative inline-block">
+              <span className="relative z-10">zatrudniac.</span>
+              <span className="absolute bottom-1 left-0 right-0 z-0 h-5 bg-[#c5fb37]" />
+            </span>
+          </h1>
+          <p className="mt-6 max-w-2xl text-lg font-semibold leading-8 text-slate-600">
+            Wybierasz gotowy pakiet w stalej cenie, zweryfikowany student realizuje go pod kontrola jakosci, a Ty placisz dopiero po akceptacji efektu. Umowy, fakture i podatki bierzemy na siebie.
+          </p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <Button asChild className="h-14 rounded-full bg-[#c5fb37] px-7 text-base font-black text-[#0f2460] shadow-xl shadow-lime-200/70 hover:bg-[#b7f22b]">
+              <Link href="/auth?role=company">
+                Deleguj pierwsze zadanie
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-14 rounded-full border-slate-200 bg-white px-7 text-base font-black text-[#0f2460] hover:bg-slate-50">
+              <a href="#bezpieczenstwo">
+                <ShieldCheck className="mr-2 h-5 w-5" />
+                Jak chronimy Twoje pieniadze
+              </a>
+            </Button>
+          </div>
+          <div className="mt-7 grid gap-3 text-sm font-black text-slate-500 sm:grid-cols-2">
+            {["Platnosc dopiero po akceptacji", "Zweryfikowani studenci", "Start w 24 godziny"].map((item) => (
+              <div key={item} className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="hidden lg:block">
+          <HeroMockup />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TrustStrip() {
+  return (
+    <section className="border-y border-slate-100 bg-white px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center">
+        <p className="max-w-[14rem] text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+          Bezpieczenstwo wbudowane w kazde zlecenie
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {trustPills.map(({ label, icon: Icon }) => (
+            <span key={label} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-[#0f2460]">
+              <Icon className="h-4 w-4 text-slate-500" />
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MarketSection() {
+  const pains = [
+    { value: "24,9%", label: "Jakosc pracy" },
+    { value: "22,8%", label: "Terminowosc" },
+    { value: "21,8%", label: "Kompetencje wykonawcy" },
+  ];
+
+  return (
+    <section className="bg-[#f4f7ef] px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <div>
+          <SectionBadge>Rynek freelancingu 2025</SectionBadge>
+          <h2 className="mt-7 max-w-xl text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Polskie firmy juz zlecaja na zewnatrz. Trzy rzeczy je powstrzymuja.
+          </h2>
+          <div className="mt-6 flex items-end gap-3">
+            <span className="text-7xl font-black leading-none text-[#0f2460]">56%</span>
+            <span className="mb-2 max-w-[14rem] text-sm font-bold leading-5 text-slate-500">
+              firm zleca freelancerom co najmniej raz w miesiacu
+            </span>
+          </div>
+          <p className="mt-8 max-w-lg text-lg font-semibold leading-8 text-slate-600">
+            A 74% z nich utrzyma lub zwiekszy skale wspolpracy. Pytanie nie brzmi juz czy zlecac - tylko komu zaufac.
+          </p>
+          <p className="mt-6 text-sm font-bold text-slate-400">Dane: Useme - raport o rynku freelancingu w Polsce, 2025.</p>
+        </div>
+
+        <div className="space-y-5">
+          {pains.map((pain) => (
+            <div key={pain.label} className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-5">
+                <span className="min-w-[7rem] text-4xl font-black text-[#0f2460]">{pain.value}</span>
+                <div className="flex-1">
+                  <p className="mb-2 text-lg font-black text-[#0f2460]">{pain.label}</p>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full w-[86%] rounded-full bg-[#2e49a3]" />
+                  </div>
+                </div>
+                <span className="text-sm font-black text-emerald-500">rozwiazujemy</span>
+              </div>
+            </div>
+          ))}
+          <div className="rounded-2xl bg-[#0f2460] p-6 text-white shadow-xl shadow-slate-300">
+            <div className="flex gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-lime-300/15 text-[#c5fb37]">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <p className="font-bold leading-7 text-white/86">
+                To dokladnie te trzy bole rozwiazujemy - kuracja wykonawcow, kontrola jakosci i escrow. Lider rynku ich nie dotyka.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SafetySection() {
+  return (
+    <section id="bezpieczenstwo" className="bg-[linear-gradient(135deg,#071739_0%,#10286a_100%)] px-4 py-20 text-white sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge dark>Bezpieczenstwo</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight sm:text-5xl">
+            Twoje pieniadze sa pod kontrola na kazdym kroku.
+          </h2>
+          <p className="mt-5 text-lg font-semibold leading-8 text-white/70">
+            Nie placisz w ciemno, student nie pracuje na slowo, a platforma sprawdza jakosc, zanim cokolwiek do Ciebie trafi.
+          </p>
+        </div>
+
+        <div className="mt-14 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+          <div className="rounded-[1.65rem] border border-white/10 bg-white/[0.06] p-7 shadow-2xl shadow-slate-950/20">
+            <div className="mb-8 flex items-center justify-between">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">Escrow - #ESC-4821</p>
+              <span className="rounded-full bg-emerald-400/20 px-4 py-1.5 text-xs font-black text-emerald-200">Aktywne</span>
+            </div>
+            <div className="text-5xl font-black">2 400 <span className="text-xl text-white/45">PLN</span></div>
+            <p className="mt-3 text-sm font-bold text-white/45">Zablokowane - uwolnienie po akceptacji</p>
+
+            <div className="mt-8 grid grid-cols-3 overflow-hidden rounded-xl bg-white/8 text-center">
+              {[
+                ["Firma", "TechStart"],
+                ["Escrow", "2 400 zl"],
+                ["Student", "Aleksandra K."],
+              ].map(([label, value]) => (
+                <div key={label} className="border-r border-white/10 px-3 py-4 last:border-r-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/35">{label}</p>
+                  <p className="mt-1 text-sm font-black">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 space-y-5 text-sm font-bold">
+              {["Srodki zablokowane", "Prace w toku", "Kontrola jakosci - akceptacja", "Wyplata do studenta"].map((item, index) => (
+                <div key={item} className={`flex items-center justify-between ${index > 1 ? "text-white/35" : "text-white"}`}>
+                  <span className="inline-flex items-center gap-3">
+                    <span className={`h-3 w-3 rounded-full ${index === 0 ? "bg-emerald-400" : index === 1 ? "bg-[#c5fb37]" : "bg-white/10"}`} />
+                    {item}
+                  </span>
+                  <span className="text-xs text-white/35">{index === 0 ? "12 kwi" : index === 1 ? "teraz" : index === 2 ? "prognoza 20 kwi" : "auto po akceptacji"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {safetyCards.map(({ title, description, icon: Icon }) => (
+              <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.06] p-6">
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-lime-300/12 text-[#c5fb37]">
+                  <Icon className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-black">{title}</h3>
+                <p className="mt-3 text-sm font-semibold leading-6 text-white/60">{description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StepsSection() {
+  return (
+    <section id="jak-dziala" className="bg-white px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge>Jak to dziala</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Trzy kroki. Zero formalnosci po Twojej stronie.
+          </h2>
+          <p className="mt-5 text-lg font-semibold leading-8 text-slate-600">
+            Tak jak na gieldzie zlecen - tylko z kuracja wykonawcy, kontrola jakosci i bezpieczna platnoscia.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {steps.map(({ number, title, description, icon: Icon }) => (
+            <div key={number} className="rounded-[1.35rem] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-7 flex items-center justify-between">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#c5fb37] text-sm font-black text-[#0f2460]">{number}</span>
+                <Icon className="h-7 w-7 text-slate-300" />
+              </div>
+              <h3 className="text-xl font-black leading-snug text-[#0f2460]">{title}</h3>
+              <p className="mt-4 text-sm font-semibold leading-6 text-slate-500">{description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PackagesSection() {
+  return (
+    <section id="pakiety" className="bg-[#f4f7ef] px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge>Katalog pakietow</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Gotowe pakiety w stalej cenie.
+          </h2>
+          <p className="mt-5 text-lg font-semibold leading-8 text-slate-600">
+            Wybierasz efekt, my dobieramy zweryfikowanego wykonawce. Bez negocjacji, bez niespodzianek.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {packages.map(({ title, description, price, label, icon: Icon, color }) => (
+            <Link key={title} href="/app/company/packages" className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+              <div className={`h-20 bg-gradient-to-r ${color} p-5`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-white">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <span className="rounded-full bg-white/25 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white">
+                    {label}
+                  </span>
+                </div>
+              </div>
+              <div className="p-6">
+                <h3 className="text-lg font-black leading-tight text-[#0f2460]">{title}</h3>
+                <p className="mt-3 min-h-12 text-sm font-semibold leading-6 text-slate-500">{description}</p>
+                <div className="mt-7 flex items-center justify-between border-t border-slate-100 pt-5">
+                  <span className="text-xl font-black text-[#0f2460]">{price} <span className="text-xs font-bold text-slate-400">brutto</span></span>
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-[#0f2460] transition group-hover:bg-[#c5fb37]">
+                    <ArrowRight className="h-5 w-5" />
+                  </span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+
+        <div className="mt-6 rounded-2xl bg-[#0f2460] p-6 text-white shadow-xl shadow-slate-300">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[#c5fb37]">
+                <Plus className="h-7 w-7" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black">Nie ma Twojego zadania?</h3>
+                <p className="mt-1 text-sm font-semibold text-white/60">Opisz, czego szukasz - studenci zloza Ci dopasowane oferty na gieldzie.</p>
+              </div>
+            </div>
+            <Button asChild className="h-14 rounded-full bg-[#c5fb37] px-8 font-black text-[#0f2460] hover:bg-[#b7f22b]">
+              <Link href="/app/company/jobs/new">Wystaw wlasne zlecenie</Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-8 text-center">
+          <Button asChild variant="outline" className="h-12 rounded-full border-slate-200 bg-white px-7 font-black text-[#0f2460]">
+            <Link href="/app/company/packages">
+              Zobacz caly katalog pakietow
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PricingSection() {
+  return (
+    <section id="cennik" className="bg-white px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge>Cennik</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Placisz tylko, gdy dostajesz efekt.
+          </h2>
+          <p className="mt-5 text-lg font-semibold leading-8 text-slate-600">
+            Zero abonamentow. Prowizja to jedyny przychod platformy - zarabiamy wylacznie na udanych zleceniach.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-5 lg:grid-cols-3">
+          {pricingCards.map((card) => (
+            <div key={card.label} className={`rounded-2xl border p-7 shadow-sm ${card.featured ? "border-[#0f2460] bg-[#0f2460] text-white shadow-2xl shadow-slate-300" : "border-slate-200 bg-white text-[#0f2460]"}`}>
+              <div className="mb-5 flex items-center justify-between">
+                <p className={`text-xs font-black uppercase tracking-[0.16em] ${card.featured ? "text-[#c5fb37]" : "text-slate-500"}`}>{card.label}</p>
+                {card.featured ? (
+                  <span className="rounded-full bg-[#c5fb37] px-3 py-1 text-[10px] font-black uppercase text-[#0f2460]">Zero oplat stalych</span>
+                ) : null}
+              </div>
+              <p className="text-5xl font-black">{card.value}</p>
+              <p className={`mt-1 text-sm font-semibold ${card.featured ? "text-white/55" : "text-slate-500"}`}>{card.sub}</p>
+              <ul className="mt-7 space-y-4">
+                {card.points.map((point) => (
+                  <li key={point} className="flex gap-3 text-sm font-semibold">
+                    <Check className={`mt-0.5 h-4 w-4 shrink-0 ${card.featured ? "text-[#c5fb37]" : "text-emerald-500"}`} />
+                    <span className={card.featured ? "text-white/80" : "text-slate-600"}>{point}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TestimonialsSection() {
+  return (
+    <section className="bg-slate-100/70 px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge>Opinie</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Mniej chaosu. Wiecej zrobionych rzeczy.
+          </h2>
+          <p className="mt-5 text-lg font-semibold leading-8 text-slate-600">
+            Przykladowe opinie z pilotazu - do podmiany na realne po pierwszych zleceniach.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {testimonials.map((item) => (
+            <div key={item.name} className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
+              <div className="mb-6 flex gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star key={star} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                ))}
+              </div>
+              <p className="min-h-28 text-base font-semibold leading-7 text-[#0f2460]">&quot;{item.text}&quot;</p>
+              <div className="mt-6 flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0f2460] text-sm font-black text-white">{item.initials}</div>
+                <div>
+                  <p className="font-black text-[#0f2460]">{item.name}</p>
+                  <p className="text-sm font-semibold text-slate-400">{item.role}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FAQSection() {
+  return (
+    <section id="faq" className="bg-white px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl">
+        <div className="text-center">
+          <SectionBadge>FAQ</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Pytania, ktore zadaja firmy.
+          </h2>
+        </div>
+
+        <div className="mt-10 space-y-3">
+          {faqs.map((faq, index) => (
+            <details key={faq.question} open={index === 0} className="group rounded-2xl border border-slate-200 bg-white p-5 open:border-lime-300 open:shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-black text-[#0f2460] [&::-webkit-details-marker]:hidden">
+                <span>{faq.question}</span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-[#0f2460] group-open:bg-[#c5fb37]">
+                  <Plus className="h-5 w-5 group-open:hidden" />
+                  <X className="hidden h-5 w-5 group-open:block" />
+                </span>
+              </summary>
+              <p className="mt-5 text-sm font-semibold leading-7 text-slate-600">{faq.answer}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FinalCTA() {
+  return (
+    <section className="relative overflow-hidden bg-[#c5fb37] px-4 py-24 sm:px-6 lg:px-8">
+      <div className="absolute -left-24 -top-36 h-80 w-80 rounded-full border border-[#0f2460]/10" />
+      <div className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full border border-[#0f2460]/10" />
+      <div className="relative mx-auto max-w-5xl text-center">
+        <h2 className="text-4xl font-black leading-tight text-[#0f2460] sm:text-6xl">
+          Deleguj pierwsze zadanie. Zaplac dopiero za efekt.
+        </h2>
+        <p className="mx-auto mt-7 max-w-3xl text-xl font-semibold leading-8 text-[#0f2460]/75">
+          Rejestracja zajmuje 2 minuty. Bez abonamentu, bez zobowiazan, bez ryzyka.
+        </p>
+        <div className="mt-9 flex flex-col justify-center gap-4 sm:flex-row">
+          <Button asChild className="h-14 rounded-full bg-[#0f2460] px-9 text-base font-black text-white hover:bg-[#071739]">
+            <Link href="/auth?role=company">
+              Deleguj zadanie
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="h-14 rounded-full border-[#0f2460] bg-transparent px-9 text-base font-black text-[#0f2460] hover:bg-[#0f2460]/5">
+            <Link href="/auth?role=student">Zacznij jako student</Link>
+          </Button>
+        </div>
+        <p className="mt-8 text-base font-black text-[#0f2460]/55">
+          Bezplatna rejestracja · Platnosc po akceptacji · Faktura i PIT po naszej stronie
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function HomeFooter() {
+  return (
+    <footer className="bg-[#071739] px-4 py-16 text-white sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid gap-12 lg:grid-cols-[1.2fr_2fr]">
+          <div>
+            <LogoMark dark />
+            <p className="mt-7 max-w-sm text-lg font-semibold leading-8 text-white/62">
+              Operacyjne wsparcie dla malych i srednich firm. Deleguj zadania zweryfikowanym studentom - bez etatu, bez rekrutacji, z platnoscia po akceptacji.
+            </p>
+          </div>
+
+          <div className="grid gap-8 sm:grid-cols-3">
+            {[
+              { title: "Platforma", links: [["Jak to dziala", "#jak-dziala"], ["Bezpieczenstwo", "#bezpieczenstwo"], ["Katalog pakietow", "#pakiety"], ["Cennik", "#cennik"]] },
+              { title: "Dla firm", links: [["Deleguj zadanie", "/auth?role=company"], ["Jak dziala escrow", "#bezpieczenstwo"], ["Wystaw ogloszenie", "/app/company/jobs/new"]] },
+              { title: "Dla studentow", links: [["Gielda zlecen", "/auth?role=student"], ["Jak zaczac", "/auth?role=student"], ["Wyplaty i PIT", "/auth?role=student"]] },
+            ].map((group) => (
+              <div key={group.title}>
+                <p className="mb-6 text-sm font-black uppercase tracking-[0.22em] text-white/35">{group.title}</p>
+                <div className="grid gap-4">
+                  {group.links.map(([label, href]) => (
+                    <Link key={label} href={href} className="text-lg font-semibold text-white/65 hover:text-white">
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-16 grid gap-8 border-t border-white/10 pt-8 text-sm font-semibold text-white/55 md:grid-cols-[1fr_auto] md:items-center">
+          <div className="grid gap-4 sm:grid-cols-3 sm:max-w-md">
+            <Link href="/regulamin" className="hover:text-white">Regulamin</Link>
+            <Link href="/polityka-prywatnosci" className="hover:text-white">Polityka prywatnosci</Link>
+            <Link href="/polityka-prywatnosci" className="hover:text-white">RODO</Link>
+          </div>
+          <div className="flex flex-col gap-3 md:items-end">
+            <p>© 2026 Student2Work. Wszelkie prawa zastrzezone.</p>
+            <p className="inline-flex items-center gap-2 text-emerald-300">
+              <ShieldCheck className="h-4 w-4" />
+              Platnosci chronione systemem escrow (Stripe)
+            </p>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+function MobileCTA() {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-16px_40px_-24px_rgba(15,23,42,0.55)] backdrop-blur-xl md:hidden">
+      <Button asChild className="h-12 w-full rounded-full bg-[#c5fb37] font-black text-[#0f2460] hover:bg-[#b7f22b]">
+        <Link href="/auth?role=company">Deleguj pierwsze zadanie</Link>
+      </Button>
     </div>
   );
 }
 
 export default function LandingPage() {
-  const navLinks = [
-    { label: "Jak to działa", href: "#jak-dziala" },
-    { label: "Zadania", href: "#usługi" },
-    { label: "Dla kogo", href: "#dla-firm" },
-    { label: "Opinie", href: "#opinie" },
-  ];
-
   return (
-    <div className="min-h-screen bg-white font-sans text-[#1a1a2e] overflow-x-hidden">
-
-      {/* ══════════════════════════════════════════
-          NAVIGATION
-      ══════════════════════════════════════════ */}
-      <nav className="fixed top-0 z-50 w-full bg-[#0f2460]/95 backdrop-blur-xl border-b border-white/10">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 text-lg font-extrabold text-white sm:text-xl">
-            <span className="text-2xl">🎓</span>
-            <span>Student<span className="text-[#7c8ef7]">2</span>Work</span>
-          </Link>
-
-          {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-8">
-            {navLinks.map(link => (
-              <a key={link.label} href={link.href} className="text-sm font-semibold text-white/70 hover:text-white transition-colors">
-                {link.label}
-              </a>
-            ))}
-          </div>
-
-          {/* CTA buttons */}
-          <div className="hidden md:flex items-center gap-3">
-            <Link href="/auth">
-              <Button variant="ghost" className="text-white/80 hover:text-white hover:bg-white/10 rounded-full px-5 font-semibold">
-                Zaloguj się
-              </Button>
-            </Link>
-            <Link href="/auth?role=company">
-              <Button className="rounded-full px-6 bg-[#5367d9] hover:bg-[#4658c7] text-white font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105">
-                Deleguj pierwsze zadanie
-              </Button>
-            </Link>
-          </div>
-
-          {/* Mobile menu */}
-          <details className="group md:hidden">
-            <summary
-              aria-controls="mobile-navigation"
-              className="relative z-10 flex cursor-pointer list-none rounded-xl p-2 text-white hover:bg-white/10 [&::-webkit-details-marker]:hidden"
-            >
-              <span className="sr-only">Otwórz menu</span>
-              <Menu className="h-6 w-6 group-open:hidden" />
-              <X className="hidden h-6 w-6 group-open:block" />
-            </summary>
-            <div
-              id="mobile-navigation"
-              className="fixed left-0 right-0 top-[64px] z-50 space-y-4 border-t border-white/10 bg-[#0f2460] px-4 py-4 shadow-2xl sm:px-6 md:hidden"
-            >
-              {navLinks.map(link => (
-                <a key={link.label} href={link.href} className="block text-white/80 font-semibold py-2">
-                  {link.label}
-                </a>
-              ))}
-              <div className="flex flex-col gap-3 pt-2">
-                <Link href="/auth"><Button variant="outline" className="w-full border-white/20 text-white rounded-full">Zaloguj się</Button></Link>
-                <Link href="/auth?role=company"><Button className="w-full bg-[#5367d9] text-white rounded-full font-bold">Zatrudnij studenta</Button></Link>
-              </div>
-            </div>
-          </details>
-        </div>
-      </nav>
-
+    <div className="min-h-screen overflow-x-hidden bg-white font-sans text-slate-950">
+      <HomeNav />
       <main>
-
-      {/* ══════════════════════════════════════════
-          HERO
-      ══════════════════════════════════════════ */}
-      <section className="relative flex overflow-hidden bg-[#0f2460] pt-16 md:min-h-[100svh] md:items-center md:pt-20">
-        {/* Background decor */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#7c8ef7]/10 rounded-full blur-[120px]" />
-          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[100px]" />
-          {/* Grid lines */}
-          <div className="absolute inset-0 opacity-[0.04]"
-            style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
-        </div>
-
-        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-24 lg:py-32">
-          <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
-            {/* Left: text */}
-            <div>
-              <RevealOnScroll>
-                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#7c8ef7]/30 bg-[#7c8ef7]/10 px-3 py-1.5 text-xs font-semibold text-[#a5b4fc] sm:mb-8 sm:px-4 sm:text-sm">
-                  <Zap className="w-4 h-4" />
-                  Dla właścicieli firm, founderów i managerów
-                </div>
-              </RevealOnScroll>
-
-              <RevealOnScroll delay={100}>
-                <h1 className="mb-5 text-[2.15rem] font-extrabold leading-[1.08] text-white sm:mb-6 sm:text-5xl lg:text-6xl">
-                  Deleguj zadania,{" "}
-                  tam gdzie nie opłaca się{" "}
-                  <span className="relative inline-block">
-                    <span className="text-[#7c8ef7]">zatrudniać.</span>
-                    <span className="absolute -bottom-1 left-0 w-full h-1 bg-[#7c8ef7]/40 rounded-full" />
-                  </span>
-                </h1>
-              </RevealOnScroll>
-
-              <RevealOnScroll delay={200}>
-                <p className="mb-7 max-w-xl text-base leading-7 text-white/70 sm:hidden">
-                  Wrzucasz zadanie, student je realizuje, a płatność czeka bezpiecznie w Escrow do akceptacji efektu.
-                </p>
-                <p className="mb-7 hidden max-w-xl text-base leading-7 text-white/70 sm:mb-10 sm:block sm:text-lg sm:leading-relaxed">
-                  Masz zadanie → wrzucasz → ktoś kompetentny robi.
-                  Szybko, bez etatu, bez rekrutacji, bez chaosu.
-                  Dodatkowe ręce do pracy wtedy, kiedy ich potrzebujesz.
-                </p>
-              </RevealOnScroll>
-
-              <RevealOnScroll delay={300}>
-                <div className="mb-8 flex flex-col gap-3 sm:mb-12 sm:flex-row sm:flex-wrap sm:gap-4">
-                  <Link href="/auth?role=company" className="w-full sm:w-auto">
-                    <Button className="h-12 w-full rounded-full bg-[#5367d9] px-6 text-base font-bold text-white shadow-xl shadow-indigo-500/30 transition-all hover:scale-105 hover:bg-[#4658c7] sm:h-14 sm:w-auto sm:px-8">
-                      Deleguj pierwsze zadanie
-                      <ArrowRight className="ml-2 w-5 h-5" />
-                    </Button>
-                  </Link>
-                  <Link href="/auth?role=student" className="w-full sm:w-auto">
-                    <Button variant="outline" className="h-12 w-full rounded-full border-white/20 bg-white/5 px-6 text-base font-bold text-white transition-all hover:bg-white/10 sm:h-14 sm:w-auto sm:px-8">
-                      Zacznij jako student
-                    </Button>
-                  </Link>
-                </div>
-              </RevealOnScroll>
-
-              <RevealOnScroll delay={400}>
-                <div className="flex flex-col gap-3 text-sm text-white/50 sm:flex-row sm:flex-wrap sm:items-center sm:gap-6">
-                  {[
-                    { icon: Clock, text: "Start w 24h" },
-                    { icon: Shield, text: "Płatności Escrow" },
-                    { icon: BadgeCheck, text: "Bez etatu i rekrutacji" },
-                  ].map(({ icon: Icon, text }) => (
-                    <div key={text} className="flex items-center gap-2">
-                      <Icon className="w-4 h-4 text-[#7c8ef7]" />
-                      <span>{text}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-7 rounded-[1.5rem] border border-white/10 bg-white/10 p-4 shadow-2xl shadow-indigo-950/20 backdrop-blur-xl lg:hidden">
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="rounded-full bg-[#7c8ef7]/20 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#c7d2fe]">
-                      Przykład zadania
-                    </span>
-                    <span className="text-sm font-black text-white">450 zł</span>
-                  </div>
-                  <div className="text-sm font-black leading-snug text-white">
-                    Research 80 firm do kampanii B2B
-                  </div>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px] font-bold text-white/60">
-                    <div className="rounded-xl bg-white/5 px-2 py-2">24h start</div>
-                    <div className="rounded-xl bg-white/5 px-2 py-2">Escrow</div>
-                    <div className="rounded-xl bg-white/5 px-2 py-2">PDF umowy</div>
-                  </div>
-                </div>
-              </RevealOnScroll>
-            </div>
-
-            {/* Right: visual dashboard mockup */}
-            <RevealOnScroll delay={200} className="hidden lg:block">
-              <div className="relative">
-                <div className="rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm p-6 space-y-4 shadow-2xl">
-                  {/* Header bar */}
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="text-white font-bold text-sm">Nowe zlecenie</div>
-                    <div className="flex gap-1.5">
-                      <div className="w-3 h-3 rounded-full bg-red-400/50" />
-                      <div className="w-3 h-3 rounded-full bg-yellow-400/50" />
-                      <div className="w-3 h-3 rounded-full bg-green-400/50" />
-                    </div>
-                  </div>
-
-                  {/* Fake form fields */}
-                  {["Tytuł projektu", "Kategoria usługi", "Budżet"].map((label, i) => (
-                    <div key={label} className="space-y-1.5">
-                      <div className="text-xs text-white/40 font-semibold uppercase tracking-wider">{label}</div>
-                      <div className="h-10 rounded-xl bg-white/5 border border-white/10 px-4 flex items-center">
-                        <div className={cn("h-2 rounded-full bg-[#7c8ef7]/40", i === 0 ? "w-3/4" : i === 1 ? "w-1/2" : "w-1/3")} />
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Applicants */}
-                  <div className="pt-4 border-t border-white/10">
-                    <div className="text-xs text-white/40 font-semibold uppercase tracking-wider mb-3">Kandydaci (4)</div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {["AK", "MB", "PW", "KN"].map((initials, i) => (
-                        <div key={initials} className={cn("rounded-xl p-3 text-center border", i === 0 ? "bg-[#7c8ef7]/20 border-[#7c8ef7]/40" : "bg-white/5 border-white/10")}>
-                          <div className={cn("w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center text-xs font-bold", i === 0 ? "bg-[#7c8ef7] text-white" : "bg-white/10 text-white/60")}>
-                            {initials}
-                          </div>
-                          <div className="flex justify-center gap-0.5">
-                            {[1,2,3,4,5].map(s => <div key={s} className={cn("w-1 h-1 rounded-full", s <= 4 ? "bg-amber-400" : "bg-white/10")} />)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Progress */}
-                  <div className="pt-4 border-t border-white/10 space-y-3">
-                    {[{ label: "Design", pct: 100 }, { label: "Frontend", pct: 65 }, { label: "Testy", pct: 20 }].map(({ label, pct }) => (
-                      <div key={label} className="space-y-1">
-                        <div className="flex justify-between text-xs text-white/50">
-                          <span>{label}</span><span>{pct}%</span>
-                        </div>
-                        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-[#7c8ef7] to-[#a5b4fc] rounded-full" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Floating badge */}
-                <div className="absolute -top-4 -right-4 bg-green-500 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg shadow-green-500/30 flex items-center gap-1.5">
-                  <BadgeCheck className="w-3.5 h-3.5" /> Escrow aktywne
-                </div>
-                <div className="absolute -bottom-4 -left-4 bg-white text-[#0f2460] text-xs font-bold px-4 py-2 rounded-full shadow-xl flex items-center gap-2">
-                  <BadgeCheck className="w-3.5 h-3.5 text-[#7c8ef7]" /> Umowy i płatność w jednym procesie
-                </div>
-              </div>
-            </RevealOnScroll>
-          </div>
-        </div>
-
-        {/* Bottom wave */}
-        <div className="absolute bottom-0 left-0 right-0">
-          <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M0 60L1440 60L1440 20C1200 60 960 0 720 20C480 40 240 0 0 20L0 60Z" fill="white" />
-          </svg>
-        </div>
-      </section>
-
+        <HomeHero />
+        <TrustStrip />
+        <MarketSection />
+        <SafetySection />
+        <StepsSection />
+        <PackagesSection />
+        <PricingSection />
+        <TestimonialsSection />
+        <FAQSection />
+        <FinalCTA />
       </main>
-
-      {/* ══════════════════════════════════════════
-          TRUST BAR / STATS
-      ══════════════════════════════════════════ */}
-      <section className="bg-white py-16 px-6">
-        <div className="mx-auto max-w-7xl">
-          <p className="text-center text-sm font-bold text-slate-600 uppercase tracking-widest mb-10">
-            Proces przygotowany pod pilotaż
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { icon: "⚡", value: "Brief", label: "Jedno miejsce na zadanie", sub: "Firma opisuje zakres, budżet i oczekiwany efekt." },
-              { icon: "🛡️", value: "Escrow", label: "Płatność pod kontrolą", sub: "Rozliczenie przechodzi przez proces akceptacji pracy." },
-              { icon: "📄", value: "Umowy A/B", label: "Formalności w flow", sub: "Współpraca jest prowadzona przez Student Impact." },
-            ].map((stat, i) => (
-              <RevealOnScroll key={stat.label} delay={i * 80}
-                className="text-center p-6 rounded-2xl border border-slate-100 bg-slate-50/50 hover:border-[#7c8ef7]/30 hover:shadow-lg transition-all">
-                <div className="text-3xl mb-3">{stat.icon}</div>
-                <div className="text-3xl font-extrabold text-[#0f2460] mb-1">{stat.value}</div>
-                <div className="text-sm font-bold text-slate-700 mb-0.5">{stat.label}</div>
-                <div className="text-xs text-slate-600">{stat.sub}</div>
-              </RevealOnScroll>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════
-          FOR COMPANIES — VALUE PROPS
-      ══════════════════════════════════════════ */}
-      <section id="dla-firm" className="bg-slate-50 px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-7xl">
-          <RevealOnScroll className="mb-10 text-center sm:mb-16">
-            <p className="text-sm font-bold text-[#5367d9] uppercase tracking-widest mb-3">Dla kogo jest Student2Work?</p>
-            <h2 className="text-3xl md:text-5xl font-extrabold text-[#0f2460] mb-4">
-              Znasz to{" "}
-              <span className="relative inline-block">
-                uczucie?
-                <span className="absolute -bottom-1 left-0 w-full h-1.5 bg-[#7c8ef7]/30 rounded-full" />
-              </span>
-            </h2>
-            <p className="text-lg text-slate-500 max-w-2xl mx-auto">
-              Masz backlog zadań, które nie uzasadniają etatu — ale zalegają tygodniami i wracają do Ciebie.
-              To właśnie rozwiązujemy.
-            </p>
-          </RevealOnScroll>
-
-          <div className="grid gap-5 md:grid-cols-3 md:gap-8">
-            {[
-              {
-                icon: Clock,
-                color: "bg-blue-50 text-blue-600",
-                title: "Nie mam kto tego zrobić",
-                desc: "Research leadów, aktualizacja CRM, przygotowanie prezentacji — zadania, które wracają do Ciebie, bo nie masz kto oddelegować.",
-              },
-              {
-                icon: Users,
-                color: "bg-amber-50 text-amber-600",
-                title: "Nie opłaca się zatrudniać",
-                desc: "Za małe, żeby rekrutować. Za duże, żeby ignorować. Student2Work to dodatkowe ręce na żądanie — bez etatu i bez umowy o pracę.",
-              },
-              {
-                icon: Zap,
-                color: "bg-green-50 text-green-600",
-                title: "Potrzebuję kogoś teraz",
-                desc: "Nie za 3 tygodnie po procesie rekrutacyjnym. Teraz. Wrzucasz zadanie, start w 24h — ktoś kompetentny je ogarnia.",
-              },
-              {
-                icon: Shield,
-                color: "bg-purple-50 text-purple-600",
-                title: "Płatność po akceptacji",
-                desc: "System Escrow chroni Twoje środki. Płacisz dopiero kiedy zatwierdzisz efekt. Zero ryzyka finansowego.",
-              },
-              {
-                icon: BadgeCheck,
-                color: "bg-rose-50 text-rose-600",
-                title: "Zweryfikowani wykonawcy",
-                desc: "Każdy wykonawca ma profil, opis kompetencji i zakres usług. Wybierasz osobę dopasowaną do zadania.",
-              },
-              {
-                icon: TrendingUp,
-                color: "bg-teal-50 text-teal-600",
-                title: "Taniej niż agencja, szybciej niż etat",
-                desc: "Projekty kosztują 40–70% mniej niż agencja. Bez briefingów, bez account managerów, bez czekania tygodniami.",
-              },
-            ].map((item, i) => (
-              <RevealOnScroll key={item.title} delay={i * 80}
-                className="group rounded-2xl border border-slate-100 bg-white p-5 transition-all hover:border-[#7c8ef7]/30 hover:shadow-xl sm:p-8">
-                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-5 transition-transform group-hover:scale-110", item.color)}>
-                  <item.icon className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-bold text-[#0f2460] mb-2">{item.title}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed">{item.desc}</p>
-              </RevealOnScroll>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════
-          HOW IT WORKS
-      ══════════════════════════════════════════ */}
-      <section id="jak-dziala" className="bg-white px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-7xl">
-          <RevealOnScroll className="mb-10 text-center sm:mb-12">
-            <p className="text-sm font-bold text-[#5367d9] uppercase tracking-widest mb-3">Jak to działa</p>
-            <h2 className="text-3xl md:text-5xl font-extrabold text-[#0f2460] mb-4">
-              Prosto jak{" "}
-              <span className="relative inline-block">
-                powinno być.
-                <span className="absolute -bottom-1 left-0 w-full h-1.5 bg-[#7c8ef7]/30 rounded-full" />
-              </span>
-            </h2>
-            <p className="text-lg text-slate-500">Masz zadanie → wrzucasz → ktoś kompetentny robi. Wybierz model współpracy.</p>
-          </RevealOnScroll>
-
-          <HowItWorksSwitcher />
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════
-          SERVICES
-      ══════════════════════════════════════════ */}
-      <section id="usługi" className="bg-slate-50 px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-7xl">
-          <RevealOnScroll className="mb-10 text-center sm:mb-14">
-            <p className="text-sm font-bold text-[#5367d9] uppercase tracking-widest mb-3">Katalog zadań</p>
-            <h2 className="text-3xl md:text-5xl font-extrabold text-[#0f2460] mb-4">
-              Co możesz{" "}
-              <span className="relative inline-block">
-                oddelegować?
-                <span className="absolute -bottom-1 left-0 w-full h-1.5 bg-[#7c8ef7]/30 rounded-full" />
-              </span>
-            </h2>
-            <p className="text-lg text-slate-500">Kliknij kategorię, żeby zobaczyć przykłady zadań i orientacyjne ceny</p>
-          </RevealOnScroll>
-
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 md:gap-5 lg:grid-cols-4">
-            {Object.entries(SERVICE_DATA).map(([name, data], index) => (
-              <RevealOnScroll key={name} delay={index * 40}>
-                <ServiceDetailsModal
-                  name={name}
-                  data={{
-                    description: data.description,
-                    stats: data.stats,
-                    examples: data.examples,
-                    funFact: data.funFact,
-                  }}
-                />
-              </RevealOnScroll>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════
-          TESTIMONIALS
-      ══════════════════════════════════════════ */}
-      <section id="opinie" className="bg-white px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-7xl">
-          <RevealOnScroll className="mb-10 text-center sm:mb-16">
-            <p className="text-sm font-bold text-[#5367d9] uppercase tracking-widest mb-3">Opinie klientów</p>
-            <h2 className="text-3xl md:text-5xl font-extrabold text-[#0f2460] mb-4">
-              Firmy, które{" "}
-              <span className="relative inline-block">
-                odzyskały czas.
-                <span className="absolute -bottom-1 left-0 w-full h-1.5 bg-[#7c8ef7]/30 rounded-full" />
-              </span>
-            </h2>
-            <p className="text-lg text-slate-500">Właściciele firm i managerowie, którzy przestali robić wszystko sami.</p>
-          </RevealOnScroll>
-
-          <div className="grid gap-5 md:grid-cols-3 md:gap-8">
-            {[
-              { name: "Michał Nowak", role: "CEO · TechStart Sp. z o.o.", badge: "Founder", text: "Miałem backlog 20 zadań, które zalegały od miesięcy. Wrzuciłem je na Student2Work — połowa była gotowa w tydzień. Taniej niż agencja, szybciej niż rekrutacja." },
-              { name: "Katarzyna Wiśniewska", role: "Operations Manager · 40-osobowa firma", badge: "Ops Manager", text: "Co tydzień wrzucam 3-4 zadania: research, aktualizacje CRM, prezentacje. Działa jak wewnętrzny team, bez kosztów etatu. Nie wyobrażam sobie powrotu do starego modelu." },
-              { name: "Tomasz Lewandowski", role: "Head of Sales · SaaS B2B", badge: "Sales Lead", text: "Lead research był naszym bottleneckiem. Teraz mam kogoś kto buduje listy kontaktów — ja zamykam deale. ROI odczułem po pierwszym tygodniu." },
-            ].map((t, i) => (
-              <RevealOnScroll key={t.name} delay={i * 100}>
-                <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl sm:p-8">
-                  <div className="flex gap-1 mb-5">
-                    {[1,2,3,4,5].map(s => <Star key={s} className="w-4 h-4 fill-amber-400 text-amber-400" />)}
-                  </div>
-                  <p className="mb-6 leading-relaxed text-slate-600 italic">&quot;{t.text}&quot;</p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-[#0f2460] flex items-center justify-center text-white font-bold text-sm">
-                        {t.name.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="font-bold text-sm text-[#0f2460]">{t.name}</div>
-                        <div className="text-xs text-slate-600">{t.role}</div>
-                      </div>
-                    </div>
-                    <span className={cn(
-                      "text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full",
-                      t.badge === "Firma" ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
-                    )}>
-                      {t.badge}
-                    </span>
-                  </div>
-                </div>
-              </RevealOnScroll>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════
-          CTA
-      ══════════════════════════════════════════ */}
-      <section className="relative overflow-hidden bg-[#0f2460] px-4 py-16 sm:px-6 sm:py-24">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#7c8ef7]/10 rounded-full blur-[120px]" />
-          <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-blue-600/10 rounded-full blur-[80px]" />
-        </div>
-        <div className="relative z-10 mx-auto max-w-3xl text-center">
-          <RevealOnScroll>
-            <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-6">
-              Ogarniemy Twój chaos operacyjny.<br />
-              <span className="text-[#7c8ef7]">W 24 godziny.</span>
-            </h2>
-            <p className="text-lg text-white/70 mb-10 max-w-xl mx-auto">
-              Jedno zadanie. Bez rekrutacji, bez etatu, bez chaosu.
-              Zacznij teraz — rejestracja zajmuje 2 minuty.
-            </p>
-            <div className="flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
-              <Link href="/auth?role=company" className="w-full sm:w-auto">
-                <Button className="h-12 w-full rounded-full bg-[#5367d9] px-6 text-base font-bold text-white shadow-xl shadow-indigo-500/30 transition-all hover:scale-105 hover:bg-[#4658c7] sm:h-14 sm:w-auto sm:px-10">
-                  Deleguj pierwsze zadanie
-                  <ArrowRight className="ml-2 w-5 h-5" />
-                </Button>
-              </Link>
-              <Link href="/auth?role=student" className="w-full sm:w-auto">
-                <Button variant="outline" className="h-12 w-full rounded-full border-white/20 bg-white/5 px-6 text-base font-bold text-white transition-all hover:bg-white/10 sm:h-14 sm:w-auto sm:px-10">
-                  Zacznij jako wykonawca
-                </Button>
-              </Link>
-            </div>
-            <p className="mt-8 text-white/40 text-sm">
-              Bezpłatna rejestracja · Płatność dopiero po akceptacji · Bez ukrytych opłat
-            </p>
-          </RevealOnScroll>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════
-          FOOTER
-      ══════════════════════════════════════════ */}
-      <footer className="bg-[#081840] px-4 py-12 sm:px-6 sm:py-14">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-10 grid gap-8 md:mb-12 md:grid-cols-4 md:gap-10">
-            <div className="md:col-span-2">
-              <div className="text-xl font-extrabold text-white mb-3">
-                🎓 Student<span className="text-[#7c8ef7]">2</span>Work
-              </div>
-              <p className="text-white/50 text-sm leading-relaxed max-w-sm">
-                Operacyjne wsparcie dla małych firm i managerów. Deleguj zadania bez etatu, bez rekrutacji, bez chaosu.
-              </p>
-            </div>
-            <div>
-              <div className="text-xs font-bold text-white/60 uppercase tracking-widest mb-4">Platforma</div>
-              <ul className="space-y-3">
-                {["Jak to działa", "Katalog usług", "Dla firm", "Dla studentów"].map(l => (
-                  <li key={l}><a href="#" className="text-white/50 text-sm hover:text-white transition-colors">{l}</a></li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <div className="text-xs font-bold text-white/60 uppercase tracking-widest mb-4">Prawne</div>
-              <ul className="space-y-3">
-                {["Regulamin", "Polityka prywatności", "Kontakt"].map(l => (
-                  <li key={l}><a href="#" className="text-white/50 text-sm hover:text-white transition-colors">{l}</a></li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <div className="flex flex-col items-start justify-between gap-4 border-t border-white/10 pt-8 md:flex-row md:items-center">
-            <div className="text-white/60 text-sm">© {new Date().getFullYear()} Student2Work. Wszelkie prawa zastrzeżone.</div>
-            <div className="flex items-center gap-2 text-white/60 text-sm">
-              <Shield className="w-4 h-4 text-green-400" />
-              Płatności chronione systemem Escrow
-            </div>
-          </div>
-        </div>
-      </footer>
+      <HomeFooter />
+      <MobileCTA />
     </div>
   );
 }

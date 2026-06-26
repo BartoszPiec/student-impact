@@ -184,9 +184,8 @@ export default async function StudentApplicationsPage() {
     }))
     .filter((item): item is SavedOfferItem => item.offer?.status === "published");
 
-  const doAkcji = applications.filter(
-    (application) => application.stage === "countered" || application.stage === "in_progress",
-  );
+  const doAkcji = applications.filter((application) => application.stage === "countered");
+  const wRealizacji = applications.filter((application) => application.stage === "in_progress");
   const oczekujeNaFirme = applications.filter((application) => application.stage === "sent");
   const czekaNaOcene = applications.filter((application) => application.stage === "done");
   const archiwum = applications.filter(
@@ -198,32 +197,81 @@ export default async function StudentApplicationsPage() {
   const defaultTab =
     doAkcji.length > 0
       ? "action"
-      : oczekujeNaFirme.length > 0
-        ? "waiting"
-        : savedOffers.length > 0
-          ? "saved"
-          : czekaNaOcene.length > 0
+      : wRealizacji.length > 0
+        ? "progress"
+        : oczekujeNaFirme.length > 0
+          ? "waiting"
+          : savedOffers.length > 0
+            ? "saved"
+            : czekaNaOcene.length > 0
             ? "review"
             : "archive";
 
+  const activeFilterLabel =
+    defaultTab === "action"
+      ? "Wymaga Twojej akcji"
+      : defaultTab === "progress"
+        ? "W realizacji"
+        : defaultTab === "waiting"
+          ? "Czeka na firmę"
+          : defaultTab === "review"
+            ? "Do oceny"
+            : defaultTab === "saved"
+              ? "Zapisane"
+              : "Archiwum";
+
   return (
-    <main className="pb-20">
+    <main className="pb-14">
       <PremiumPageHeader
         badge="Panel Studenta"
-        title="Moje Aplikacje"
-        description="Sledz swoje zgłoszenia, zarzadzaj realizacjami i przegladaj zapisane okazje."
+        title="Moje aplikacje"
+        description="Śledź swoje zgłoszenia, zarządzaj realizacjami i przeglądaj zapisane okazje."
         icon={
-          <FileText className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />
+          <FileText className="h-8 w-8 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />
         }
+        className="mb-5 pb-7 pt-6 sm:mb-6 sm:pb-8 sm:pt-7"
       />
 
-      <PageContainer className="space-y-8">
+      <PageContainer className="max-w-7xl space-y-5">
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <h2 className="text-xl font-black tracking-tight text-slate-950">Centrum aplikacji</h2>
+              <p className="mt-1 text-xs font-semibold text-slate-500 sm:text-sm">
+                {doAkcji.length > 0
+                  ? `${doAkcji.length} elementów wymaga Twojej uwagi`
+                  : "Aktualne aplikacje, zapisane oferty i archiwum w jednym miejscu."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <Badge className="rounded-full border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-black text-slate-700 hover:bg-slate-50">
+                Wszystkie {applications.length}
+              </Badge>
+              <Badge className="rounded-full border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-black text-amber-700 hover:bg-amber-50">
+                Wymagają akcji {doAkcji.length}
+              </Badge>
+              <Badge className="rounded-full border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-black text-indigo-700 hover:bg-indigo-50">
+                Czeka na firmę {oczekujeNaFirme.length}
+              </Badge>
+              <Badge className="rounded-full border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 hover:bg-emerald-50">
+                W realizacji {wRealizacji.length}
+              </Badge>
+              <Badge className="rounded-full border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50">
+                Do oceny {czekaNaOcene.length}
+              </Badge>
+              <Badge className="rounded-full border-slate-200 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500 hover:bg-white">
+                Zapisane {savedOffers.length}
+              </Badge>
+            </div>
+          </div>
+        </div>
+
         <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1.5 rounded-2xl border border-slate-200/50 bg-slate-100/80 shadow-inner backdrop-blur-sm sm:grid-cols-3 md:w-auto md:grid-cols-5 md:gap-0">
+          <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-2xl border border-slate-200/50 bg-slate-100/80 p-1 shadow-inner backdrop-blur-sm sm:grid-cols-3 md:w-auto md:grid-cols-6 md:gap-0">
               <TabsTrigger
                 value="action"
-                className="rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg sm:px-5 sm:py-3"
+                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md sm:px-4"
               >
                 Akcja{" "}
                 {doAkcji.length > 0 ? (
@@ -237,16 +285,25 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="waiting"
-                className="rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg sm:px-5 sm:py-3"
+                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md sm:px-4"
               >
-                Czeka na firme{" "}
+                Czeka na firmę{" "}
                 <span className="ml-2 text-slate-400 font-medium tracking-tighter">
                   ({oczekujeNaFirme.length})
                 </span>
               </TabsTrigger>
               <TabsTrigger
+                value="progress"
+                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-emerald-600 data-[state=active]:shadow-md sm:px-4"
+              >
+                W realizacji{" "}
+                <span className="ml-2 text-slate-400 font-medium tracking-tighter">
+                  ({wRealizacji.length})
+                </span>
+              </TabsTrigger>
+              <TabsTrigger
                 value="review"
-                className="rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg sm:px-5 sm:py-3"
+                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md sm:px-4"
               >
                 Do oceny{" "}
                 <span className="ml-2 text-slate-400 font-medium tracking-tighter">
@@ -255,7 +312,7 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="saved"
-                className="rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg sm:px-5 sm:py-3"
+                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md sm:px-4"
               >
                 Zapisane{" "}
                 {savedOffers.length > 0 ? (
@@ -269,17 +326,17 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="archive"
-                className="rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg sm:px-5 sm:py-3"
+                className="rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md sm:px-4"
               >
                 Archiwum
               </TabsTrigger>
             </TabsList>
 
-            <div className="px-5 py-2.5 bg-indigo-50 rounded-full border border-indigo-100/50 hidden md:block">
-              <p className="text-sm font-bold text-indigo-700">
+            <div className="hidden rounded-full border border-indigo-100/50 bg-indigo-50 px-4 py-2 md:block">
+              <p className="text-xs font-bold text-indigo-700">
                 Filtr:{" "}
                 <span className="text-indigo-900 ml-1">
-                  {defaultTab === "action" ? "Wymaga Twojej akcji" : "Widok ogolny"}
+                  {activeFilterLabel}
                 </span>
               </p>
             </div>
@@ -294,14 +351,21 @@ export default async function StudentApplicationsPage() {
           </TabsContent>
           <TabsContent value="waiting" className="space-y-4">
             {oczekujeNaFirme.length === 0 ? (
-              <EmptyState label="Brak zgloszen oczekujacych na decyzje firmy." />
+              <EmptyState label="Brak zgłoszeń oczekujących na decyzję firmy." />
             ) : (
               <ApplicationList items={oczekujeNaFirme} />
             )}
           </TabsContent>
+          <TabsContent value="progress" className="space-y-4">
+            {wRealizacji.length === 0 ? (
+              <EmptyState label="Brak aktywnych realizacji." />
+            ) : (
+              <ApplicationList items={wRealizacji} />
+            )}
+          </TabsContent>
           <TabsContent value="review" className="space-y-4">
             {czekaNaOcene.length === 0 ? (
-              <EmptyState label="Brak zakonczonych zlecen czekajacych na ocenę." />
+              <EmptyState label="Brak zakończonych zleceń czekających na ocenę." />
             ) : (
               <ApplicationList items={czekaNaOcene} />
             )}
