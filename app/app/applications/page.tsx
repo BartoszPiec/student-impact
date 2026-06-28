@@ -233,7 +233,7 @@ export default async function StudentApplicationsPage() {
       />
 
       <PageContainer className="max-w-7xl space-y-4">
-        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm sm:px-5">
+        <div className="hidden rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm sm:block sm:px-5">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <h2 className="text-base font-black tracking-tight text-[#10245f] sm:text-lg">Centrum aplikacji</h2>
@@ -269,10 +269,10 @@ export default async function StudentApplicationsPage() {
         <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
           <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
             <div className="scrollbar-hide w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:w-auto">
-            <TabsList className="flex h-auto min-w-max justify-start gap-1 bg-transparent p-0">
+            <TabsList className="flex h-auto min-w-max justify-start gap-1.5 bg-transparent p-0">
               <TabsTrigger
                 value="action"
-                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
+                className="min-h-9 shrink-0 justify-center whitespace-nowrap rounded-xl px-3.5 py-2 text-[12px] font-bold leading-none transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] data-[state=active]:shadow-sm sm:px-4"
               >
                 Akcja{" "}
                 {doAkcji.length > 0 ? (
@@ -286,7 +286,7 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="waiting"
-                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
+                className="min-h-9 min-w-[8.5rem] shrink-0 justify-center whitespace-nowrap rounded-xl px-3.5 py-2 text-[12px] font-bold leading-none transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] data-[state=active]:shadow-sm sm:min-w-[10rem] sm:px-4"
               >
                 <span className="sm:hidden">Czeka</span>
                 <span className="hidden sm:inline">Czeka na firmę</span>{" "}
@@ -296,7 +296,7 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="progress"
-                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
+                className="min-h-9 min-w-[7.5rem] shrink-0 justify-center whitespace-nowrap rounded-xl px-3.5 py-2 text-[12px] font-bold leading-none transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] data-[state=active]:shadow-sm sm:min-w-[8.75rem] sm:px-4"
               >
                 <span className="sm:hidden">W toku</span>
                 <span className="hidden sm:inline">W realizacji</span>{" "}
@@ -306,7 +306,7 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="review"
-                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
+                className="min-h-9 min-w-[6.5rem] shrink-0 justify-center whitespace-nowrap rounded-xl px-3.5 py-2 text-[12px] font-bold leading-none transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] data-[state=active]:shadow-sm sm:min-w-[7.5rem] sm:px-4"
               >
                 <span className="sm:hidden">Ocena</span>
                 <span className="hidden sm:inline">Do oceny</span>{" "}
@@ -316,7 +316,7 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="saved"
-                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
+                className="min-h-9 shrink-0 justify-center whitespace-nowrap rounded-xl px-3.5 py-2 text-[12px] font-bold leading-none transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] data-[state=active]:shadow-sm sm:px-4"
               >
                 Zapisane{" "}
                 {savedOffers.length > 0 ? (
@@ -330,7 +330,7 @@ export default async function StudentApplicationsPage() {
               </TabsTrigger>
               <TabsTrigger
                 value="archive"
-                className="shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] sm:px-4"
+                className="min-h-9 shrink-0 justify-center whitespace-nowrap rounded-xl px-3.5 py-2 text-[12px] font-bold leading-none transition-all duration-300 data-[state=active]:bg-lime-200 data-[state=active]:text-[#0b1b47] data-[state=active]:shadow-sm sm:px-4"
               >
                 Archiwum
               </TabsTrigger>

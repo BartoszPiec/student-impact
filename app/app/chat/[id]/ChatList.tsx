@@ -314,14 +314,14 @@ export function ChatList({
                         )}
 
                         <div className={`group/message flex min-w-0 flex-col ${isTimelineEvent ? 'items-center' : (msg.is_mine ? "items-end" : "items-start")} gap-1`}>
-                            <div className={`flex max-w-full items-center gap-1 sm:gap-2 ${msg.is_mine ? "flex-row-reverse" : "flex-row"}`}>
+                            <div className={`flex w-full max-w-full items-start gap-1 sm:gap-2 ${msg.is_mine ? "flex-row-reverse" : "flex-row"}`}>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="icon"
-                                            className="h-7 w-7 rounded-full text-slate-300 opacity-0 transition-opacity hover:text-slate-700 group-hover/message:opacity-100"
+                                            className="h-7 w-7 shrink-0 rounded-full text-slate-300 opacity-0 transition-opacity hover:text-slate-700 group-hover/message:opacity-100 max-sm:hidden"
                                             disabled={pendingActionId === msg.id}
                                         >
                                             <MoreHorizontal className="h-4 w-4" />

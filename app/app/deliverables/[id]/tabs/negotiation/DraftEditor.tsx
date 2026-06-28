@@ -387,34 +387,34 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
             )}
 
             {/* Budget Bar */}
-            <div className={`p-5 rounded-2xl border flex flex-col gap-4 shadow-sm transition-all duration-300 ${statusColor}`}>
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+            <div className={`rounded-[1.5rem] border p-4 shadow-sm transition-all duration-300 sm:p-5 ${statusColor}`}>
+                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
                     <div className="flex flex-col gap-1">
-                        <div className="flex gap-4 text-sm font-medium text-slate-600/80 uppercase tracking-wide">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-black uppercase tracking-normal text-slate-600/80 sm:text-sm">
                             <span>Ustalona kwota: <b className="text-slate-800">{totalBudget.toFixed(2)}</b></span>
                             <span>Suma etapów: <b className="text-slate-800">{currentSum.toFixed(2)}</b></span>
                         </div>
-                        <div className="text-lg">
+                        <div className="text-base sm:text-lg">
                             {statusText}
                         </div>
                     </div>
 
                     {/* Distribution Tools */}
-                    <div className="flex items-center gap-1 bg-white/80 p-1.5 rounded-xl border border-slate-200/50 backdrop-blur-sm shadow-sm">
+                    <div className="flex w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200/60 bg-white/85 p-1.5 shadow-sm backdrop-blur-sm lg:w-auto">
                         <Button
                             variant={allocationMode === 'MANUAL' ? "secondary" : "ghost"}
                             size="sm"
                             onClick={() => distributeBudget('manual')}
-                            className={`text-xs h-8 rounded-lg font-medium transition-all ${allocationMode === 'MANUAL' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`h-8 flex-1 rounded-xl px-3 text-xs font-black transition-all lg:flex-none ${allocationMode === 'MANUAL' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             Ręcznie
                         </Button>
-                        <div className="w-px h-4 bg-slate-300 mx-1" />
+                        <div className="hidden h-4 w-px bg-slate-300 sm:block" />
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => distributeBudget('equal')}
-                            className="text-xs h-8 rounded-lg font-medium text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                            className="h-8 flex-1 rounded-xl px-3 text-xs font-black text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 lg:flex-none"
                         >
                             Po równo
                         </Button>
@@ -422,7 +422,7 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
                             variant={allocationMode === 'REST_TO_LAST' ? "secondary" : "ghost"}
                             size="sm"
                             onClick={() => distributeBudget('end')}
-                            className={`text-xs h-8 rounded-lg font-medium transition-all ${allocationMode === 'REST_TO_LAST' ? 'bg-white shadow-sm text-orange-600 ring-1 ring-orange-100' : 'text-slate-500 hover:text-orange-600 hover:bg-orange-50'}`}
+                            className={`h-8 flex-[1.35] rounded-xl px-3 text-xs font-black transition-all lg:flex-none ${allocationMode === 'REST_TO_LAST' ? 'bg-white shadow-sm text-orange-600 ring-1 ring-orange-100' : 'text-slate-500 hover:bg-orange-50 hover:text-orange-600'}`}
                         >
                             {allocationMode === 'REST_TO_LAST' && <Lock className="w-3 h-3 mr-1" />}
                             Reszta na ostatni

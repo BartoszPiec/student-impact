@@ -63,7 +63,7 @@ export function DetailedReviewForm({
     >
       <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 px-4 py-3">
         <div className="text-xs font-bold uppercase tracking-wide text-indigo-500">Ocena koncowa</div>
-        <div className="mt-1 flex items-center gap-3">
+        <div className="mt-1 flex flex-wrap items-center gap-3">
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((star) => (
               <Star
@@ -83,13 +83,13 @@ export function DetailedReviewForm({
 
           return (
             <div key={category.key} className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="font-semibold text-slate-900">{category.label}</div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <div className="break-words font-semibold text-slate-900">{category.label}</div>
                   <p className="text-sm text-slate-500">{category.description}</p>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex w-full shrink-0 items-center justify-between gap-3 sm:w-auto sm:justify-end">
                   <span className="text-xs font-medium text-slate-500">
                     {state.enabled ? "Oceniam" : "Nie dotyczy"}
                   </span>
@@ -108,7 +108,7 @@ export function DetailedReviewForm({
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center gap-2">
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
                     key={star}

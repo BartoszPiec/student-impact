@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { resolveCommissionRate } from "@/lib/commission";
+import { isAllowedJobCategory, resolveJobCategoryLabel } from "@/lib/constants";
+import { logCriticalError } from "@/lib/observability/error-log";
 import { createClient } from "@/lib/supabase/server";
 
 type BudgetRange = "lt_500" | "500_1500" | "1500_3000" | "estimate";
@@ -46,6 +48,12 @@ const challengeSchema = z.object({
   budgetRange: z.enum(["lt_500", "500_1500", "1500_3000", "estimate"], {
     error: "Wybierz orientacyjny budzet.",
   }),
+  category: z
+    .string()
+    .trim()
+    .min(1, "Wybierz kategorie wyzwania.")
+    .transform((value) => resolveJobCategoryLabel(value) ?? value)
+    .refine((value) => isAllowedJobCategory(value), "Wybierz poprawna kategorie wyzwania."),
   contactPerson: z
     .string()
     .trim()
@@ -75,6 +83,9 @@ function buildChallengeDescription(input: z.infer<typeof challengeSchema>, budge
     "",
     "## Orientacyjny budzet",
     budgetLabel,
+    "",
+    "## Kategoria",
+    input.category,
   ];
 
   if (input.extraContext) {
@@ -116,6 +127,7 @@ export async function createChallengeOffer(formData: FormData): Promise<CreateCh
     problem: getFormString(formData, "problem"),
     problemLocation: getFormString(formData, "problemLocation"),
     budgetRange: getFormString(formData, "budgetRange"),
+    category: getFormString(formData, "category"),
     contactPerson: getFormString(formData, "contactPerson"),
     extraContext: getFormString(formData, "extraContext"),
   });
@@ -144,7 +156,7 @@ export async function createChallengeOffer(formData: FormData): Promise<CreateCh
       company_id: user.id,
       tytul: title,
       opis: description,
-      kategoria: "Inne",
+      kategoria: parsed.data.category,
       typ: "challenge",
       status: "published",
       stawka: null,
@@ -181,9 +193,20 @@ export async function createChallengeOffer(formData: FormData): Promise<CreateCh
     .single();
 
   if (error || !inserted?.id) {
+    await logCriticalError({
+      source: "company.challenges.create_offer",
+      error,
+      message: error ? undefined : "Supabase insert returned no challenge offer id.",
+      userId: user.id,
+      context: {
+        budgetRange: parsed.data.budgetRange,
+        budgetLabel: budget.label,
+      },
+    });
+
     return {
       success: false,
-      error: error?.message ?? "Nie udalo sie zapisac wyzwania.",
+      error: "Nie udalo sie zapisac wyzwania. Sprobuj ponownie lub skontaktuj sie z pomoca.",
     };
   }
 

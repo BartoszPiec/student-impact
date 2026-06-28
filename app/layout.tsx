@@ -30,7 +30,7 @@ export default function RootLayout({
     <html lang="pl">
       <body
         suppressHydrationWarning={true}
-        className="antialiased font-sans overflow-x-hidden"
+        className="antialiased font-sans overflow-x-clip"
       >
         {children}
       </body>

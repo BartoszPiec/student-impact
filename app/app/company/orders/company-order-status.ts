@@ -31,11 +31,11 @@ const STATUS_META: Record<ServiceOrderStatus, CompanyOrderStatusMeta> = {
     nextActionLabel: "Czekaj na wycene",
   },
   pending_selection: {
-    label: "Wybierz studenta",
+    label: "Czeka na zgłoszenia",
     badgeClass: "bg-indigo-100 text-indigo-700 border border-indigo-200",
-    bucket: "needs_company_action",
-    summaryLabel: "Brief jest gotowy. Wybierz wykonawce z listy kandydatow.",
-    nextActionLabel: "Wybierz studenta",
+    bucket: "waiting_for_student",
+    summaryLabel: "Brief jest zapisany. Kandydat pojawi się po realnym zgłoszeniu albo przypisaniu przez platformę.",
+    nextActionLabel: "Czekaj na zgłoszenia",
   },
   pending_student_confirmation: {
     label: "Czeka na potwierdzenie",

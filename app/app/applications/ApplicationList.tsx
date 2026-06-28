@@ -154,44 +154,45 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
   const agreedMoney = app.agreed_stawka ?? fromMinorUnits(app.agreed_stawka_minor);
   const isJobOffer =
     offer?.typ === "job" || offer?.typ === "Praca" || offer?.typ === "praca";
+  const accentClass = isCountered
+    ? "bg-gradient-to-b from-amber-300 via-amber-500 to-amber-300"
+    : isInProgress
+      ? "bg-gradient-to-b from-emerald-300 via-emerald-500 to-emerald-300"
+      : isDone
+        ? "bg-gradient-to-b from-slate-200 via-slate-300 to-slate-200"
+        : isJobOffer
+          ? "bg-gradient-to-b from-[#10245f] via-[#3154b8] to-[#10245f]"
+          : "bg-gradient-to-b from-amber-300 via-amber-500 to-amber-300";
 
   return (
     <Card
       className={cn(
-        "group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5",
+        "group relative overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/95 shadow-sm shadow-slate-200/60 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-200/70",
         isCountered
-          ? "ring-1 ring-amber-300 shadow-amber-100/50 hover:shadow-lg hover:shadow-amber-200/30"
+          ? "border-amber-200 ring-1 ring-amber-100"
           : isInProgress
-            ? "border-emerald-200 ring-1 ring-emerald-100 hover:shadow-lg hover:shadow-emerald-100/50"
+            ? "border-emerald-200 ring-1 ring-emerald-100"
             : isSent
-              ? "border-blue-100 ring-1 ring-blue-50 hover:shadow-lg hover:shadow-blue-100/40"
-              : "hover:border-lime-100/80 hover:shadow-lg",
+              ? "border-blue-100 ring-1 ring-blue-50"
+              : "hover:border-lime-100/80",
       )}
     >
-      <CardContent className="p-0">
-        <div className="flex flex-col gap-0 md:flex-row md:items-stretch">
-          <div
-            className={cn(
-              "h-1.5 w-full shrink-0 transition-colors duration-300 md:h-auto md:w-1.5 md:self-stretch",
-              isCountered
-                ? "bg-amber-400 group-hover:bg-amber-500"
-                : isInProgress
-                  ? "bg-emerald-500 group-hover:bg-emerald-600"
-                  : isDone
-                    ? "bg-slate-300 group-hover:bg-slate-400"
-                : isJobOffer
-                  ? "bg-[#10245f] group-hover:bg-[#0b1b47]"
-                  : "bg-amber-500 group-hover:bg-amber-600",
-            )}
-          />
-
+      <CardContent className="relative p-0">
+        <div
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute left-0 top-0 h-full w-1.5 transition-all duration-300 sm:left-5 sm:top-5 sm:bottom-5 sm:h-auto sm:rounded-full",
+            accentClass,
+          )}
+        />
+        <div className="flex min-w-0 flex-col">
           <div className="flex min-w-0 flex-1 flex-col gap-0">
             {/* Negotiation alert banner */}
             {isCountered && app.counter_stawka && (
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2.5">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 border-b border-amber-100 bg-gradient-to-r from-amber-50 to-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:pl-9">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-                  <span className="text-xs font-bold text-amber-900">
+                  <span className="min-w-0 text-xs font-bold leading-5 text-amber-900">
                     Firma zaproponowała kontrofertę:{" "}
                     <span className="text-amber-700">{formatMoney(app.counter_stawka)}</span>
                   </span>
@@ -208,10 +209,10 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
             )}
 
             {isInProgress && (
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 bg-emerald-50 px-4 py-2.5">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 via-emerald-50/80 to-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:pl-9">
+                <div className="flex min-w-0 items-center gap-2">
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                  <span className="text-xs font-bold text-emerald-950">
+                  <span className="min-w-0 text-xs font-bold leading-5 text-emerald-950">
                     Realizacja aktywna - przejdź do workspace, gdy chcesz dodać pliki lub sprawdzić status.
                   </span>
                 </div>
@@ -222,10 +223,10 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
             )}
 
             {stage === "sent" && (
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 border-b border-blue-100 bg-gradient-to-r from-blue-50 via-blue-50/80 to-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:pl-9">
+                <div className="flex min-w-0 items-center gap-2">
                   <FileText className="h-3.5 w-3.5 shrink-0 text-[#10245f]" />
-                  <span className="text-xs font-bold text-[#10245f]">
+                  <span className="min-w-0 text-xs font-bold leading-5 text-[#10245f]">
                     Zgłoszenie wysłane - czekasz na decyzję firmy.
                   </span>
                 </div>
@@ -235,8 +236,8 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
               </div>
             )}
 
-            <div className="flex flex-1 flex-col items-start justify-between gap-4 p-4 sm:p-5 lg:flex-row lg:items-center">
-              <div className="w-full flex-1 space-y-2.5">
+            <div className="grid flex-1 gap-5 p-4 pl-6 sm:p-5 sm:pl-9 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-center lg:gap-6">
+              <div className="min-w-0 space-y-2.5">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <h3 className="break-words text-base font-extrabold leading-tight text-slate-900 sm:text-lg">
                     {offer?.tytul ?? "Nieznana oferta"}
@@ -279,10 +280,10 @@ function ApplicationCard({ app }: { app: ApplicationItem }) {
                 )}
               </div>
 
-              <div className="flex w-full flex-col gap-2.5 lg:w-[220px] lg:shrink-0">
+              <div className="flex w-full flex-col gap-2.5 lg:w-auto lg:shrink-0">
                 <div
                   className={cn(
-                    "rounded-xl border p-3 lg:text-right",
+                    "rounded-2xl border p-3 shadow-sm lg:text-right",
                     isCountered
                       ? "border-amber-200 bg-amber-50"
                       : isInProgress

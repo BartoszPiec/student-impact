@@ -117,7 +117,7 @@ export function validateUploadFile(file: File, purpose: UploadPurpose): { ok: tr
   }
 
   if (!policy.allowedMimeTypes.has(file.type)) {
-    return { ok: false, error: "Nieprawidlowy typ MIME pliku." };
+    return { ok: false, error: "Nieprawidłowy typ MIME pliku." };
   }
 
   if (file.size <= 0 || file.size > policy.maxBytes) {

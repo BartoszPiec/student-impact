@@ -3,8 +3,39 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin/auth";
+import { uuidSchema } from "@/lib/security/validation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateContractDocumentsForAdmin } from "@/app/app/deliverables/_actions";
+import { logCriticalError } from "@/lib/observability/error-log";
+
+const INVALID_CONTRACT_ID_MESSAGE = "Nieprawidłowy identyfikator kontraktu.";
+const PDF_REPAIR_FAILED_MESSAGE =
+  "Nie udało się naprawić dokumentów PDF. Sprawdź logi serwera albo spróbuj ponownie.";
+
+function readErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.trim().length > 0 ? code.trim() : null;
+}
+
+async function logAdminVaultError(input: {
+  source: string;
+  error?: unknown;
+  level?: "error" | "warning" | "info";
+  userId?: string | null;
+  contractId?: string | null;
+  context?: Record<string, unknown>;
+}) {
+  await logCriticalError({
+    source: input.source,
+    error: input.error,
+    errorCode: readErrorCode(input.error),
+    level: input.level ?? "error",
+    userId: input.userId ?? null,
+    contractId: input.contractId ?? null,
+    context: input.context,
+  });
+}
 
 function isNextRedirectError(error: unknown) {
   if (!error || typeof error !== "object") {
@@ -19,18 +50,48 @@ function isNextRedirectError(error: unknown) {
   );
 }
 
+function parseContractId(contractId: string) {
+  const parsed = uuidSchema.safeParse(contractId);
+  if (!parsed.success) {
+    throw new Error(INVALID_CONTRACT_ID_MESSAGE);
+  }
+
+  return parsed.data;
+}
+
+function redirectSingleRepairFailure(message: string, contractId?: string): never {
+  const params = new URLSearchParams({
+    pdfRepair: "single",
+    repaired: "0",
+    failed: "1",
+    errorMessage: message,
+  });
+
+  if (contractId) {
+    params.set("contractId", contractId);
+  }
+
+  redirect(`/app/admin/vault?${params.toString()}`);
+}
+
 export async function getContractDocuments(contractId: string) {
-  await requireAdmin();
+  const { user } = await requireAdmin();
+  const safeContractId = parseContractId(contractId);
   const supabase = createAdminClient();
 
   const { data: documents, error } = await supabase
     .from("contract_documents")
     .select("id, file_name, storage_path, document_type, created_at")
-    .eq("contract_id", contractId)
+    .eq("contract_id", safeContractId)
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error loading contract documents:", error);
+    await logAdminVaultError({
+      source: "admin.vault.load_contract_documents",
+      error,
+      userId: user.id,
+      contractId: safeContractId,
+    });
     throw new Error("Nie udało sie pobrać dokumentów kontraktu.");
   }
 
@@ -54,12 +115,27 @@ export async function getContractDocuments(contractId: string) {
         .from("deliverables")
         .createSignedUrl(document.storage_path, 60 * 60 * 24);
 
+      if (error || !data?.signedUrl) {
+        await logAdminVaultError({
+          source: "admin.vault.contract_document_signed_url",
+          error,
+          level: "warning",
+          userId: user.id,
+          contractId: safeContractId,
+          context: {
+            documentId: document.id,
+            documentType: document.document_type,
+            storagePath: document.storage_path,
+          },
+        });
+      }
+
       return {
         id: document.id,
         name: document.file_name || document.document_type,
         type: document.document_type,
         url: data?.signedUrl || null,
-        error: error?.message || null,
+        error: error ? "signed-url-failed" : null,
       };
     }),
   );
@@ -77,7 +153,11 @@ export async function backfillMissingContractPdfs() {
     .order("created_at", { ascending: false });
 
   if (contractsError) {
-    console.error("Error loading contracts for PDF backfill:", contractsError);
+    await logAdminVaultError({
+      source: "admin.vault.pdf_backfill.load_contracts",
+      error: contractsError,
+      userId: user.id,
+    });
     throw new Error("Nie udało sie pobrać kontraktów do naprawy PDF.");
   }
 
@@ -94,7 +174,14 @@ export async function backfillMissingContractPdfs() {
     .in("document_type", ["contract_a", "contract_b"]);
 
   if (documentsError) {
-    console.error("Error loading contract documents for PDF backfill:", documentsError);
+    await logAdminVaultError({
+      source: "admin.vault.pdf_backfill.load_documents",
+      error: documentsError,
+      userId: user.id,
+      context: {
+        contractCount: contractIds.length,
+      },
+    });
     throw new Error("Nie udało sie pobrać dokumentów kontraktów.");
   }
 
@@ -125,7 +212,13 @@ export async function backfillMissingContractPdfs() {
       }
     } catch (error) {
       failed += 1;
-      console.error(`PDF backfill failed for contract ${contractId}:`, error);
+      await logAdminVaultError({
+        source: "admin.vault.pdf_backfill.generate_contract_documents",
+        error,
+        level: "warning",
+        userId: user.id,
+        contractId,
+      });
     }
   }
 
@@ -139,26 +232,32 @@ export async function backfillMissingContractPdfs() {
 
 export async function repairSingleContractPdf(contractId: string) {
   const { user } = await requireAdmin();
+  const parsedContractId = uuidSchema.safeParse(contractId);
+
+  if (!parsedContractId.success) {
+    redirectSingleRepairFailure(INVALID_CONTRACT_ID_MESSAGE);
+  }
+
+  const safeContractId = parsedContractId.data;
 
   try {
-    const result = await generateContractDocumentsForAdmin(contractId, user.id);
+    const result = await generateContractDocumentsForAdmin(safeContractId, user.id);
     revalidatePath("/app/admin/vault");
-    revalidatePath(`/app/admin/contracts/${contractId}`);
+    revalidatePath(`/app/admin/contracts/${safeContractId}`);
     redirect(
-      `/app/admin/vault?pdfRepair=single&contractId=${contractId}&repaired=${result.skipped ? 0 : 1}&failed=0`,
+      `/app/admin/vault?pdfRepair=single&contractId=${safeContractId}&repaired=${result.skipped ? 0 : 1}&failed=0`,
     );
   } catch (error) {
     if (isNextRedirectError(error)) {
       throw error;
     }
 
-    console.error(`Single PDF repair failed for contract ${contractId}:`, error);
-    const message =
-      error instanceof Error && error.message
-        ? encodeURIComponent(error.message.slice(0, 180))
-        : encodeURIComponent("Nieznany błąd naprawy PDF");
-    redirect(
-      `/app/admin/vault?pdfRepair=single&contractId=${contractId}&repaired=0&failed=1&errorMessage=${message}`,
-    );
+    await logAdminVaultError({
+      source: "admin.vault.pdf_repair_single.generate_contract_documents",
+      error,
+      userId: user.id,
+      contractId: safeContractId,
+    });
+    redirectSingleRepairFailure(PDF_REPAIR_FAILED_MESSAGE, safeContractId);
   }
 }

@@ -399,7 +399,7 @@ export default function AuthPage({
             </div>
             <div className="my-auto h-10 w-px bg-white/20" />
             <div className="text-center">
-              <div className="text-2xl font-bold">Escrow</div>
+              <div className="text-2xl font-bold">Depozyt</div>
               <div className="text-sm text-white/70">płatność chroniona</div>
             </div>
             <div className="my-auto h-10 w-px bg-white/20" />

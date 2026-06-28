@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Briefcase, Building2, ExternalLink } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 // Components for Tabs
 import { findConversationForServiceOrder } from "@/lib/services/service-order-conversations";
@@ -305,81 +304,70 @@ export default async function RealizationWorkspace({
         if (hasDeliveredMilestone) return isCompany ? "Sprawdź pracę" : "Czekamy na odbiór";
         return isStudent ? "Prześlij efekt pracy" : "Czekamy na realizację";
     })();
+    const projectTitle = offer?.tytul ?? "Zlecenie";
+    const companyHref = isStudent && companyId ? `/app/companies/${companyId}` : null;
+    const conversationHref = conversation?.id ? `/app/chat/${conversation.id}` : "/app/chat";
 
     return (
-        <main className="min-h-screen bg-[#f8fafc]">
-            {/* PREMIUM HEADER - Dark Gradient (Full Width) */}
-            <div className="relative overflow-hidden bg-slate-950 pt-12 pb-20 border-b border-white/5 shadow-2xl">
-                {/* Decorative Elements */}
-                <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
-                <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-[0.03] bg-repeat pointer-events-none" />
-
-                <div className="container mx-auto max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
-                    <div className="flex flex-col gap-6">
+        <main className="min-h-screen bg-[#eef3f8]">
+            <div className="relative overflow-hidden bg-[#102b66] pt-24 pb-8 shadow-[0_24px_70px_-54px_rgba(7,20,47,0.85)] sm:pt-28 sm:pb-10">
+                <div className="container relative z-10 mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-8">
+                    <div className="flex flex-col gap-5">
                         <Link
                             href={backHref}
-                            className="group flex items-center gap-2 text-slate-400 hover:text-white transition-all w-fit px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/5"
+                            className="group flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-white/70 transition-all hover:bg-white/12 hover:text-white"
                         >
-                            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                            <span className="text-xs font-bold uppercase tracking-wider">Twoje Zlecenia</span>
+                            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Moje zlecenia</span>
                         </Link>
 
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                            <div className="space-y-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl ring-1 ring-indigo-500/50">
-                                        <Briefcase className="w-7 h-7" />
+                        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                            <div className="min-w-0">
+                                <div className="mb-3 flex flex-wrap items-center gap-2">
+                                    <Badge className="rounded-full border border-emerald-300/25 bg-emerald-300/12 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-100">
+                                        Workspace
+                                    </Badge>
+                                    <Badge className="rounded-full border border-violet-300/25 bg-violet-300/12 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-violet-100">
+                                        {status === "completed" ? "Zakończone" : status === "cancelled" ? "Anulowane" : "W trakcie"}
+                                    </Badge>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-[#c5fb37]">
+                                        <Briefcase className="h-6 w-6" />
                                     </div>
-                                    <div>
-                                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                                            <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
-                                                Panel Realizacji
-                                            </h1>
-                                            <Badge className={cn(
-                                                "px-4 py-1.5 rounded-full font-black uppercase text-[10px] tracking-widest",
-                                                status === 'completed' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
-                                                    status === 'cancelled' ? "bg-red-500/20 text-red-400 border-red-500/30" :
-                                                        status === 'delivered' ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
-                                                        "bg-indigo-500/20 text-indigo-400 border-indigo-500/30"
-                                            )}>
-                                                {status === 'pending' && "Oczekuje"}
-                                                {status === 'in_progress' && "W trakcie"}
-                                                {status === 'delivered' && "W trakcie odbioru"}
-                                                {status === 'completed' && "Zakończone"}
-                                                {status === 'cancelled' && "Anulowane"}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-slate-400 font-medium">
-                                            Kontynuujesz pracę nad: <span className="text-white font-bold">{offer?.tytul}</span>
+                                    <div className="min-w-0">
+                                        <h1 className="max-w-4xl text-balance text-2xl font-black leading-tight tracking-tight text-white sm:text-3xl lg:text-4xl">
+                                            {projectTitle}
+                                        </h1>
+                                        <p className="mt-2 max-w-2xl text-sm font-semibold leading-relaxed text-white/62">
+                                            Panel realizacji z etapami, plikami, akceptacją i statusem rozliczenia w jednym widoku.
                                         </p>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                                <div className="text-right hidden md:block">
-                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Wartość zlecenia</p>
-                                    <p className="text-xl font-black text-white">
+                            <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-[420px]">
+                                <div className="rounded-2xl border border-white/10 bg-white/8 p-4 text-white">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/45">Budżet</p>
+                                    <p className="mt-1 text-xl font-black">
                                         {agreedAmount != null ? `${agreedAmount} PLN` : "---"}
                                     </p>
                                 </div>
-                                <div className="h-10 w-px bg-white/10 mx-2 hidden md:block" />
-                                <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-2xl">
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">Następna akcja</p>
-                                    <p className="text-xs text-indigo-200 font-bold">{nextActionLabel}</p>
+                                <div className="rounded-2xl border border-white/10 bg-white/8 p-4 text-white">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/45">Następna akcja</p>
+                                    <p className="mt-1 line-clamp-2 text-sm font-black leading-snug text-[#c5fb37]">{nextActionLabel}</p>
                                 </div>
-                                {isStudent && companyId && (
+                                {companyHref && (
                                     <Link
-                                        href={`/app/companies/${companyId}`}
-                                        className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-indigo-500/30 transition-all group"
+                                        href={companyHref}
+                                        className="group flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 p-4 text-white transition-all hover:bg-white/12 sm:col-span-2"
                                     >
-                                        <Building2 className="w-4 h-4 text-indigo-400 group-hover:text-indigo-300" />
-                                        <div>
-                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">Profil Firmy</p>
-                                            <p className="text-xs text-white font-bold">{companyName ?? "Zobacz profil"}</p>
+                                        <Building2 className="h-4 w-4 shrink-0 text-[#c5fb37]" />
+                                        <div className="min-w-0">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-white/45">Profil firmy</p>
+                                            <p className="truncate text-sm font-black">{companyName ?? "Zobacz profil"}</p>
                                         </div>
-                                        <ExternalLink className="w-3 h-3 text-slate-600 group-hover:text-indigo-400 transition-colors" />
+                                        <ExternalLink className="ml-auto h-3.5 w-3.5 text-white/35 transition-colors group-hover:text-white" />
                                     </Link>
                                 )}
                             </div>
@@ -388,8 +376,7 @@ export default async function RealizationWorkspace({
                 </div>
             </div>
 
-            {/* MAIN CONTENT AREA */}
-            <div className="container mx-auto max-w-[2000px] px-4 sm:px-6 lg:px-8 xl:px-12 -mt-10 relative z-20 pb-20">
+            <div className="container relative z-20 mx-auto max-w-[1280px] px-4 pb-24 pt-5 sm:px-6 lg:px-8">
                 <WorkspaceTabs
                     statusProps={{
                         applicationStatus: appRow.status,
@@ -407,6 +394,11 @@ export default async function RealizationWorkspace({
                         studentInstructions,
                         contractDocuments,
                         resources,
+                        projectTitle,
+                        companyName,
+                        companyHref,
+                        conversationHref,
+                        nextActionLabel,
                     }}
                     filesProps={{ applicationId, resources, deliverables, isCompany }}
                     secretsProps={{ applicationId, secrets, isCompany }}

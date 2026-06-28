@@ -131,6 +131,7 @@
     max-width: 100%;
     overflow-x: hidden;
     text-size-adjust: 100%;
+    overscroll-behavior-x: none;
   }
 
   * {
@@ -140,6 +141,7 @@
 
   body {
     @apply bg-background text-foreground;
+    min-width: 0;
     -webkit-user-select: none;
     user-select: none;
     caret-color: transparent;
@@ -182,6 +184,13 @@
   video,
   canvas,
   iframe {
+    max-width: 100%;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
     max-width: 100%;
   }
 

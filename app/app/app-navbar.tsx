@@ -1,30 +1,38 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Image from "next/image";
 import dynamic from "next/dynamic";
 import {
   Briefcase,
-  CircleHelp,
+  ChevronDown,
   CircleDollarSign,
+  CircleHelp,
   FileText,
   LayoutGrid,
   LogOut,
   Menu,
   MessageSquare,
-  PlusCircle,
+  Plus,
   Search,
-  SearchCheck,
-  Sparkles,
+  Settings,
+  Star,
   User,
+  WalletCards,
   type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+
 import { AdminNav } from "@/components/admin/admin-nav";
-import { Button } from "@/components/ui/button";
+import { Student2WorkBrand } from "@/components/student2work-brand";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -33,12 +41,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { signOut } from "./_actions/auth";
+import { cn } from "@/lib/utils";
 import { useAppTour } from "@/components/app-tour/app-tour-provider";
+import { signOut } from "./_actions/auth";
 
-const NotificationsBell = dynamic(() => import("@/components/notifications-bell"));
+const NotificationsBell = dynamic<NotificationsBellProps>(() => import("@/components/notifications-bell"));
 const UnreadChatBadge = dynamic(() =>
-  import("./_components/UnreadChatBadge").then((module) => module.UnreadChatBadge)
+  import("./_components/UnreadChatBadge").then((module) => module.UnreadChatBadge),
 );
 
 type AppNavbarUser = {
@@ -53,7 +62,7 @@ interface AppNavbarProps {
   unreadChat?: number;
 }
 
-type MobileNavItem = {
+type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
@@ -61,88 +70,487 @@ type MobileNavItem = {
   tourId?: string;
 };
 
+type MobileAction = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  tourId?: string;
+};
+
+type NotificationsBellProps = {
+  unread: number;
+  triggerClassName?: string;
+  badgeClassName?: string;
+};
+
 function isPathActive(pathname: string | null, path: string) {
   return pathname === path || pathname?.startsWith(`${path}/`);
+}
+
+function getRoleLabel(role: string | null) {
+  if (role === "company") return "Firma";
+  if (role === "admin") return "Admin";
+  return "Student";
+}
+
+function getDisplayName(user: AppNavbarUser | null, role: string | null) {
+  if (!user?.email) {
+    return role === "company" ? "LOOB" : "Bartosz";
+  }
+
+  const [localPart] = user.email.split("@");
+  const cleaned = localPart.replace(/[._-]+/g, " ").trim();
+
+  if (!cleaned) {
+    return role === "company" ? "Firma" : "Student";
+  }
+
+  return cleaned
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function getInitials(name: string, role: string | null) {
+  const initials = name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+
+  if (initials) {
+    return initials;
+  }
+
+  return role === "company" ? "L" : "BP";
+}
+
+function getHomeHref(role: string | null) {
+  if (role === "student") return "/app/jobs";
+  if (role === "company") return "/app/company/packages";
+  if (role === "admin") return "/app/admin";
+  return "/app";
+}
+
+function getDesktopNavItems(role: string | null): NavItem[] {
+  if (role === "company") {
+    return [
+      { href: "/app/company/packages", label: "Katalog", icon: Search, tourId: "company-catalog" },
+      { href: "/app/company/offers", label: "Ogłoszenia", icon: LayoutGrid, tourId: "company-offers" },
+      { href: "/app/company/documents", label: "Dokumenty", icon: FileText },
+      { href: "/app/company/orders", label: "Zamówienia", icon: Briefcase, tourId: "company-orders" },
+    ];
+  }
+
+  if (role === "student") {
+    return [
+      { href: "/app/jobs", label: "Giełda Zleceń", icon: Search, tourId: "student-jobs" },
+      { href: "/app/applications", label: "Aplikacje", icon: FileText, tourId: "student-applications" },
+      { href: "/app/services/my", label: "Usługi", icon: Briefcase, tourId: "student-services" },
+      { href: "/app/finances", label: "Finanse", icon: CircleDollarSign },
+      { href: "/app/chat", label: "Wiadomości", icon: MessageSquare, chat: true, tourId: "student-chat" },
+    ];
+  }
+
+  return [
+    { href: "/app", label: "Start", icon: LayoutGrid },
+    { href: "/app/chat", label: "Wiadomości", icon: MessageSquare, chat: true },
+    { href: "/app/profile", label: "Profil", icon: User },
+  ];
+}
+
+function getMobileItems(role: string | null): { left: NavItem[]; right: NavItem[]; action: MobileAction } {
+  if (role === "company") {
+    return {
+      left: [
+        { href: "/app/company/packages", label: "Katalog", icon: Search, tourId: "company-catalog" },
+        { href: "/app/company/offers", label: "Oferty", icon: LayoutGrid, tourId: "company-offers" },
+      ],
+      right: [
+        { href: "/app/company/orders", label: "Zamówienia", icon: Briefcase, tourId: "company-orders" },
+        { href: "/app/profile", label: "Profil", icon: User },
+      ],
+      action: {
+        href: "/app/company/jobs/new",
+        label: "Dodaj",
+        icon: Plus,
+        tourId: "company-create-offer",
+      },
+    };
+  }
+
+  if (role === "student") {
+    return {
+      left: [
+        { href: "/app/jobs", label: "Giełda", icon: Search, tourId: "student-jobs" },
+        { href: "/app/applications", label: "Aplikacje", icon: FileText, tourId: "student-applications" },
+      ],
+      right: [
+        { href: "/app/chat", label: "Czat", icon: MessageSquare, chat: true, tourId: "student-chat" },
+        { href: "/app/profile", label: "Profil", icon: User },
+      ],
+      action: {
+        href: "/app/services/new",
+        label: "Dodaj",
+        icon: Plus,
+      },
+    };
+  }
+
+  return {
+    left: [
+      { href: "/app/admin", label: "Admin", icon: LayoutGrid },
+      { href: "/app/admin/users", label: "Użytkownicy", icon: User },
+    ],
+    right: [
+      { href: "/app/admin/offers", label: "Oferty", icon: FileText },
+      { href: "/app/profile", label: "Profil", icon: User },
+    ],
+    action: {
+      href: "/app/admin",
+      label: "Panel",
+      icon: Plus,
+    },
+  };
 }
 
 function AppNavLink({
   href,
   children,
   icon: Icon,
-  onClick,
   pathname,
   tourId,
+  userId,
+  unreadChat,
+  chat,
+  className,
+  activeIndicatorClassName,
 }: {
   href: string;
   children: ReactNode;
-  icon?: LucideIcon;
-  onClick?: () => void;
+  icon: LucideIcon;
   pathname: string | null;
   tourId?: string;
+  userId?: string;
+  unreadChat: number;
+  chat?: boolean;
+  className?: string;
+  activeIndicatorClassName?: string;
 }) {
   const active = isPathActive(pathname, href);
 
   return (
     <Link
       href={href}
-      onClick={onClick}
       data-tour={tourId}
       className={cn(
-        "relative flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-extrabold transition-all duration-200 xl:px-4",
+        "relative flex h-10 min-w-fit flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-[11px] font-black transition-all duration-200 2xl:text-xs",
         active
-          ? "bg-white/10 text-white shadow-sm"
-          : "text-white/60 hover:bg-white/10 hover:text-white"
+          ? "bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+          : "text-white/58 hover:bg-white/8 hover:text-white",
+        className,
       )}
     >
-      {Icon && (
-        <Icon
-          className={cn(
-            "h-4 w-4 transition-colors",
-            active ? "text-white" : "text-white/40"
-          )}
-        />
-      )}
-      <span>{children}</span>
-      {active && (
-        <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-lime-300" />
-      )}
+      <Icon
+        className={cn(
+          "h-3.5 w-3.5 shrink-0 transition-colors 2xl:h-4 2xl:w-4",
+          active ? "text-[#c5fb37]" : "text-white/38",
+        )}
+      />
+      <span className="leading-none">{children}</span>
+      {chat && userId ? (
+        <UnreadChatBadge userId={userId} initialCount={unreadChat} />
+      ) : null}
+      {active ? (
+        <span className={cn("absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[#c5fb37]", activeIndicatorClassName)} />
+      ) : null}
     </Link>
   );
 }
 
-function getMobileNavItems(role: string | null): MobileNavItem[] {
-  if (role === "company") {
-    return [
-      { href: "/app/company/packages", label: "Katalog", icon: Search, tourId: "company-catalog" },
-      { href: "/app/company/offers", label: "Zlecenia", icon: LayoutGrid, tourId: "company-offers" },
-      { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true, tourId: "company-chat" },
-      { href: "/app/profile", label: "Profil", icon: User },
-    ];
-  }
+function MobileBottomLink({
+  item,
+  pathname,
+  userId,
+  unreadChat,
+}: {
+  item: NavItem;
+  pathname: string | null;
+  userId?: string;
+  unreadChat: number;
+}) {
+  const active = isPathActive(pathname, item.href);
+  const Icon = item.icon;
 
-  if (role === "student") {
-    return [
-      { href: "/app/jobs", label: "Giełda", icon: Search, tourId: "student-jobs" },
-      { href: "/app/applications", label: "Aplikacje", icon: FileText, tourId: "student-applications" },
-      { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true, tourId: "student-chat" },
-      { href: "/app/profile", label: "Profil", icon: User },
-    ];
-  }
+  return (
+    <Link
+      href={item.href}
+      data-tour={item.tourId}
+      className={cn(
+        "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-black transition-all",
+        active ? "bg-lime-100 text-[#07142f]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-950",
+      )}
+    >
+      <span className="relative flex h-5 w-5 items-center justify-center">
+        <Icon className={cn("h-4 w-4", active ? "text-[#07142f]" : "text-slate-500")} />
+        {item.chat && userId && unreadChat > 0 ? (
+          <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-red-500 px-1 text-center text-[9px] leading-4 text-white">
+            {unreadChat > 9 ? "9+" : unreadChat}
+          </span>
+        ) : null}
+      </span>
+      <span className="max-w-full truncate">{item.label}</span>
+    </Link>
+  );
+}
 
-  if (role === "admin") {
-    return [
-      { href: "/app/admin", label: "Admin", icon: LayoutGrid },
-      { href: "/app/admin/users", label: "Użytkownicy", icon: User },
-      { href: "/app/admin/offers", label: "Oferty", icon: FileText },
-      { href: "/app/profile", label: "Profil", icon: User },
-    ];
-  }
+function AccountMenu({
+  displayName,
+  email,
+  initials,
+  role,
+  roleLabel,
+  tourAvailable,
+  onRestartTour,
+}: {
+  displayName: string;
+  email?: string | null;
+  initials: string;
+  role: string | null;
+  roleLabel: string;
+  tourAvailable: boolean;
+  onRestartTour: () => void;
+}) {
+  const documentsHref = role === "company" ? "/app/company/documents" : "/app/finances";
 
-  return [
-    { href: "/app", label: "Start", icon: LayoutGrid },
-    { href: "/app/chat", label: "Chat", icon: MessageSquare, chat: true },
-    { href: "/app/profile", label: "Profil", icon: User },
-  ];
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="hidden h-10 items-center gap-2 rounded-full border border-white/10 bg-white/5 py-1 pl-1.5 pr-2.5 text-left text-white transition hover:bg-white/10 xl:flex"
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#8b6ff5] text-[11px] font-black text-white">
+            {initials}
+          </span>
+          <span className="grid min-w-0 leading-none">
+            <span className="max-w-24 truncate text-xs font-black">{displayName}</span>
+            <span className="mt-0.5 text-[9px] font-bold text-white/46">{roleLabel}</span>
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 text-white/38" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={12}
+        className="w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-[0_24px_70px_-34px_rgba(7,20,47,0.75)]"
+      >
+        <div className="bg-[#172b68] px-4 py-4 text-white">
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#8b6ff5] text-sm font-black">
+              {initials}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black">{displayName}</p>
+              <p className="truncate text-xs font-semibold text-white/58">{email ?? "konto@student2work.pl"}</p>
+            </div>
+          </div>
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#c5fb37]/12 px-2.5 py-1 text-[10px] font-black uppercase tracking-normal text-[#c5fb37]">
+            <Star className="h-3 w-3" />
+            {role === "company" ? "Zweryfikowana firma" : "Zweryfikowany profil"}
+          </p>
+        </div>
+
+        <div className="grid gap-1 p-2">
+          <DropdownMenuItem asChild className="cursor-pointer rounded-xl px-3 py-3 text-xs font-black text-[#07142f]">
+            <Link href="/app/profile">
+              <User className="h-4 w-4" />
+              Mój profil
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild className="cursor-pointer rounded-xl px-3 py-3 text-xs font-black text-[#07142f]">
+            <Link href={documentsHref}>
+              <WalletCards className="h-4 w-4" />
+              Płatności i faktury
+            </Link>
+          </DropdownMenuItem>
+          {tourAvailable ? (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                onRestartTour();
+              }}
+              className="cursor-pointer rounded-xl px-3 py-3 text-xs font-black text-[#07142f]"
+            >
+              <CircleHelp className="h-4 w-4" />
+              Samouczek
+              <span className="ml-auto rounded-full bg-lime-100 px-2 py-0.5 text-[9px] font-black text-[#07142f]">
+                Nowość
+              </span>
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem asChild className="cursor-pointer rounded-xl px-3 py-3 text-xs font-black text-[#07142f]">
+            <Link href="/app/profile">
+              <Settings className="h-4 w-4" />
+              Ustawienia
+            </Link>
+          </DropdownMenuItem>
+        </div>
+
+        <DropdownMenuSeparator className="mx-2 bg-slate-100" />
+        <form action={signOut} className="p-2 pt-1">
+          <button
+            type="submit"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-xs font-black text-red-500 transition hover:bg-red-50"
+          >
+            <LogOut className="h-4 w-4" />
+            Wyloguj się
+          </button>
+        </form>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function MobileSheetMenu({
+  user,
+  role,
+  roleLabel,
+  displayName,
+  email,
+  initials,
+  pathname,
+  unreadChat,
+  tourAvailable,
+  onRestartTour,
+  open,
+  onOpenChange,
+}: {
+  user: AppNavbarUser | null;
+  role: string | null;
+  roleLabel: string;
+  displayName: string;
+  email?: string | null;
+  initials: string;
+  pathname: string | null;
+  unreadChat: number;
+  tourAvailable: boolean;
+  onRestartTour: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const navItems = getDesktopNavItems(role);
+
+  const handleRestartTour = () => {
+    onOpenChange(false);
+    window.setTimeout(onRestartTour, 250);
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/78 transition hover:bg-white/10 hover:text-white lg:hidden"
+          aria-label="Otwórz menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      </SheetTrigger>
+      <SheetContent
+        side="left"
+        className="flex w-[min(86vw,20rem)] flex-col border-r border-white/10 bg-[#07142f] p-3 text-white [&>button]:rounded-xl [&>button]:bg-white/10 [&>button]:text-white/70 [&>button]:hover:text-white"
+      >
+        <SheetHeader className="mb-4 border-b border-white/10 px-1 pb-5 text-left">
+          <SheetTitle className="text-white">
+            <Student2WorkBrand href={getHomeHref(role)} onClick={() => onOpenChange(false)} />
+          </SheetTitle>
+          <SheetDescription className="sr-only">
+            Nawigacja aplikacji Student2Work.
+          </SheetDescription>
+        </SheetHeader>
+
+        {user ? (
+          <Link
+            href="/app/profile"
+            onClick={() => onOpenChange(false)}
+            className="mb-4 flex items-center gap-3 rounded-xl border border-white/10 bg-white/8 p-3"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#8b6ff5] text-sm font-black">
+              {initials}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-black">{displayName}</span>
+              <span className="block truncate text-[11px] font-semibold text-white/48">{email ?? roleLabel}</span>
+            </span>
+          </Link>
+        ) : null}
+
+        <div className="grid gap-1">
+          {role === "admin" ? (
+            <AdminNav pathname={pathname} mobile onNavigate={() => onOpenChange(false)} />
+          ) : (
+            navItems.map((item) => (
+              <AppNavLink
+                key={item.href}
+                href={item.href}
+                icon={item.icon}
+                pathname={pathname}
+                tourId={item.tourId}
+                userId={user?.id}
+                unreadChat={unreadChat}
+                chat={item.chat}
+                className="w-full justify-start"
+                activeIndicatorClassName="bottom-auto left-auto right-5 top-1/2 -translate-x-0 -translate-y-1/2"
+              >
+                {item.label}
+              </AppNavLink>
+            ))
+          )}
+
+          {role === "company" ? (
+            <AppNavLink
+              href="/app/company/jobs/new"
+              icon={Plus}
+              pathname={pathname}
+              tourId="company-create-offer"
+              userId={user?.id}
+              unreadChat={unreadChat}
+              className="w-full justify-start"
+              activeIndicatorClassName="bottom-auto left-auto right-5 top-1/2 -translate-x-0 -translate-y-1/2"
+            >
+              Dodaj ofertę
+            </AppNavLink>
+          ) : null}
+        </div>
+
+        <div className="mt-auto grid gap-2 border-t border-white/10 pt-4">
+          {tourAvailable ? (
+            <button
+              type="button"
+              onClick={handleRestartTour}
+              className="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#c5fb37] px-4 text-sm font-black text-[#07142f]"
+            >
+              <CircleHelp className="h-4 w-4" />
+              Samouczek
+            </button>
+          ) : null}
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-black text-white transition hover:bg-white/10"
+            >
+              <LogOut className="h-4 w-4" />
+              Wyloguj się
+            </button>
+          </form>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
 }
 
 export function AppNavbar({
@@ -154,341 +562,192 @@ export function AppNavbar({
   const pathname = usePathname();
   const { available: tourAvailable, restart: restartTour } = useAppTour();
   const [isOpen, setIsOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const lastScrollYRef = useRef(0);
 
-  const mobileNavItems = getMobileNavItems(role);
-  const restartTourFromMobileMenu = () => {
-    setIsOpen(false);
-    window.setTimeout(restartTour, 300);
-  };
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentY = window.scrollY;
+      const delta = currentY - lastScrollYRef.current;
+
+      setScrolled(currentY > 12);
+
+      if (isOpen || currentY < 24) {
+        setHidden(false);
+      } else if (Math.abs(delta) > 8) {
+        setHidden(delta > 0 && currentY > 96);
+      }
+
+      lastScrollYRef.current = currentY;
+    };
+
+    lastScrollYRef.current = window.scrollY;
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [isOpen, pathname]);
+
+  const navItems = getDesktopNavItems(role);
+  const mobile = getMobileItems(role);
+  const roleLabel = getRoleLabel(role);
+  const displayName = getDisplayName(user, role);
+  const initials = getInitials(displayName, role);
+  const homeHref = getHomeHref(role);
+  const MobileActionIcon = mobile.action.icon;
 
   return (
     <>
-    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#07142f] backdrop-blur-xl">
-      <div className="mx-auto w-full max-w-[1380px] px-3 sm:px-4 lg:px-8">
-        <div className="relative flex h-14 items-center gap-2 sm:gap-4">
-          <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
-            <Sheet open={isOpen} onOpenChange={setIsOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-1/2 h-9 w-9 -translate-y-1/2 rounded-xl text-white/70 hover:bg-white/10 hover:text-white lg:hidden"
-                  suppressHydrationWarning
-                >
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent
-                side="left"
-                className="flex flex-col bg-slate-950 pt-8 border-r border-white/5 z-[100]"
-              >
-                <SheetHeader className="px-1 mb-6 text-left border-b border-white/5 pb-6">
-                  <SheetTitle className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/25 flex items-center justify-center">
-                      <Sparkles className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <span className="font-black text-xl text-white block leading-tight">
-                        Student<span className="text-indigo-400">2</span>Work
-                      </span>
-                      <span className="text-[10px] text-white/40 font-bold tracking-[0.15em] uppercase">
-                        Platforma Premium
-                      </span>
-                    </div>
-                  </SheetTitle>
-                  <SheetDescription className="sr-only">
-                    Nawigacja aplikacji, profil użytkownika i szybkie uruchomienie samouczka.
-                  </SheetDescription>
-                </SheetHeader>
+      <header
+        className={cn(
+          "fixed inset-x-0 top-0 z-50 w-full px-3 py-3 transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform sm:px-4 lg:px-6",
+          hidden ? "pointer-events-none -translate-y-[120%] opacity-0" : "translate-y-0 opacity-100",
+        )}
+      >
+        <div
+          className={cn(
+            "mx-auto flex h-14 items-center gap-2 rounded-2xl border border-white/10 bg-[#07142f]/96 px-3 shadow-[0_18px_52px_-34px_rgba(7,20,47,0.9)] backdrop-blur-xl transition-all duration-200 sm:h-16 sm:px-4 lg:gap-3 lg:px-5",
+            role === "admin" ? "max-w-[1840px]" : "max-w-[1480px]",
+            scrolled && "bg-[#07142f]/90 shadow-[0_22px_60px_-30px_rgba(7,20,47,0.95)]",
+          )}
+        >
+          <Student2WorkBrand href={homeHref} compact={false} />
 
-                <div className="flex-1 flex flex-col gap-1 overflow-y-auto py-2">
-                  {role === "company" && (
-                    <>
-                      <div className="px-4 text-[10px] font-black text-white/30 uppercase tracking-[0.15em] mb-2 mt-1">
-                        Panel Firmy
-                      </div>
-                      <AppNavLink href="/app/company/packages" icon={Search} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-catalog">
-                        Katalog Usług
-                      </AppNavLink>
-                      <AppNavLink href="/app/company/offers" icon={LayoutGrid} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-offers">
-                        Moje ogłoszenia
-                      </AppNavLink>
-                      <AppNavLink href="/app/company/challenges/new" icon={SearchCheck} onClick={() => setIsOpen(false)} pathname={pathname}>
-                        Dodaj wyzwanie
-                      </AppNavLink>
-                      <AppNavLink href="/app/company/documents" icon={FileText} onClick={() => setIsOpen(false)} pathname={pathname}>
-                        Dokumenty
-                      </AppNavLink>
-                      <AppNavLink href="/app/company/orders" icon={Briefcase} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-orders">
-                        Zamówienia usług
-                      </AppNavLink>
-                      <AppNavLink href="/app/chat" icon={MessageSquare} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-chat">
-                        Wiadomości
-                        {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
-                      </AppNavLink>
-                      <AppNavLink href="/app/company/jobs/new" icon={PlusCircle} onClick={() => setIsOpen(false)} pathname={pathname} tourId="company-create-offer">
-                        Dodaj ofertę
-                      </AppNavLink>
-                    </>
-                  )}
-
-                  {role === "student" && (
-                    <>
-                      <div className="px-4 text-[10px] font-black text-white/30 uppercase tracking-[0.15em] mb-2 mt-1">
-                        Panel Studenta
-                      </div>
-                      <AppNavLink href="/app/jobs" icon={Search} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-jobs">
-                        Giełda Zleceń
-                      </AppNavLink>
-                      <AppNavLink href="/app/applications" icon={FileText} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-applications">
-                        Aplikacje
-                      </AppNavLink>
-                      <AppNavLink href="/app/services/my" icon={Briefcase} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-services">
-                        Usługi
-                      </AppNavLink>
-                      <AppNavLink href="/app/finances" icon={CircleDollarSign} onClick={() => setIsOpen(false)} pathname={pathname}>
-                        Finanse
-                      </AppNavLink>
-                      <AppNavLink href="/app/chat" icon={MessageSquare} onClick={() => setIsOpen(false)} pathname={pathname} tourId="student-chat">
-                        Wiadomości
-                        {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
-                      </AppNavLink>
-                    </>
-                  )}
-
-                  {role === "admin" && (
-                    <AdminNav
-                      pathname={pathname}
-                      mobile
-                      onNavigate={() => setIsOpen(false)}
-                    />
-                  )}
-                </div>
-
-                <div className="border-t border-white/5 pt-4 mt-auto pb-6 space-y-2">
-                  {user ? (
-                    <>
-                      {tourAvailable ? (
-                        <button
-                          type="button"
-                          onClick={restartTourFromMobileMenu}
-                          data-testid="restart-app-tour-mobile"
-                          className="flex w-full items-center gap-3 rounded-xl border border-indigo-300/20 bg-indigo-500/10 px-3 py-3 text-left text-sm font-black text-indigo-100 transition-all hover:border-indigo-300/40 hover:bg-indigo-500/20"
-                        >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-100">
-                            <CircleHelp className="h-4 w-4" />
-                          </div>
-                          Samouczek
-                        </button>
-                      ) : null}
-                      <Link
-                        href="/app/profile"
-                        onClick={() => setIsOpen(false)}
-                        className="flex items-center gap-3 px-3 py-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group"
-                      >
-                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
-                          <User className="h-4 w-4 text-white" />
-                        </div>
-                        <div className="flex-1 overflow-hidden">
-                          <div className="text-sm font-bold text-white truncate">Twój Profil</div>
-                          <div className="text-xs text-white/40 truncate">{user.email}</div>
-                        </div>
-                      </Link>
-                      <form action={signOut} className="w-full">
-                        <button className="flex w-full items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all font-bold text-sm">
-                          <LogOut className="h-4 w-4" />
-                          Wyloguj sie
-                        </button>
-                      </form>
-                    </>
-                  ) : (
-                    <Link
-                      href="/auth"
-                      onClick={() => setIsOpen(false)}
-                      className="block w-full text-center rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-5 py-3.5 font-bold text-sm shadow-xl shadow-indigo-500/25"
-                    >
-                      Dołącz teraz
-                    </Link>
-                  )}
-                </div>
-              </SheetContent>
-            </Sheet>
-
-            <Link
-              href={role === "student" ? "/app/jobs" : role === "admin" ? "/app/admin" : role === "company" ? "/app/company/packages" : "/app"}
-              data-tour="tour-home"
-              className="flex items-center gap-2.5 group"
-            >
-              <div className="relative">
-                <div className="absolute inset-0 bg-indigo-500/30 blur-lg rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <Image
-                  src="/logo.png"
-                  alt="Logo"
-                  width={128}
-                  height={32}
-                  priority
-                className="relative z-10 h-6 w-auto transition-transform duration-300 group-hover:scale-105 sm:h-7"
-              />
-            </div>
-              <span className="inline-block text-xs font-black tracking-normal text-white sm:text-sm">
-                Student<span className="text-indigo-400">2</span>Work
-              </span>
-            </Link>
-          </div>
-
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 px-3 lg:flex">
-            {role === "company" && (
-              <>
-                <AppNavLink href="/app/company/packages" icon={Search} pathname={pathname} tourId="company-catalog">
-                  Katalog Usług
-                </AppNavLink>
-                <AppNavLink href="/app/company/offers" icon={LayoutGrid} pathname={pathname} tourId="company-offers">
-                  Moje ogłoszenia
-                </AppNavLink>
-                <AppNavLink href="/app/company/challenges/new" icon={SearchCheck} pathname={pathname}>
-                  Wyzwanie
-                </AppNavLink>
-                <AppNavLink href="/app/company/documents" icon={FileText} pathname={pathname}>
-                  Dokumenty
-                </AppNavLink>
-                <AppNavLink href="/app/company/orders" icon={Briefcase} pathname={pathname} tourId="company-orders">
-                  Zamówienia usług
-                </AppNavLink>
-                <AppNavLink href="/app/chat" icon={MessageSquare} pathname={pathname} tourId="company-chat">
-                  Wiadomości
-                  {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
-                </AppNavLink>
-                <Link
-                  href="/app/company/jobs/new"
-                  data-tour="company-create-offer"
-                  className={cn(
-                    "ml-3 flex items-center gap-2 rounded-full px-5 py-2 text-sm font-black transition-all active:scale-95",
-                    isPathActive(pathname, "/app/company/jobs/new")
-                      ? "bg-lime-300 text-[#10245f] shadow-lg shadow-lime-300/20"
-                      : "bg-lime-300 text-[#10245f] shadow-md shadow-lime-300/20 hover:-translate-y-0.5 hover:bg-lime-200 hover:shadow-lg hover:shadow-lime-300/30"
-                  )}
-                >
-                  <PlusCircle className="h-4 w-4" />
-                  <span>Dodaj ofertę</span>
-                </Link>
-              </>
-            )}
-
-            {role === "student" && (
-              <>
-                <AppNavLink href="/app/jobs" icon={Search} pathname={pathname} tourId="student-jobs">
-                  Giełda Zleceń
-                </AppNavLink>
-                <AppNavLink href="/app/applications" icon={FileText} pathname={pathname} tourId="student-applications">
-                  Aplikacje
-                </AppNavLink>
-                <AppNavLink href="/app/services/my" icon={Briefcase} pathname={pathname} tourId="student-services">
-                  Usługi
-                </AppNavLink>
-                <AppNavLink href="/app/finances" icon={CircleDollarSign} pathname={pathname}>
-                  Finanse
-                </AppNavLink>
-                <AppNavLink href="/app/chat" icon={MessageSquare} pathname={pathname} tourId="student-chat">
-                  Wiadomości
-                  {user && <UnreadChatBadge userId={user.id} initialCount={unreadChat} />}
-                </AppNavLink>
-              </>
-            )}
-
-            {role === "admin" && (
+          <nav className={cn(
+            "hidden min-w-0 flex-1 items-center gap-1 px-2 lg:flex 2xl:px-5",
+            role === "admin" ? "justify-start" : "justify-center",
+          )}>
+            {role === "admin" ? (
               <AdminNav pathname={pathname} />
+            ) : (
+              navItems.map((item) => (
+                <AppNavLink
+                  key={item.href}
+                  href={item.href}
+                  icon={item.icon}
+                  pathname={pathname}
+                  tourId={item.tourId}
+                  userId={user?.id}
+                  unreadChat={unreadChat}
+                  chat={item.chat}
+                >
+                  {item.label}
+                </AppNavLink>
+              ))
             )}
+
+            {role === "company" ? (
+              <Link
+                href="/app/company/jobs/new"
+                data-tour="company-create-offer"
+                className={cn(
+                  "ml-2 flex h-10 flex-none items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[11px] font-black text-[#07142f] shadow-[0_14px_34px_-20px_rgba(197,251,55,0.9)] transition-all active:scale-95 2xl:text-xs",
+                  isPathActive(pathname, "/app/company/jobs/new")
+                    ? "bg-[#c5fb37]"
+                    : "bg-[#c5fb37] hover:-translate-y-0.5 hover:bg-[#d8ff52]",
+                )}
+              >
+                <Plus className="h-4 w-4" />
+                Dodaj ofertę
+              </Link>
+            ) : null}
           </nav>
 
-          <div className="ml-auto flex items-center gap-1 border-l border-white/10 pl-2 pr-10 sm:gap-2 sm:pl-3 lg:ml-2 lg:pr-0">
+          <div className="ml-auto flex items-center gap-1.5 lg:ml-2 lg:border-l lg:border-white/10 lg:pl-3">
             {tourAvailable ? (
               <button
                 type="button"
                 onClick={restartTour}
                 data-testid="restart-app-tour"
-                className="hidden h-9 items-center gap-2 rounded-full border border-lime-300/25 bg-white/5 px-2.5 text-lime-100 shadow-sm shadow-indigo-950/20 transition-all hover:border-lime-200/60 hover:bg-white/10 hover:text-white sm:px-3 lg:inline-flex"
+                className="hidden h-10 items-center gap-2 rounded-full border border-lime-300/25 bg-white/5 px-3 text-xs font-black text-lime-100 transition-all hover:border-lime-200/60 hover:bg-white/10 hover:text-white md:inline-flex"
                 title="Uruchom samouczek"
                 aria-label="Uruchom samouczek"
               >
                 <CircleHelp className="h-4 w-4" />
-                <span className="hidden xl:inline text-xs font-black">Samouczek</span>
+                <span className="hidden xl:inline">Samouczek</span>
               </button>
             ) : null}
 
-            {user && (
-              <div className="relative [&_button]:text-white/60 [&_button]:hover:text-white [&_button]:hover:bg-white/10 [&_button]:rounded-xl">
-                <NotificationsBell unread={unread} />
-              </div>
-            )}
+            {user ? (
+              <NotificationsBell
+                unread={unread}
+                triggerClassName="h-10 w-10 rounded-xl border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
+                badgeClassName="ring-[#07142f]"
+              />
+            ) : null}
 
             {user ? (
-              <div className="flex items-center gap-1">
-                <Link
-                  href="/app/profile"
-                  className={cn(
-                    "hidden h-9 w-9 items-center justify-center rounded-xl transition-all sm:flex",
-                    isPathActive(pathname, "/app/profile")
-                      ? "bg-white/15 text-white shadow-sm"
-                      : "text-white/50 hover:text-white hover:bg-white/10"
-                  )}
-                  title="Mój Profil"
-                >
-                  <User className="h-4 w-4" />
-                </Link>
-
-                <form action={signOut} className="hidden md:block">
-                  <button
-                    className="flex items-center justify-center h-9 w-9 rounded-xl text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-all active:scale-95"
-                    title="Wyloguj"
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </form>
-              </div>
+              <AccountMenu
+                displayName={displayName}
+                email={user.email}
+                initials={initials}
+                role={role}
+                roleLabel={roleLabel}
+                tourAvailable={tourAvailable}
+                onRestartTour={restartTour}
+              />
             ) : (
               <Link
                 href="/auth"
-                className="rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white px-5 py-2 hover:shadow-lg hover:shadow-indigo-500/30 hover:-translate-y-0.5 transition-all active:scale-95 font-black text-xs uppercase tracking-widest shadow-md shadow-indigo-500/20"
+                className="hidden h-10 items-center rounded-full bg-[#c5fb37] px-5 text-xs font-black text-[#07142f] transition hover:bg-[#d8ff52] md:inline-flex"
               >
                 Dołącz
               </Link>
             )}
+
+            <MobileSheetMenu
+              user={user}
+              role={role}
+              roleLabel={roleLabel}
+              displayName={displayName}
+              email={user?.email}
+              initials={initials}
+              pathname={pathname}
+              unreadChat={unreadChat}
+              tourAvailable={tourAvailable}
+              onRestartTour={restartTour}
+              open={isOpen}
+              onOpenChange={setIsOpen}
+            />
           </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200/80 bg-white px-3 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-1.5 shadow-[0_-10px_28px_-24px_rgba(15,23,42,0.55)] lg:hidden">
-      <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
-        {mobileNavItems.map(({ href, label, icon: Icon, chat, tourId }) => {
-          const active = isPathActive(pathname, href);
+      <nav className="fixed inset-x-0 bottom-0 z-50 max-w-full overflow-visible border-t border-slate-200/80 bg-white px-3 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 shadow-[0_-10px_28px_-24px_rgba(15,23,42,0.55)] lg:hidden">
+        <div className="mx-auto grid w-full max-w-sm grid-cols-5 items-end gap-1">
+          {mobile.left.map((item) => (
+            <MobileBottomLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              userId={user?.id}
+              unreadChat={unreadChat}
+            />
+          ))}
 
-          return (
-            <Link
-              key={href}
-              href={href}
-              data-tour={tourId}
-              className={cn(
-                "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-extrabold transition-all",
-                active
-                  ? "bg-lime-200 text-[#0b1b47]"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
-              )}
-            >
-              <span className="relative">
-                <Icon className={cn("h-4 w-4", active ? "text-[#0b1b47]" : "text-slate-500")} />
-                {chat && user && unreadChat > 0 ? (
-                  <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-red-500 px-1 text-center text-[9px] leading-4 text-white">
-                    {unreadChat > 9 ? "9+" : unreadChat}
-                  </span>
-                ) : null}
-              </span>
-              <span className="max-w-full truncate">{label}</span>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+          <Link
+            href={mobile.action.href}
+            data-tour={mobile.action.tourId}
+            className="relative -mt-4 flex min-w-0 flex-col items-center justify-end gap-1 rounded-xl px-1 pb-1.5 text-[10px] font-black text-[#07142f]"
+          >
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#c5fb37] shadow-[0_12px_28px_-14px_rgba(7,20,47,0.8)]">
+              <MobileActionIcon className="h-6 w-6 shrink-0" />
+            </span>
+            <span className="max-w-full truncate">{mobile.action.label}</span>
+          </Link>
+
+          {mobile.right.map((item) => (
+            <MobileBottomLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              userId={user?.id}
+              unreadChat={unreadChat}
+            />
+          ))}
+        </div>
+      </nav>
     </>
   );
 }

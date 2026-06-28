@@ -27,45 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadPrivateFile } from "@/lib/security/client-upload";
-
-const CATEGORIES = [
-  "Administracja biurowa",
-  "Badania i rozwoj",
-  "Bankowosc",
-  "BHP / Ochrona srodowiska",
-  "Budownictwo",
-  "Call Center",
-  "Doradztwo / Konsulting",
-  "Edukacja / Szkolenia",
-  "Energetyka",
-  "Finanse / Ekonomia",
-  "Franczyza / Wlasny biznes",
-  "Grafika & Design",
-  "Hotelarstwo / Gastronomia / Turystyka",
-  "Human Resources / Zasoby ludzkie",
-  "Internet / e-Commerce / Nowe media",
-  "Inzynieria",
-  "IT - Administracja",
-  "IT - Rozwoj oprogramowania",
-  "Kontrola jakosci",
-  "Lancuch dostaw",
-  "Marketing",
-  "Media / Sztuka / Rozrywka",
-  "Nieruchomosci",
-  "Obsluga klienta",
-  "Praca fizyczna",
-  "Prawo",
-  "Produkcja",
-  "Public Relations",
-  "Reklama / Grafika / Kreacja / Fotografia",
-  "Sektor publiczny",
-  "Sprzedaz",
-  "Transport / Spedycja / Logistyka",
-  "Ubezpieczenia",
-  "Zakupy",
-  "Zdrowie / Uroda / Rekreacja",
-  "Inne",
-];
+import { JOB_CATEGORIES } from "@/lib/constants";
 
 const STEP_NAMES = ["Rodzaj", "Informacje", "Szczegoly", "Podsumowanie"];
 
@@ -121,7 +83,7 @@ function createExampleOfferData(type: OfferFormData["typ"]): OfferFormData {
       typ: "job",
       is_platform_service: false,
       tytul: "Junior React Developer do projektu SaaS",
-      kategoria: "IT - Rozwoj oprogramowania",
+      kategoria: "Strony internetowe i CMS",
       opis:
         "Szukamy studenta lub absolwenta do wsparcia zespolu przy rozwoju panelu klienta w aplikacji SaaS. Zakres obejmuje wdrazanie widokow w React, poprawki UI, podlaczenie prostych integracji API i wspolprace z designerem.",
       technologies: "React, TypeScript, Tailwind CSS, Git",
@@ -159,7 +121,7 @@ function createExampleOfferData(type: OfferFormData["typ"]): OfferFormData {
     typ: "micro",
     is_platform_service: false,
     tytul: "Landing page do kampanii rekrutacyjnej",
-    kategoria: "Marketing",
+    kategoria: "Strony internetowe i CMS",
     opis:
       "Potrzebujemy prostego landing page'a promujacego program stazowy. Mamy logo, podstawowe teksty i brandbook. Student ma przygotowac strone z czytelnym CTA, sekcja benefitow i formularzem kontaktowym.",
     technologies: "Figma, Webflow lub Next.js, Google Analytics",
@@ -1469,7 +1431,7 @@ export default function NewOfferForm({
                     <option value="" disabled>
                       Wybierz kategorie
                     </option>
-                    {CATEGORIES.map((category) => (
+                    {JOB_CATEGORIES.map((category) => (
                       <option key={category} value={category}>
                         {category}
                       </option>

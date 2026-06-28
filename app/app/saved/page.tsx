@@ -11,7 +11,23 @@ import { Input } from "@/components/ui/input";
 export const dynamic = "force-dynamic";
 
 type SP = Record<string, string | string[] | undefined>;
-const getStr = (sp: SP, key: string) => (typeof sp[key] === "string" ? (sp[key] as string) : "");
+const ALLOWED_TYPES = new Set(["micro", "projekt", "praktyka"]);
+const ALLOWED_SORTS = new Set(["saved_newest", "offer_newest", "stawka_desc", "stawka_asc"]);
+
+function getLimitedStr(sp: SP, key: string, maxLength: number) {
+  const value = typeof sp[key] === "string" ? (sp[key] as string).trim() : "";
+  return value.slice(0, maxLength);
+}
+
+function getTypeFilter(sp: SP) {
+  const value = getLimitedStr(sp, "typ", 32);
+  return ALLOWED_TYPES.has(value) ? value : "";
+}
+
+function getSortFilter(sp: SP) {
+  const value = getLimitedStr(sp, "sort", 32);
+  return ALLOWED_SORTS.has(value) ? value : "saved_newest";
+}
 
 type SavedOffer = {
   id: string;
@@ -40,9 +56,9 @@ export default async function SavedOffersPage({
 }) {
   const sp = await searchParams;
 
-  const q = getStr(sp, "q");
-  const typ = getStr(sp, "typ"); // micro/projekt/praktyka/""
-  const sort = getStr(sp, "sort") || "saved_newest"; // saved_newest / offer_newest / stawka_desc / stawka_asc
+  const q = getLimitedStr(sp, "q", 120);
+  const typ = getTypeFilter(sp);
+  const sort = getSortFilter(sp);
 
   const supabase = await createClient();
 
@@ -50,11 +66,16 @@ export default async function SavedOffersPage({
   const user = userData.user;
   if (!user) redirect("/auth");
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
     .eq("user_id", user.id)
     .single();
+
+  if (profileError) {
+    console.error("[saved] profile lookup failed:", profileError);
+    redirect("/app");
+  }
 
   if (profile?.role !== "student") redirect("/app");
 
@@ -64,6 +85,10 @@ export default async function SavedOffersPage({
     .select("created_at, offers(id, tytul, opis, typ, czas, wymagania, stawka, status, created_at, is_platform_service)")
     .eq("student_id", user.id)
     .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[saved] saved offers lookup failed:", error);
+  }
 
   // Normalizacja + filtracja po status
   let items = ((rows ?? []) as unknown as SavedOfferRow[])
@@ -77,15 +102,19 @@ export default async function SavedOffersPage({
   const offerIds = items.map((item) => item.offer.id).filter(Boolean);
 
   if (offerIds.length > 0) {
-    const { data: lockedApplications } = await supabase
+    const { data: lockedApplications, error: lockedApplicationsError } = await supabase
       .from("applications")
       .select("offer_id")
       .in("offer_id", offerIds)
       .in("status", ["accepted", "in_progress", "completed"]);
 
-    (lockedApplications ?? []).forEach((application) => {
-      if (application?.offer_id) lockedOfferIds.add(application.offer_id);
-    });
+    if (lockedApplicationsError) {
+      console.error("[saved] locked applications lookup failed:", lockedApplicationsError);
+    } else {
+      (lockedApplications ?? []).forEach((application) => {
+        if (application?.offer_id) lockedOfferIds.add(application.offer_id);
+      });
+    }
   }
 
   items = items.filter((item) => {
@@ -94,7 +123,7 @@ export default async function SavedOffersPage({
   });
 
   // Filtry
-  if (typ && ["micro", "projekt", "praktyka"].includes(typ)) {
+  if (typ) {
     items = items.filter((x) => x.offer.typ === typ);
   }
 

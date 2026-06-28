@@ -11,7 +11,6 @@ import {
   FileCheck2,
   LockKeyhole,
   MessageSquare,
-  Menu,
   PenLine,
   Plus,
   ShieldCheck,
@@ -20,11 +19,12 @@ import {
   Users,
   Video,
   WandSparkles,
-  X,
   Zap,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { LandingFaqAccordion } from "@/components/landing-faq-accordion";
+import { LandingNavbar } from "@/components/landing-navbar";
 
 type IconComponent = ComponentType<{ className?: string }>;
 
@@ -45,16 +45,8 @@ type PricingCard = {
   featured?: boolean;
 };
 
-const navLinks = [
-  { label: "Jak to dziala", href: "#jak-dziala" },
-  { label: "Bezpieczenstwo", href: "#bezpieczenstwo" },
-  { label: "Pakiety", href: "#pakiety" },
-  { label: "Cennik", href: "#cennik" },
-  { label: "Dla studentów", href: "/dla-studentow" },
-];
-
 const trustPills = [
-  { label: "Escrow", icon: ShieldCheck },
+  { label: "Depozyt Student2Work", icon: ShieldCheck },
   { label: "Umowy A/B online", icon: FileCheck2 },
   { label: "Kontrola jakosci", icon: Users },
   { label: "Faktura VAT + PIT", icon: ClipboardCheck },
@@ -64,7 +56,7 @@ const trustPills = [
 
 const safetyCards = [
   {
-    title: "Escrow",
+    title: "Depozyt Student2Work",
     description: "Platnosc zablokowana do czasu, az zaakceptujesz efekt. Zero placenia w ciemno.",
     icon: ShieldCheck,
   },
@@ -110,7 +102,7 @@ const steps = [
   },
   {
     number: "3",
-    title: "Akceptujesz efekt - platnosc z escrow",
+    title: "Akceptujesz efekt - platnosc z depozytu",
     description: "Zadowolony? Srodki trafiaja do studenta. Fakture, rachunek i PIT rozliczamy my.",
     icon: Check,
   },
@@ -169,22 +161,22 @@ const packages: PackageCard[] = [
 
 const pricingCards: PricingCard[] = [
   {
-    label: "Pakiet z katalogu",
-    value: "25%",
-    sub: "prowizji, wliczonej w stala cene",
-    points: ["Cena z katalogu = cena, ktora placisz", "Pelne finansowanie z gory w escrow", "Bez negocjacji i niespodzianek"],
-  },
-  {
-    label: "Wlasne zlecenie / gielda",
-    value: "15%",
-    sub: "prowizji - minimum 39 zl",
-    points: ["Wlasne ogloszenia i zlecenia potorne", "Mozliwa negocjacja i podzial na etapy", "Escrow na kazdym etapie pracy"],
-  },
-  {
-    label: "Abonament",
+    label: "Koszt startu",
     value: "0 zl",
-    sub: "miesiecznie - zawsze",
-    points: ["Brak oplat za samo posiadanie konta", "Placisz tylko za realne, udane zlecenia", "Interes platformy = Twoj interes"],
+    sub: "abonamentu i oplat za samo konto",
+    points: ["Dostep do katalogu bez oplaty", "Brief i wycena bez zobowiazan", "Placisz dopiero przy realnym zleceniu"],
+  },
+  {
+    label: "Formalnosci",
+    value: "1 faktura",
+    sub: "dla firmy, reszta po naszej stronie",
+    points: ["My prowadzimy umowy i akceptacje online", "Ty dostajesz fakture VAT do rozliczenia", "Student rozlicza sie z platforma, nie z firma"],
+  },
+  {
+    label: "Kontrola zlecenia",
+    value: "5 etapow",
+    sub: "od briefu do bezpiecznej wyplaty",
+    points: ["Brief i dopasowanie wykonawcy", "Umowy oraz depozyt przed startem", "Odbior, poprawki albo tryb sporu"],
     featured: true,
   },
 ];
@@ -218,7 +210,7 @@ const faqs = [
   },
   {
     question: "Kiedy faktycznie place za zlecenie?",
-    answer: "Srodki trafiaja do escrow przed startem, ale student otrzymuje wyplate dopiero po akceptacji efektu lub po auto-akceptacji po terminie.",
+    answer: "Srodki trafiaja do depozytu Student2Work przed startem, ale student otrzymuje wyplate dopiero po akceptacji efektu lub po auto-akceptacji po terminie.",
   },
   {
     question: "Co, jesli student nie dowiezie albo efekt jest slaby?",
@@ -265,52 +257,7 @@ function SectionBadge({ children, dark = false }: { children: string; dark?: boo
 }
 
 function HomeNav() {
-  return (
-    <nav className="landing-nav sticky top-0 z-50 border-b border-slate-100 bg-white/95 shadow-[0_8px_30px_-28px_rgba(15,36,96,0.35)] backdrop-blur-xl">
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="shrink-0">
-          <LogoMark />
-        </Link>
-
-        <div className="hidden items-center gap-8 lg:flex">
-          {navLinks.map((link) => (
-            <a key={link.href} href={link.href} className="text-sm font-black text-slate-500 transition hover:text-[#0f2460]">
-              {link.label}
-            </a>
-          ))}
-        </div>
-
-        <div className="hidden items-center gap-3 md:flex">
-          <Button asChild variant="ghost" className="rounded-full px-5 font-black text-[#0f2460] hover:bg-slate-50">
-            <Link href="/auth">Zaloguj sie</Link>
-          </Button>
-          <Button asChild className="landing-hover-lift h-12 rounded-full bg-[#c5fb37] px-7 font-black text-[#0f2460] shadow-[0_16px_42px_-18px_rgba(197,251,55,0.9)] hover:bg-[#b7f22b] hover:shadow-[0_20px_45px_-20px_rgba(197,251,55,1)]">
-            <Link href="/auth?role=company">Deleguj zadanie</Link>
-          </Button>
-        </div>
-
-        <details className="group md:hidden">
-          <summary className="flex cursor-pointer list-none rounded-xl p-2 text-[#0f2460] hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-            <span className="sr-only">Otworz menu</span>
-            <Menu className="h-6 w-6 group-open:hidden" />
-            <X className="hidden h-6 w-6 group-open:block" />
-          </summary>
-          <div className="fixed inset-x-3 top-20 hidden rounded-2xl border border-slate-100 bg-white px-4 py-5 shadow-2xl group-open:block">
-            <div className="grid gap-1">
-              {navLinks.map((link) => (
-                <a key={link.href} href={link.href} className="rounded-xl px-3 py-3 text-sm font-black text-slate-600 hover:bg-slate-50">
-                  {link.label}
-                </a>
-              ))}
-            </div>
-            <Button asChild className="mt-4 h-12 w-full rounded-full bg-[#c5fb37] font-black text-[#0f2460] hover:bg-[#b7f22b]">
-              <Link href="/auth?role=company">Deleguj zadanie</Link>
-            </Button>
-          </div>
-        </details>
-      </div>
-    </nav>
-  );
+  return <LandingNavbar audience="company" />;
 }
 
 function HeroMockup() {
@@ -368,7 +315,7 @@ function HeroMockup() {
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 text-emerald-500" />
             <div>
-              <p className="text-sm font-black text-[#0f2460]">Escrow aktywne - umowy A/B podpisane</p>
+              <p className="text-sm font-black text-[#0f2460]">Depozyt aktywny - umowy A/B podpisane</p>
               <p className="mt-1 text-xs font-bold text-slate-500">2 400 PLN zablokowane do akceptacji</p>
             </div>
           </div>
@@ -386,7 +333,7 @@ function HomeHero() {
   return (
     <section className="relative overflow-hidden bg-[linear-gradient(105deg,#ffffff_0%,#ffffff_57%,#f3ffd6_100%)]">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,36,96,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(15,36,96,0.025)_1px,transparent_1px)] bg-[size:52px_52px]" />
-      <div className="relative mx-auto grid min-h-[580px] max-w-7xl items-center gap-12 px-4 py-10 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:px-8 lg:py-12">
+      <div className="relative mx-auto grid min-h-[580px] max-w-7xl items-center gap-12 px-4 pb-10 pt-28 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:px-8 lg:pb-12 lg:pt-32">
         <div>
           <div className="landing-enter-up mb-7 inline-flex max-w-full items-center gap-2 rounded-full bg-[#eaffae] px-4 py-2 text-sm font-black text-[#0f2460] max-[390px]:text-xs">
             <Zap className="h-4 w-4" />
@@ -443,11 +390,11 @@ function TrustStrip() {
         <p className="max-w-[14rem] text-xs font-black uppercase tracking-[0.2em] text-slate-500">
           Bezpieczenstwo wbudowane w kazde zlecenie
         </p>
-        <div className="flex flex-wrap gap-3">
+        <div className="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:flex-wrap">
           {trustPills.map(({ label, icon: Icon }) => (
-            <span key={label} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-[#0f2460]">
-              <Icon className="h-4 w-4 text-slate-500" />
-              {label}
+            <span key={label} className="inline-flex min-w-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-center text-[12px] font-black leading-4 text-[#0f2460] sm:justify-start sm:px-4 sm:text-sm">
+              <Icon className="h-4 w-4 shrink-0 text-slate-500" />
+              <span className="min-w-0 break-words">{label}</span>
             </span>
           ))}
         </div>
@@ -504,7 +451,7 @@ function MarketSection() {
                 <ShieldCheck className="h-6 w-6" />
               </div>
               <p className="font-bold leading-7 text-white/86">
-                To dokladnie te trzy bole rozwiazujemy - kuracja wykonawcow, kontrola jakosci i escrow. Lider rynku ich nie dotyka.
+                To dokladnie te trzy bole rozwiazujemy - kuracja wykonawcow, kontrola jakosci i platnosc po akceptacji. Lider rynku ich nie dotyka.
               </p>
             </div>
           </div>
@@ -531,7 +478,7 @@ function SafetySection() {
         <div className="mt-14 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
           <div className="rounded-[1.65rem] border border-white/10 bg-white/[0.06] p-7 shadow-2xl shadow-slate-950/20">
             <div className="mb-8 flex items-center justify-between">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">Escrow - #ESC-4821</p>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">Depozyt - #DEP-4821</p>
               <span className="rounded-full bg-emerald-400/20 px-4 py-1.5 text-xs font-black text-emerald-200">Aktywne</span>
             </div>
             <div className="text-5xl font-black">2 400 <span className="text-xl text-white/45">PLN</span></div>
@@ -540,7 +487,7 @@ function SafetySection() {
             <div className="mt-8 grid grid-cols-3 overflow-hidden rounded-xl bg-white/8 text-center">
               {[
                 ["Firma", "TechStart"],
-                ["Escrow", "2 400 zl"],
+                ["Depozyt", "2 400 zl"],
                 ["Student", "Aleksandra K."],
               ].map(([label, value]) => (
                 <div key={label} className="border-r border-white/10 px-3 py-4 last:border-r-0">
@@ -687,12 +634,12 @@ function PricingSection() {
     <section id="cennik" className="bg-white px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="mx-auto max-w-3xl text-center">
-          <SectionBadge>Cennik</SectionBadge>
+          <SectionBadge>Rozliczenia</SectionBadge>
           <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
-            Placisz tylko, gdy dostajesz efekt.
+            Najwazniejsze zasady wspolpracy.
           </h2>
           <p className="mt-5 text-lg font-semibold leading-8 text-slate-600">
-            Zero abonamentow. Prowizja to jedyny przychod platformy - zarabiamy wylacznie na udanych zleceniach.
+            Firma wie, kiedy placi, student wie, kiedy otrzyma wyplate, a platforma pilnuje umow, depozytu, jakosci i odbioru pracy.
           </p>
         </div>
 
@@ -702,7 +649,7 @@ function PricingSection() {
               <div className="mb-5 flex items-center justify-between">
                 <p className={`text-xs font-black uppercase tracking-[0.16em] ${card.featured ? "text-[#c5fb37]" : "text-slate-500"}`}>{card.label}</p>
                 {card.featured ? (
-                  <span className="rounded-full bg-[#c5fb37] px-3 py-1 text-[10px] font-black uppercase text-[#0f2460]">Zero oplat stalych</span>
+                  <span className="rounded-full bg-[#c5fb37] px-3 py-1 text-[10px] font-black uppercase text-[#0f2460]">Kontrola procesu</span>
                 ) : null}
               </div>
               <p className="text-5xl font-black">{card.value}</p>
@@ -733,7 +680,7 @@ function TestimonialsSection() {
             Mniej chaosu. Wiecej zrobionych rzeczy.
           </h2>
           <p className="mt-5 text-lg font-semibold leading-8 text-slate-600">
-            Przykladowe opinie z pilotazu - do podmiany na realne po pierwszych zleceniach.
+            Tak firmy i studenci opisuja dobrze poprowadzona wspolprace projektowa.
           </p>
         </div>
 
@@ -772,20 +719,7 @@ function FAQSection() {
           </h2>
         </div>
 
-        <div className="mt-10 space-y-3">
-          {faqs.map((faq, index) => (
-            <details key={faq.question} open={index === 0} className="group rounded-2xl border border-slate-200 bg-white p-5 open:border-lime-300 open:shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-black text-[#0f2460] [&::-webkit-details-marker]:hidden">
-                <span>{faq.question}</span>
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-[#0f2460] group-open:bg-[#c5fb37]">
-                  <Plus className="h-5 w-5 group-open:hidden" />
-                  <X className="hidden h-5 w-5 group-open:block" />
-                </span>
-              </summary>
-              <p className="mt-5 text-sm font-semibold leading-7 text-slate-600">{faq.answer}</p>
-            </details>
-          ))}
-        </div>
+        <LandingFaqAccordion items={faqs} />
       </div>
     </section>
   );
@@ -836,8 +770,8 @@ function HomeFooter() {
 
           <div className="grid gap-8 sm:grid-cols-3">
             {[
-              { title: "Platforma", links: [["Jak to dziala", "#jak-dziala"], ["Bezpieczenstwo", "#bezpieczenstwo"], ["Katalog pakietow", "#pakiety"], ["Cennik", "#cennik"]] },
-              { title: "Dla firm", links: [["Deleguj zadanie", "/auth?role=company"], ["Jak dziala escrow", "#bezpieczenstwo"], ["Wystaw ogloszenie", "/app/company/jobs/new"]] },
+              { title: "Platforma", links: [["Jak to dziala", "#jak-dziala"], ["Bezpieczenstwo", "#bezpieczenstwo"], ["Katalog pakietow", "#pakiety"], ["Rozliczenia", "#cennik"]] },
+              { title: "Dla firm", links: [["Deleguj zadanie", "/auth?role=company"], ["Jak dziala depozyt", "#bezpieczenstwo"], ["Wystaw ogloszenie", "/app/company/jobs/new"]] },
               { title: "Dla studentów", links: [["Gielda zlecen", "/dla-studentow#zlecenia"], ["Jak zaczac", "/dla-studentow#jak-zaczac"], ["Wyplaty i PIT", "/dla-studentow#wyplata"]] },
             ].map((group) => (
               <div key={group.title}>
@@ -864,7 +798,7 @@ function HomeFooter() {
             <p>© 2026 Student2Work. Wszelkie prawa zastrzezone.</p>
             <p className="inline-flex items-center gap-2 text-emerald-300">
               <ShieldCheck className="h-4 w-4" />
-              Platnosci chronione systemem escrow (Stripe)
+              Platnosci chronione przez depozyt Student2Work i Stripe
             </p>
           </div>
         </div>
@@ -875,7 +809,7 @@ function HomeFooter() {
 
 export default function LandingPage() {
   return (
-    <div className="landing-page min-h-screen overflow-x-hidden bg-white font-sans text-slate-950">
+    <div className="landing-page min-h-screen overflow-x-clip bg-white font-sans text-slate-950">
       <HomeNav />
       <main>
         <HomeHero />

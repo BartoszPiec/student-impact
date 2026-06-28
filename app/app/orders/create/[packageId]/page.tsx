@@ -14,6 +14,8 @@ import {
     PenTool,
     Megaphone,
     BarChart3,
+    Briefcase,
+    Globe,
     Languages,
     Scale,
     TrendingUp,
@@ -22,8 +24,63 @@ import {
 import OrderForm from "./order-form";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import Link from "next/link";
+import { resolveJobCategorySlug } from "@/lib/constants";
 
 const categoryConfig: Record<string, { icon: React.ReactNode; gradient: string; lightBg: string; darkText: string }> = {
+    "marketing-i-social-media": {
+        icon: <Megaphone className="w-8 h-8" />,
+        gradient: "from-blue-500 to-indigo-600",
+        lightBg: "bg-blue-50",
+        darkText: "text-blue-600"
+    },
+    "e-commerce-i-marketplace": {
+        icon: <TrendingUp className="w-8 h-8" />,
+        gradient: "from-yellow-500 to-amber-600",
+        lightBg: "bg-yellow-50",
+        darkText: "text-yellow-600"
+    },
+    "strony-internetowe-i-cms": {
+        icon: <Globe className="w-8 h-8" />,
+        gradient: "from-teal-500 to-cyan-600",
+        lightBg: "bg-teal-50",
+        darkText: "text-teal-600"
+    },
+    "seo-i-tresci": {
+        icon: <PenTool className="w-8 h-8" />,
+        gradient: "from-emerald-500 to-teal-600",
+        lightBg: "bg-emerald-50",
+        darkText: "text-emerald-600"
+    },
+    "grafika-i-materialy-sprzedazowe": {
+        icon: <Palette className="w-8 h-8" />,
+        gradient: "from-violet-500 to-purple-600",
+        lightBg: "bg-violet-50",
+        darkText: "text-violet-600"
+    },
+    "wideo-i-ugc": {
+        icon: <Clapperboard className="w-8 h-8" />,
+        gradient: "from-rose-500 to-orange-500",
+        lightBg: "bg-rose-50",
+        darkText: "text-rose-600"
+    },
+    "dane-research-analizy": {
+        icon: <BarChart3 className="w-8 h-8" />,
+        gradient: "from-amber-500 to-orange-600",
+        lightBg: "bg-amber-50",
+        darkText: "text-amber-600"
+    },
+    "automatyzacje-ai-narzedzia": {
+        icon: <Cpu className="w-8 h-8" />,
+        gradient: "from-purple-600 to-pink-600",
+        lightBg: "bg-purple-50",
+        darkText: "text-purple-600"
+    },
+    "administracja-i-operacje": {
+        icon: <Briefcase className="w-8 h-8" />,
+        gradient: "from-stone-500 to-stone-700",
+        lightBg: "bg-stone-50",
+        darkText: "text-stone-600"
+    },
     "video": {
         icon: <Clapperboard className="w-8 h-8" />,
         gradient: "from-rose-500 to-orange-500",
@@ -94,7 +151,7 @@ const categoryConfig: Record<string, { icon: React.ReactNode; gradient: string; 
 
 function getCategoryConfig(category: string | null) {
     if (!category) return categoryConfig.default;
-    const key = category.toLowerCase();
+    const key = resolveJobCategorySlug(category) ?? category.toLowerCase();
     return categoryConfig[key] || categoryConfig.default;
 }
 
@@ -211,7 +268,6 @@ export default async function CreateOrderPage({
                             </h2>
                             <OrderForm
                                 packageId={pkg.id}
-                                price={pkg.price}
                                 title={pkg.title}
                                 description={pkg.description}
                                 formSchema={pkg.form_schema}

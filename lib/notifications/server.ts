@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logCriticalError } from "@/lib/observability/error-log";
 
 export type NotificationPayload = Record<string, unknown>;
 
@@ -23,7 +24,17 @@ export async function sendNotification(
   });
 
   if (error) {
-    throw new Error(`create_notification failed: ${error.message}`);
+    await logCriticalError({
+      source: "notifications.create_notification_failed",
+      error,
+      errorCode: error.code,
+      message: "create_notification RPC failed.",
+      userId,
+      context: {
+        notificationType: typ,
+      },
+    });
+    throw new Error("Nie udało się wysłać powiadomienia.");
   }
 }
 
@@ -35,6 +46,15 @@ export async function trySendNotification(
   try {
     await sendNotification(userId, typ, payload);
   } catch (error) {
-    console.error("Notification dispatch failed:", error);
+    await logCriticalError({
+      source: "notifications.try_send_failed",
+      level: "warning",
+      error,
+      message: "Non-blocking notification dispatch failed.",
+      userId,
+      context: {
+        notificationType: typ,
+      },
+    });
   }
 }

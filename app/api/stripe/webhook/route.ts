@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { jsonError, noStoreJson } from "@/lib/security/api-response";
+import { NextRequest } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { enqueueStripeEvent, processPendingStripeEvents } from "@/lib/stripe/stripe-event-processor";
+import { logCriticalError } from "@/lib/observability/error-log";
 import Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +13,7 @@ async function getRawBody(req: NextRequest): Promise<Buffer> {
   const reader = req.body?.getReader();
 
   if (!reader) {
-    throw new Error("No request body");
+    throw new Error("Brak treści żądania.");
   }
 
   while (true) {
@@ -40,8 +42,11 @@ export async function POST(req: NextRequest) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    console.error("STRIPE_WEBHOOK_SECRET is not set");
-    return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
+    await logCriticalError({
+      source: "stripe.webhook.missing_secret",
+      message: "STRIPE_WEBHOOK_SECRET is not configured.",
+    });
+    return jsonError("Webhook Stripe nie jest skonfigurowany.", 500);
   }
 
   let event: Stripe.Event;
@@ -51,33 +56,46 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get("stripe-signature");
 
     if (!signature) {
-      return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
+      return jsonError("Brak podpisu webhooka Stripe.", 400);
     }
 
     event = getStripe().webhooks.constructEvent(rawBody, signature, webhookSecret);
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    console.error("Webhook signature verification failed:", msg);
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  } catch {
+    return jsonError("Nieprawidłowy podpis webhooka Stripe.", 400);
   }
 
   try {
     const status = await enqueueStripeEvent(event);
     if (!shouldProcessInline()) {
-      return NextResponse.json({ received: true, status });
+      return noStoreJson({ received: true, status });
     }
 
     try {
       const inlineProcessing = await processPendingStripeEvents(3);
-      return NextResponse.json({ received: true, status, inlineProcessing });
+      return noStoreJson({ received: true, status, inlineProcessing });
     } catch (processingError) {
-      const message = processingError instanceof Error ? processingError.message : "Inline Stripe processing failed";
-      console.error("[stripe-webhook] inline processing failed:", message);
-      return NextResponse.json({ received: true, status, inlineProcessing: { failed: true } });
+      await logCriticalError({
+        source: "stripe.webhook.inline_processing_failed",
+        level: "warning",
+        error: processingError,
+        message: "Inline Stripe event processing failed after enqueue.",
+        stripeEventId: event.id,
+        context: {
+          eventType: event.type,
+        },
+      });
+      return noStoreJson({ received: true, status, inlineProcessing: { failed: true } });
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to enqueue Stripe event";
-    console.error("[stripe-webhook] enqueue failed:", message);
-    return NextResponse.json({ error: "Failed to enqueue webhook event" }, { status: 500 });
+    await logCriticalError({
+      source: "stripe.webhook.enqueue_failed",
+      error,
+      message: "Failed to enqueue Stripe event.",
+      stripeEventId: event.id,
+      context: {
+        eventType: event.type,
+      },
+    });
+    return jsonError("Nie udało się zapisać zdarzenia Stripe.", 500);
   }
 }

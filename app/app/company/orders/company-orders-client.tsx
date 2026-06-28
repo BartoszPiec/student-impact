@@ -21,14 +21,21 @@ type ServiceOrderRow = {
   amount: number | null;
   counter_amount: number | null;
   student_id: string | null;
+  student_selected_at: string | null;
+  entry_point?: string | null;
+  initiated_by?: string | null;
   package:
     | {
         id?: string | null;
         title?: string | null;
+        type?: string | null;
+        is_system?: boolean | null;
       }
     | {
         id?: string | null;
         title?: string | null;
+        type?: string | null;
+        is_system?: boolean | null;
       }[]
     | null;
 };
@@ -68,9 +75,9 @@ const emptyStats: CompanyOfferStats = {
 
 const filters: Array<{ key: FilterKey; label: string }> = [
   { key: "all", label: "Wszystkie" },
+  { key: "delivery", label: "W realizacji" },
   { key: "action", label: "Do decyzji" },
   { key: "terms", label: "Warunki" },
-  { key: "delivery", label: "W realizacji" },
   { key: "closed", label: "Archiwum" },
 ];
 
@@ -79,11 +86,13 @@ function SummaryTile({
   label,
   value,
   tone,
+  highlight = false,
 }: {
   icon: ReactNode;
   label: string;
   value: number;
   tone: "indigo" | "amber" | "emerald" | "slate";
+  highlight?: boolean;
 }) {
   const toneClass =
     tone === "indigo"
@@ -94,13 +103,24 @@ function SummaryTile({
           ? "bg-emerald-100 text-emerald-700"
           : "bg-slate-100 text-slate-600";
 
+  const highlightClass =
+    tone === "emerald"
+      ? "border-emerald-200 bg-emerald-50/80 ring-1 ring-emerald-100"
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50/80 ring-1 ring-amber-100"
+        : tone === "indigo"
+          ? "border-indigo-200 bg-indigo-50/80 ring-1 ring-indigo-100"
+          : "border-slate-200 bg-slate-50";
+
   return (
-    <div className="rounded-2xl px-4 py-3 transition hover:bg-slate-50">
-      <div className="flex items-center justify-between gap-3">
+    <div className={cn("rounded-2xl border border-transparent px-4 py-3 transition hover:bg-slate-50", highlight && highlightClass)}>
+      <div className="flex items-center gap-3">
         <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", toneClass)}>{icon}</div>
-        <span className="text-2xl font-black text-slate-950">{value}</span>
+        <div className="min-w-0">
+          <span className="block text-2xl font-black leading-none text-slate-950">{value}</span>
+          <p className="mt-1 text-sm font-bold leading-tight text-slate-600">{label}</p>
+        </div>
       </div>
-      <p className="mt-3 text-sm font-bold text-slate-600">{label}</p>
     </div>
   );
 }
@@ -118,21 +138,25 @@ function Section({
   title,
   description,
   items,
+  highlight = false,
 }: {
   title: string;
   description: string;
   items: OrderListItem[];
+  highlight?: boolean;
 }) {
   if (items.length === 0) return null;
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-200 pb-3">
+    <section className={cn("space-y-4", highlight && "rounded-[2rem] border border-emerald-200 bg-emerald-50/45 p-4 shadow-sm")}>
+      <div className={cn("flex flex-wrap items-end justify-between gap-2 border-b pb-3", highlight ? "border-emerald-200" : "border-slate-200")}>
         <div>
           <h2 className="text-lg font-black text-slate-950">{title}</h2>
           <p className="mt-1 text-sm font-medium text-slate-500">{description}</p>
         </div>
-        <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-black text-indigo-700">{items.length}</span>
+        <span className={cn("rounded-full px-3 py-1 text-xs font-black", highlight ? "bg-emerald-100 text-emerald-700" : "bg-indigo-50 text-indigo-700")}>
+          {items.length}
+        </span>
       </div>
       <div className="space-y-3">
         {items.map((item) => (
@@ -143,8 +167,23 @@ function Section({
   );
 }
 
+function suppressLegacyAutoAssignedStudent(order: ServiceOrderRow): boolean {
+  const pkg = Array.isArray(order.package) ? order.package[0] ?? null : order.package;
+  const isSystemPackage = pkg?.type === "platform_service" || pkg?.is_system === true;
+
+  return Boolean(
+    isSystemPackage
+      && order.student_id
+      && order.entry_point === "company_request"
+      && order.initiated_by === "company"
+      && ["pending_student_confirmation", "pending_confirmation"].includes(order.status ?? "")
+      && !order.student_selected_at,
+  );
+}
+
 function orderToOffer(order: ServiceOrderRow): CompanyOffer {
   const pkg = Array.isArray(order.package) ? order.package[0] ?? null : order.package;
+  const status = suppressLegacyAutoAssignedStudent(order) ? "pending_selection" : order.status;
 
   return {
     id: order.id,
@@ -153,7 +192,7 @@ function orderToOffer(order: ServiceOrderRow): CompanyOffer {
     tytul: pkg?.title || "Zamowienie usługi",
     typ: "service_order",
     stawka: order.amount,
-    status: order.status,
+    status,
     created_at: order.created_at,
     location: null,
     salary_range_min: null,
@@ -174,11 +213,12 @@ export default function CompanyOrdersClient({ initialOrders, studentData }: Comp
     () =>
       initialOrders.map((order) => {
         const offer = orderToOffer(order);
-        const preview = order.student_id ? studentData[order.student_id] : null;
+        const hasVisibleStudent = Boolean(order.student_id) && !suppressLegacyAutoAssignedStudent(order);
+        const preview = hasVisibleStudent && order.student_id ? studentData[order.student_id] : null;
         const stats: CompanyOfferStats = {
           ...emptyStats,
-          acceptedStudentId: order.student_id,
-          acceptedProfile: order.student_id
+          acceptedStudentId: hasVisibleStudent ? order.student_id : null,
+          acceptedProfile: hasVisibleStudent && order.student_id
             ? {
                 id: order.student_id,
                 first_name: preview?.public_name || "Student",
@@ -212,7 +252,7 @@ export default function CompanyOrdersClient({ initialOrders, studentData }: Comp
     }
 
     if (status !== "all") {
-      result = result.filter((item) => item.order.status === status);
+      result = result.filter((item) => item.offer.status === status);
     }
 
     result.sort((a, b) => {
@@ -253,8 +293,8 @@ export default function CompanyOrdersClient({ initialOrders, studentData }: Comp
       <div className="rounded-[1.75rem] border border-slate-200 bg-white p-2 shadow-sm">
         <div className="grid gap-1 md:grid-cols-4">
           <SummaryTile icon={<Users className="h-4 w-4" />} label="Do decyzji" value={actionItems.length} tone="indigo" />
+          <SummaryTile icon={<Timer className="h-4 w-4" />} label="W realizacji" value={deliveryItems.length} tone="emerald" highlight />
           <SummaryTile icon={<SlidersHorizontal className="h-4 w-4" />} label="Warunki" value={termsItems.length} tone="amber" />
-          <SummaryTile icon={<Timer className="h-4 w-4" />} label="W realizacji" value={deliveryItems.length} tone="emerald" />
           <SummaryTile icon={<ClipboardCheck className="h-4 w-4" />} label="Archiwum" value={closedItems.length} tone="slate" />
         </div>
       </div>
@@ -296,6 +336,7 @@ export default function CompanyOrdersClient({ initialOrders, studentData }: Comp
                         : filteredItems.length;
 
               const isActive = filter === item.key;
+              const isDeliveryTab = item.key === "delivery";
 
               return (
                 <button
@@ -309,19 +350,26 @@ export default function CompanyOrdersClient({ initialOrders, studentData }: Comp
                         ? "border-indigo-200 bg-indigo-600 text-white"
                         : item.key === "terms"
                           ? "border-amber-200 bg-amber-50 text-amber-800"
-                          : item.key === "delivery"
-                            ? "border-emerald-200 bg-emerald-600 text-white"
+                          : isDeliveryTab
+                            ? "border-emerald-200 bg-emerald-600 text-white shadow-sm shadow-emerald-100"
                             : item.key === "closed"
                               ? "border-slate-300 bg-slate-700 text-white"
                               : "border-indigo-200 bg-indigo-600 text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+                      : isDeliveryTab
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
                   )}
                 >
+                  {isDeliveryTab ? <span className="h-2 w-2 rounded-full bg-emerald-400" /> : null}
                   {item.label}
                   <span
                     className={cn(
                       "rounded-full px-2 py-0.5 text-xs",
-                      isActive ? "bg-white/20 text-current" : "bg-slate-100 text-slate-500",
+                      isActive
+                        ? "bg-white/20 text-current"
+                        : isDeliveryTab
+                          ? "bg-white text-emerald-700"
+                          : "bg-slate-100 text-slate-500",
                     )}
                   >
                     {count}
@@ -368,14 +416,15 @@ export default function CompanyOrdersClient({ initialOrders, studentData }: Comp
       ) : filter === "all" ? (
         <div className="space-y-8">
           <Section
+            title="W realizacji"
+            description="Zamówienia po uzgodnieniach, które nie wymagają teraz bezpośredniej reakcji firmy."
+            items={inProgressItems}
+            highlight
+          />
+          <Section
             title="Wymaga reakcji firmy"
             description="Wyceny, wybor wykonawcy i etapy, w których decyzja jest teraz po Twojej stronie."
             items={actionItems}
-          />
-          <Section
-            title="W toku"
-            description="Zamowienia po uzgodnieniach, które nie wymagaja teraz bezpośredniej reakcji firmy."
-            items={inProgressItems}
           />
           {closedItems.length > 0 ? (
             <details className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">

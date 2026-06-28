@@ -53,10 +53,12 @@ export default async function AppLayout({
       role={role}
       enabled={!needsOnboarding && (role === "company" || role === "student")}
     >
-      <div className="min-h-screen bg-[#f3f6fb]">
+      <div className="min-h-screen max-w-full overflow-x-hidden bg-[#f3f6fb]">
         {needsOnboarding ? <EnsureOnboarding /> : null}
         <AppNavbar user={user} role={role} unread={unread} unreadChat={unreadChat} />
-        <main className="min-h-screen pb-24 lg:pb-0">{children}</main>
+        <main className="min-h-screen max-w-full overflow-x-hidden bg-[linear-gradient(180deg,#10245f_0,#10245f_6rem,#f3f6fb_6rem,#f3f6fb_100%)] pb-24 pt-20 sm:pt-24 lg:pb-0">
+          {children}
+        </main>
       </div>
     </AppTourProvider>
   );

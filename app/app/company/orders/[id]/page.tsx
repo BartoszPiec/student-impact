@@ -264,13 +264,16 @@ export default async function CompanyOrderDetailPage(props: Props) {
       requirements,
       request_snapshot,
       quote_snapshot,
+      student_selected_at,
       company_id,
       student_id,
       package:service_packages!service_orders_package_id_fkey(
         id,
         title,
         description,
-        price
+        price,
+        type,
+        is_system
       )
     `)
     .eq("id", id)
@@ -289,12 +292,26 @@ export default async function CompanyOrderDetailPage(props: Props) {
     );
   }
 
-  const packageId = (order.package as { id?: string } | null)?.id ?? null;
-  const hasStudentAssigned = isAssignedStudent(order.student_id);
+  const packageInfo = Array.isArray(order.package) ? order.package[0] ?? null : order.package;
+  const packageId = (packageInfo as { id?: string } | null)?.id ?? null;
+  const packageIsSystem =
+    (packageInfo as { type?: string | null; is_system?: boolean | null } | null)?.type === "platform_service"
+    || (packageInfo as { type?: string | null; is_system?: boolean | null } | null)?.is_system === true;
+  const rawHasStudentAssigned = isAssignedStudent(order.student_id);
+  const suppressLegacyAutoAssignedStudent =
+    packageIsSystem
+    && rawHasStudentAssigned
+    && order.entry_point === "company_request"
+    && order.initiated_by === "company"
+    && ["pending_student_confirmation", "pending_confirmation"].includes(order.status)
+    && !order.student_selected_at;
+  const displayStatus = suppressLegacyAutoAssignedStudent ? "pending_selection" : order.status;
+  const hasStudentAssigned = rawHasStudentAssigned && !suppressLegacyAutoAssignedStudent;
   const isLogoOrder = packageId === LOGO_PACKAGE_ID;
-  const isPendingSelection = isLogoOrder && !hasStudentAssigned && ["pending_selection", "pending"].includes(order.status);
+  const isPendingSelection = !hasStudentAssigned && ["pending_selection", "pending"].includes(displayStatus);
+  const canSelectStudentManually = isPendingSelection && isLogoOrder;
   const isPendingStudentConfirmation =
-    hasStudentAssigned && ["pending_student_confirmation", "pending_confirmation"].includes(order.status);
+    hasStudentAssigned && ["pending_student_confirmation", "pending_confirmation"].includes(displayStatus);
 
   const [studentResult, conv, availableStudents] = await Promise.all([
     hasStudentAssigned
@@ -308,14 +325,14 @@ export default async function CompanyOrderDetailPage(props: Props) {
           packageId,
         })
       : Promise.resolve(null),
-    isPendingSelection
+    canSelectStudentManually
       ? fetchAvailableLogoStudents(supabase, { maxActiveOrders: 1 })
       : Promise.resolve([]),
   ]);
   const student = studentResult.data;
 
   const chatLink = conv ? `/app/chat/${conv.id}` : "/app/chat";
-  const statusInfo = getCompanyOrderStatusMeta(order.status);
+  const statusInfo = getCompanyOrderStatusMeta(displayStatus);
   const requestSnapshot = isRequestSnapshot(order.request_snapshot) ? order.request_snapshot : null;
   const legacyRequirements = requestSnapshot ? null : parseLegacyRequirements(order.requirements);
   const quoteSnapshot = isQuoteSnapshot(order.quote_snapshot) ? order.quote_snapshot : null;
@@ -331,7 +348,7 @@ export default async function CompanyOrderDetailPage(props: Props) {
     ? requestPackageTitle.split(" - ").slice(1).join(" - ").trim()
     : null;
 
-  const activeAmount = order.status === "countered" && order.counter_amount
+  const activeAmount = displayStatus === "countered" && order.counter_amount
     ? order.counter_amount
     : order.amount;
 
@@ -368,7 +385,12 @@ export default async function CompanyOrderDetailPage(props: Props) {
             </div>
 
             <div className="shrink-0">
-              <CompanyOrderDetailActions order={order} chatLink={chatLink} canMessage={hasStudentAssigned} />
+              <CompanyOrderDetailActions
+                order={{ ...order, status: displayStatus }}
+                chatLink={chatLink}
+                canMessage={hasStudentAssigned}
+                canSelectStudent={canSelectStudentManually}
+              />
             </div>
           </div>
 
@@ -398,7 +420,7 @@ export default async function CompanyOrderDetailPage(props: Props) {
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.75fr)_minmax(340px,1fr)]">
           {/* Main column */}
           <div className="space-y-6">
-            {isPendingSelection ? (
+            {canSelectStudentManually ? (
               <div className="rounded-[2rem] border border-amber-200 bg-amber-50 p-6 shadow-xl shadow-amber-500/5">
                 <div className="mb-5 flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-100">
@@ -427,6 +449,41 @@ export default async function CompanyOrderDetailPage(props: Props) {
                     Brak studentów spełniających kryteria (portfolio min. 3 i maks. 1 aktywne zlecenie). Spróbuj ponownie za chwilę.
                   </div>
                 )}
+              </div>
+            ) : isPendingSelection ? (
+              <div className="overflow-hidden rounded-[2rem] border border-indigo-200 bg-white shadow-xl shadow-indigo-500/10">
+                <div className="flex">
+                  <div className="w-2 shrink-0 bg-gradient-to-b from-indigo-400 to-indigo-600" />
+                  <div className="flex-1 p-6">
+                    <div className="mb-5 flex items-center gap-3 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm">
+                        <UserRound className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-black text-slate-950">Brak zgłoszeń do tego zlecenia</p>
+                        <p className="mt-0.5 text-xs font-semibold text-indigo-700">
+                          Kandydat pojawi się dopiero po realnym zgłoszeniu albo przypisaniu przez platformę.
+                        </p>
+                      </div>
+                      <Badge className="rounded-full border-0 bg-indigo-600 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white">
+                        Czeka
+                      </Badge>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Zgłoszenia</p>
+                        <p className="mt-2 text-2xl font-black text-slate-950">0</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 md:col-span-2">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Następny krok</p>
+                        <p className="mt-2 text-sm font-bold leading-6 text-slate-700">
+                          Zlecenie jest zapisane z briefem. Nie pokazujemy profilu wykonawcy, dopóki student nie zostanie faktycznie przypisany.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : null}
 
@@ -710,6 +767,15 @@ export default async function CompanyOrderDetailPage(props: Props) {
                     <p className="text-sm italic text-slate-400">Brak dodatkowego opisu studenta.</p>
                   )}
                 </div>
+              ) : isPendingSelection ? (
+                <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50 p-5 text-sm">
+                  <p className="font-black text-slate-900">Brak przypisanego wykonawcy.</p>
+                  <p className="mt-2 font-medium text-indigo-700">
+                    {canSelectStudentManually
+                      ? "Wybierz wykonawcę z listy kandydatów, aby rozpocząć realizację."
+                      : "Kandydat pojawi się tutaj dopiero po realnym zgłoszeniu albo przypisaniu przez platformę."}
+                  </p>
+                </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm">
                   <p className="font-black text-slate-900">Student nie został jeszcze przypisany.</p>
@@ -734,7 +800,7 @@ export default async function CompanyOrderDetailPage(props: Props) {
                 </div>
                 <p className="text-sm font-medium leading-relaxed text-slate-500">
                   To zamówienie zostało zainicjowane przez studenta jako prywatną propozycja współpracy. Po akceptacji
-                  przejdzie do tego samego flow kontraktu, escrow i realizacji co standardowe zamówienia usług.
+                  przejdzie do tego samego flow kontraktu, depozytu i realizacji co standardowe zamówienia usług.
                 </p>
               </div>
             ) : null}

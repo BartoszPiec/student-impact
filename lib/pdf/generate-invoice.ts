@@ -7,6 +7,7 @@ import { renderPdfToBuffer } from "./render";
 import { InvoiceDocument } from "./invoice-template";
 import { PLATFORM_ENTITY } from "./legal-clauses-pl";
 import type { InvoiceData } from "./types";
+import { logCriticalError } from "@/lib/observability/error-log";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -31,6 +32,68 @@ type IssueDraftInvoiceInput = {
   numberPrefix: "FV" | "RCH";
 };
 
+class LoggedInvoiceError extends Error {
+  readonly alreadyLogged = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "LoggedInvoiceError";
+  }
+}
+
+function readErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.trim().length > 0 ? code.trim() : null;
+}
+
+function wasAlreadyLogged(error: unknown): error is LoggedInvoiceError {
+  return error instanceof LoggedInvoiceError || (
+    error !== null
+    && typeof error === "object"
+    && "alreadyLogged" in error
+    && (error as { alreadyLogged?: unknown }).alreadyLogged === true
+  );
+}
+
+async function failInvoiceOperation(input: {
+  source: string;
+  publicMessage: string;
+  error?: unknown;
+  level?: "error" | "warning" | "info";
+  contractId?: string | null;
+  context?: Record<string, unknown>;
+}): Promise<never> {
+  await logCriticalError({
+    source: input.source,
+    level: input.level,
+    error: input.error,
+    errorCode: readErrorCode(input.error),
+    message: input.publicMessage,
+    contractId: input.contractId ?? null,
+    context: input.context,
+  });
+  throw new LoggedInvoiceError(input.publicMessage);
+}
+
+async function logInvoiceWarning(input: {
+  source: string;
+  message: string;
+  error?: unknown;
+  contractId?: string | null;
+  context?: Record<string, unknown>;
+}) {
+  await logCriticalError({
+    source: input.source,
+    level: "warning",
+    error: input.error,
+    errorCode: readErrorCode(input.error),
+    message: input.message,
+    contractId: input.contractId ?? null,
+    context: input.context,
+  });
+}
+
 function formatIssueDate() {
   return new Date().toLocaleDateString("pl-PL", {
     day: "2-digit",
@@ -50,7 +113,14 @@ async function uploadPdf(admin: AdminClient, path: string, buffer: Buffer) {
   });
 
   if (error) {
-    throw new Error(`Upload PDF failed: ${error.message}`);
+    await failInvoiceOperation({
+      source: "pdf.invoice.upload_failed",
+      publicMessage: "Nie udało się zapisać pliku PDF faktury.",
+      error,
+      context: {
+        storagePath: path,
+      },
+    });
   }
 }
 
@@ -73,15 +143,33 @@ async function issueDraftInvoice(admin: AdminClient, input: IssueDraftInvoiceInp
   });
 
   if (error) {
-    throw new Error(`Invoice RPC failed: ${error.message}`);
+    await failInvoiceOperation({
+      source: "pdf.invoice.issue_rpc_failed",
+      publicMessage: "Nie udało się wystawić faktury w bazie.",
+      error,
+      contractId: input.contractId,
+      context: {
+        milestoneId: input.milestoneId,
+        invoiceType: input.invoiceType,
+        storagePath: input.storagePath,
+      },
+    });
   }
 
   const row = Array.isArray(data) ? (data[0] as IssueInvoiceRpcRow | undefined) : (data as IssueInvoiceRpcRow | null);
   if (!row?.id || !row?.invoice_number) {
-    throw new Error("Invoice RPC returned empty payload.");
+    await failInvoiceOperation({
+      source: "pdf.invoice.issue_rpc_empty",
+      publicMessage: "Nie udało się odczytać numeru wystawionej faktury.",
+      contractId: input.contractId,
+      context: {
+        milestoneId: input.milestoneId,
+        invoiceType: input.invoiceType,
+      },
+    });
   }
 
-  return row;
+  return row as IssueInvoiceRpcRow;
 }
 
 async function markInvoiceIssued(admin: AdminClient, invoiceId: string, storagePath: string, fileName: string) {
@@ -97,7 +185,16 @@ async function markInvoiceIssued(admin: AdminClient, invoiceId: string, storageP
     .eq("id", invoiceId);
 
   if (error) {
-    throw new Error(`Invoice update failed: ${error.message}`);
+    await failInvoiceOperation({
+      source: "pdf.invoice.mark_issued_failed",
+      publicMessage: "Nie udało się oznaczyć faktury jako wystawionej.",
+      error,
+      context: {
+        invoiceId,
+        storagePath,
+        fileName,
+      },
+    });
   }
 }
 
@@ -120,7 +217,17 @@ async function ensureContractDocument(
   );
 
   if (error) {
-    throw new Error(`Contract document upsert failed: ${error.message}`);
+    await failInvoiceOperation({
+      source: "pdf.invoice.contract_document_upsert_failed",
+      publicMessage: "Nie udało się zsynchronizować dokumentu faktury.",
+      error,
+      contractId,
+      context: {
+        documentType,
+        storagePath,
+        fileName,
+      },
+    });
   }
 }
 
@@ -137,7 +244,7 @@ export async function generateCompanyInvoice(
   const admin = createAdminClient();
 
   try {
-    const { data: existingIssued } = await admin
+    const { data: existingIssued, error: existingIssuedError } = await admin
       .from("invoices")
       .select("id")
       .eq("contract_id", contractId)
@@ -147,11 +254,20 @@ export async function generateCompanyInvoice(
       .limit(1)
       .maybeSingle();
 
+    if (existingIssuedError) {
+      await failInvoiceOperation({
+        source: "pdf.invoice.company_existing_lookup_failed",
+        publicMessage: "Nie udało się sprawdzić istniejącej faktury firmy.",
+        error: existingIssuedError,
+        contractId,
+      });
+    }
+
     if (existingIssued?.id) {
       return existingIssued.id;
     }
 
-    const { data: contract } = await admin
+    const { data: contract, error: contractError } = await admin
       .from("contracts")
       .select(`
         id, company_id, student_id, total_amount,
@@ -162,16 +278,41 @@ export async function generateCompanyInvoice(
       .eq("id", contractId)
       .single();
 
+    if (contractError) {
+      await failInvoiceOperation({
+        source: "pdf.invoice.company_contract_lookup_failed",
+        publicMessage: "Nie udało się pobrać kontraktu do faktury firmy.",
+        error: contractError,
+        contractId,
+      });
+    }
+
     if (!contract) {
-      console.error("[generate-invoice] Contract not found:", contractId);
+      await failInvoiceOperation({
+        source: "pdf.invoice.company_contract_missing",
+        publicMessage: "Nie znaleziono kontraktu do faktury firmy.",
+        contractId,
+      });
       return null;
     }
 
-    const { data: company } = await admin
+    const { data: company, error: companyError } = await admin
       .from("company_profiles")
       .select("nazwa, nip, address, city, miasto")
       .eq("user_id", contract.company_id)
       .maybeSingle();
+
+    if (companyError) {
+      await failInvoiceOperation({
+        source: "pdf.invoice.company_profile_lookup_failed",
+        publicMessage: "Nie udało się pobrać danych firmy do faktury.",
+        error: companyError,
+        contractId,
+        context: {
+          companyId: contract.company_id,
+        },
+      });
+    }
 
     const offerTitle = (contract.applications as { offers?: { tytul?: string } } | null)?.offers?.tytul || "Usługa platformowa";
     const amountNet = amountGross - platformFee;
@@ -190,7 +331,7 @@ export async function generateCompanyInvoice(
         : "",
       items: [
         {
-          description: `Escrow - ${offerTitle}`,
+          description: `Depozyt - ${offerTitle}`,
           quantity: 1,
           unitPrice: amountGross,
           total: amountGross,
@@ -236,11 +377,29 @@ export async function generateCompanyInvoice(
     await markInvoiceIssued(admin, issued.id, finalStoragePath, fileName);
     await ensureContractDocument(admin, contractId, "invoice_company", finalStoragePath, fileName);
 
-    await admin.storage.from("deliverables").remove([tempStoragePath]);
+    const { error: tempRemoveError } = await admin.storage.from("deliverables").remove([tempStoragePath]);
+    if (tempRemoveError) {
+      await logInvoiceWarning({
+        source: "pdf.invoice.company_draft_cleanup_failed",
+        message: "Failed to remove temporary company invoice draft PDF.",
+        error: tempRemoveError,
+        contractId,
+        context: {
+          storagePath: tempStoragePath,
+        },
+      });
+    }
 
     return issued.id;
   } catch (err) {
-    console.error("[generate-invoice] Error:", err);
+    if (!wasAlreadyLogged(err)) {
+      await logInvoiceWarning({
+        source: "pdf.invoice.company_generation_failed",
+        message: "Company invoice generation failed.",
+        error: err,
+        contractId,
+      });
+    }
     return null;
   }
 }
@@ -269,8 +428,15 @@ export async function generateStudentInvoice(
       .limit(1);
 
     if (existingInvoicesError) {
-      console.error("[generate-invoice] Existing student invoice guard error:", existingInvoicesError);
-      throw new Error("Nie udało sie sprawdzic istniejacego rachunku studenta.");
+      await failInvoiceOperation({
+        source: "pdf.invoice.student_existing_lookup_failed",
+        publicMessage: "Nie udało się sprawdzić istniejącego rachunku studenta.",
+        error: existingInvoicesError,
+        contractId,
+        context: {
+          milestoneId,
+        },
+      });
     }
 
     const existingInvoice = existingInvoices?.[0];
@@ -283,8 +449,16 @@ export async function generateStudentInvoice(
         .limit(1);
 
       if (existingDocumentError) {
-        console.error("[generate-invoice] Existing contract_document sync error:", existingDocumentError);
-        throw new Error("Nie udało sie zsynchronizowac dokumentu rachunku.");
+        await failInvoiceOperation({
+          source: "pdf.invoice.student_existing_document_lookup_failed",
+          publicMessage: "Nie udało się zsynchronizować dokumentu rachunku.",
+          error: existingDocumentError,
+          contractId,
+          context: {
+            milestoneId,
+            storagePath: existingInvoice.storage_path,
+          },
+        });
       }
 
       if (!existingDocumentRows?.length) {
@@ -300,24 +474,68 @@ export async function generateStudentInvoice(
       return existingInvoice.id;
     }
 
-    const { data: contract } = await admin
+    const { data: contract, error: contractError } = await admin
       .from("contracts")
       .select("id, student_id")
       .eq("id", contractId)
       .single();
 
+    if (contractError) {
+      await failInvoiceOperation({
+        source: "pdf.invoice.student_contract_lookup_failed",
+        publicMessage: "Nie udało się pobrać kontraktu do rachunku studenta.",
+        error: contractError,
+        contractId,
+        context: {
+          milestoneId,
+        },
+      });
+    }
+
     if (!contract) {
-      console.error("[generate-invoice] Contract not found:", contractId);
+      await failInvoiceOperation({
+        source: "pdf.invoice.student_contract_missing",
+        publicMessage: "Nie znaleziono kontraktu do rachunku studenta.",
+        contractId,
+        context: {
+          milestoneId,
+        },
+      });
       return null;
     }
 
-    const { data: student } = await admin
+    const { data: student, error: studentError } = await admin
       .from("student_profiles")
       .select("public_name")
       .eq("user_id", contract.student_id)
       .maybeSingle();
 
-    const { data: authUser } = await admin.auth.admin.getUserById(contract.student_id);
+    if (studentError) {
+      await failInvoiceOperation({
+        source: "pdf.invoice.student_profile_lookup_failed",
+        publicMessage: "Nie udało się pobrać profilu studenta do rachunku.",
+        error: studentError,
+        contractId,
+        context: {
+          milestoneId,
+          studentId: contract.student_id,
+        },
+      });
+    }
+
+    const { data: authUser, error: authUserError } = await admin.auth.admin.getUserById(contract.student_id);
+    if (authUserError) {
+      await failInvoiceOperation({
+        source: "pdf.invoice.student_auth_lookup_failed",
+        publicMessage: "Nie udało się pobrać danych użytkownika do rachunku.",
+        error: authUserError,
+        contractId,
+        context: {
+          milestoneId,
+          studentId: contract.student_id,
+        },
+      });
+    }
     const studentEmail = authUser?.user?.email || "";
     const tempStoragePath = `contracts/${contractId}/invoice-drafts/student-${randomUUID()}.pdf`;
 
@@ -378,11 +596,33 @@ export async function generateStudentInvoice(
     await markInvoiceIssued(admin, issued.id, finalStoragePath, fileName);
     await ensureContractDocument(admin, contractId, "invoice_student", finalStoragePath, fileName);
 
-    await admin.storage.from("deliverables").remove([tempStoragePath]);
+    const { error: tempRemoveError } = await admin.storage.from("deliverables").remove([tempStoragePath]);
+    if (tempRemoveError) {
+      await logInvoiceWarning({
+        source: "pdf.invoice.student_draft_cleanup_failed",
+        message: "Failed to remove temporary student invoice draft PDF.",
+        error: tempRemoveError,
+        contractId,
+        context: {
+          milestoneId,
+          storagePath: tempStoragePath,
+        },
+      });
+    }
 
     return issued.id;
   } catch (err) {
-    console.error("[generate-invoice] Error:", err);
+    if (!wasAlreadyLogged(err)) {
+      await logInvoiceWarning({
+        source: "pdf.invoice.student_generation_failed",
+        message: "Student invoice generation failed.",
+        error: err,
+        contractId,
+        context: {
+          milestoneId,
+        },
+      });
+    }
     return null;
   }
 }

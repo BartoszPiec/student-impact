@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonError } from "@/lib/security/api-response";
 import { createClient } from "@/lib/supabase/server";
 import {
   assertCanAccessStorageRef,
@@ -8,10 +9,6 @@ import {
 import { sanitizeDownloadName } from "@/lib/security/upload-policy";
 
 export const dynamic = "force-dynamic";
-
-function jsonError(error: string, status: number) {
-  return NextResponse.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
-}
 
 export async function GET(req: NextRequest) {
   const rawRef = req.nextUrl.searchParams.get("ref");
@@ -47,6 +44,6 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch {
-    return jsonError("Brak dostepu do pliku.", 403);
+    return jsonError("Brak dostępu do pliku.", 403);
   }
 }

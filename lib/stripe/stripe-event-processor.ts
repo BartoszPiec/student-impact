@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
 import { rejectCompetingApplicationsForOffer } from "@/lib/services/application-chat-closure";
+import { isUuid } from "@/lib/security/validation";
+import { logCriticalError } from "@/lib/observability/error-log";
 
 type StripeEventRow = {
   id: string;
@@ -11,8 +13,6 @@ type StripeEventRow = {
   payload: Stripe.Event;
   retry_count: number;
 };
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type PaymentSource = {
   applicationId: string | null;
@@ -40,6 +40,60 @@ type TargetApplicationRow = {
   }[] | null;
 };
 
+class LoggedStripeProcessorError extends Error {
+  readonly alreadyLogged = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "LoggedStripeProcessorError";
+  }
+}
+
+function readErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.trim().length > 0 ? code.trim() : null;
+}
+
+function wasAlreadyLogged(error: unknown): error is LoggedStripeProcessorError {
+  return error instanceof LoggedStripeProcessorError || (
+    error !== null
+    && typeof error === "object"
+    && "alreadyLogged" in error
+    && (error as { alreadyLogged?: unknown }).alreadyLogged === true
+  );
+}
+
+async function failStripeProcessor(input: {
+  source: string;
+  publicMessage: string;
+  error?: unknown;
+  level?: "error" | "warning" | "info";
+  contractId?: string | null;
+  stripeSessionId?: string | null;
+  stripeEventId?: string | null;
+  context?: Record<string, unknown>;
+}): Promise<never> {
+  await logCriticalError({
+    source: input.source,
+    level: input.level,
+    error: input.error,
+    errorCode: readErrorCode(input.error),
+    message: input.publicMessage,
+    contractId: input.contractId ?? null,
+    stripeSessionId: input.stripeSessionId ?? null,
+    stripeEventId: input.stripeEventId ?? null,
+    context: input.context,
+  });
+  throw new LoggedStripeProcessorError(input.publicMessage);
+}
+
+function processingErrorMessage(error: unknown) {
+  return error instanceof LoggedStripeProcessorError
+    ? error.message
+    : "Stripe event processing failed. See error_logs.";
+}
+
 function normalizeMetadataId(value: string | null | undefined): string | null {
   return value && value.trim().length > 0 ? value.trim() : null;
 }
@@ -50,7 +104,7 @@ function resolvePaymentSource(session: Stripe.Checkout.Session): PaymentSource {
   const selectedSourceCount = Number(Boolean(applicationId)) + Number(Boolean(serviceOrderId));
 
   if (selectedSourceCount !== 1) {
-    throw new Error(`Checkout session ${session.id} must reference exactly one payment source`);
+    throw new Error("Stripe checkout session must reference exactly one payment source.");
   }
 
   return {
@@ -60,9 +114,9 @@ function resolvePaymentSource(session: Stripe.Checkout.Session): PaymentSource {
   };
 }
 
-function assertSourceMatchesContract(sessionId: string, source: PaymentSource, contract: PaymentContractRow | null): void {
+function assertSourceMatchesContract(source: PaymentSource, contract: PaymentContractRow | null): void {
   if (!contract) {
-    throw new Error(`Contract not found for checkout session ${sessionId}`);
+    throw new Error("Contract not found for Stripe checkout session.");
   }
 
   const contractSourceType = contract.source_type ?? (contract.service_order_id ? "service_order" : "application");
@@ -72,7 +126,7 @@ function assertSourceMatchesContract(sessionId: string, source: PaymentSource, c
       || contract.application_id !== source.applicationId
       || contract.service_order_id !== null
     ) {
-      throw new Error(`Checkout session ${sessionId} application metadata does not match contract source`);
+      throw new Error("Stripe checkout application metadata does not match contract source.");
     }
     return;
   }
@@ -82,22 +136,41 @@ function assertSourceMatchesContract(sessionId: string, source: PaymentSource, c
     || contract.service_order_id !== source.serviceOrderId
     || contract.application_id !== null
   ) {
-    throw new Error(`Checkout session ${sessionId} service order metadata does not match contract source`);
+    throw new Error("Stripe checkout service order metadata does not match contract source.");
   }
 }
 
 function resolveFeePln(session: Stripe.Checkout.Session): number {
   const raw = session.metadata?.platform_fee;
   if (!raw) {
-    throw new Error(`Missing platform_fee metadata for session ${session.id}`);
+    throw new Error("Missing platform_fee metadata for Stripe checkout session.");
   }
 
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`Invalid platform_fee metadata for session ${session.id}: ${raw}`);
+    throw new Error("Invalid platform_fee metadata for Stripe checkout session.");
   }
 
   return parsed / 100;
+}
+
+function parseMilestoneIdsMetadata(value: string | undefined): string[] {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    if (
+      !Array.isArray(parsed)
+      || parsed.length > 100
+      || !parsed.every((item): item is string => typeof item === "string" && isUuid(item))
+    ) {
+      throw new Error("Invalid milestone_ids metadata");
+    }
+
+    return parsed;
+  } catch {
+    throw new Error("Invalid milestone_ids metadata for Stripe checkout session.");
+  }
 }
 
 export async function enqueueStripeEvent(event: Stripe.Event): Promise<"queued" | "duplicate"> {
@@ -116,7 +189,15 @@ export async function enqueueStripeEvent(event: Stripe.Event): Promise<"queued" 
     return "duplicate";
   }
 
-  throw new Error(`Failed to enqueue stripe event ${event.id}: ${error.message}`);
+  return failStripeProcessor({
+    source: "stripe.event_processor.enqueue_failed",
+    publicMessage: "Failed to enqueue Stripe event.",
+    error,
+    stripeEventId: event.id,
+    context: {
+      eventType: event.type,
+    },
+  });
 }
 
 export async function processPendingStripeEvents(limit = 10): Promise<{
@@ -134,7 +215,11 @@ export async function processPendingStripeEvents(limit = 10): Promise<{
     .limit(limit);
 
   if (error) {
-    throw new Error(`Failed to load stripe event queue: ${error.message}`);
+    return failStripeProcessor({
+      source: "stripe.event_processor.queue_load_failed",
+      publicMessage: "Failed to load Stripe event queue.",
+      error,
+    });
   }
 
   const rows = (data ?? []) as StripeEventRow[];
@@ -147,7 +232,7 @@ export async function processPendingStripeEvents(limit = 10): Promise<{
     const payload = row.payload;
     if (!payload || typeof payload !== "object" || typeof payload.type !== "string") {
       skipped += 1;
-      await supabase
+      const { error: invalidPayloadUpdateError } = await supabase
         .from("stripe_events")
         .update({
           retry_count: row.retry_count + 1,
@@ -155,14 +240,26 @@ export async function processPendingStripeEvents(limit = 10): Promise<{
           last_attempt_at: new Date().toISOString(),
         })
         .eq("id", row.id);
+      if (invalidPayloadUpdateError) {
+        await logCriticalError({
+          source: "stripe.event_processor.invalid_payload_update_failed",
+          error: invalidPayloadUpdateError,
+          errorCode: invalidPayloadUpdateError.code,
+          message: "Failed to mark invalid Stripe event payload.",
+          stripeEventId: row.stripe_event_id,
+          context: {
+            eventType: row.event_type,
+            retryCount: row.retry_count,
+          },
+        });
+      }
       continue;
     }
 
     try {
       await processStripeEvent(payload);
-      processed += 1;
 
-      await supabase
+      const { error: processedUpdateError } = await supabase
         .from("stripe_events")
         .update({
           processed_at: new Date().toISOString(),
@@ -170,11 +267,38 @@ export async function processPendingStripeEvents(limit = 10): Promise<{
           last_attempt_at: new Date().toISOString(),
         })
         .eq("id", row.id);
+
+      if (processedUpdateError) {
+        await failStripeProcessor({
+          source: "stripe.event_processor.processed_update_failed",
+          publicMessage: "Failed to mark Stripe event as processed.",
+          error: processedUpdateError,
+          stripeEventId: row.stripe_event_id,
+          context: {
+            eventType: row.event_type,
+            retryCount: row.retry_count,
+          },
+        });
+      }
+
+      processed += 1;
     } catch (error) {
       failed += 1;
-      const message = error instanceof Error ? error.message : "Unknown processing error";
+      const message = processingErrorMessage(error);
+      if (!wasAlreadyLogged(error)) {
+        await logCriticalError({
+          source: "stripe.event_processor.processing_failed",
+          error,
+          message: "Stripe event processing failed.",
+          stripeEventId: row.stripe_event_id,
+          context: {
+            eventType: row.event_type,
+            retryCount: row.retry_count,
+          },
+        });
+      }
 
-      await supabase
+      const { error: failedUpdateError } = await supabase
         .from("stripe_events")
         .update({
           retry_count: row.retry_count + 1,
@@ -182,6 +306,20 @@ export async function processPendingStripeEvents(limit = 10): Promise<{
           last_attempt_at: new Date().toISOString(),
         })
         .eq("id", row.id);
+
+      if (failedUpdateError) {
+        await logCriticalError({
+          source: "stripe.event_processor.failed_update_failed",
+          error: failedUpdateError,
+          errorCode: failedUpdateError.code,
+          message: "Failed to update failed Stripe event retry metadata.",
+          stripeEventId: row.stripe_event_id,
+          context: {
+            eventType: row.event_type,
+            retryCount: row.retry_count,
+          },
+        });
+      }
     }
   }
 
@@ -230,15 +368,15 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const milestoneIdsJson = session.metadata?.milestone_ids;
 
   if (!contractId) {
-    throw new Error(`Missing metadata in checkout session: ${session.id}`);
+    throw new Error("Missing contract metadata in Stripe checkout session.");
   }
 
   if (
-    !UUID_RE.test(contractId)
-    || (applicationId && !UUID_RE.test(applicationId))
-    || (serviceOrderId && !UUID_RE.test(serviceOrderId))
+    !isUuid(contractId)
+    || (applicationId && !isUuid(applicationId))
+    || (serviceOrderId && !isUuid(serviceOrderId))
   ) {
-    throw new Error(`Invalid UUID in session metadata for session ${session.id}`);
+    throw new Error("Invalid UUID metadata in Stripe checkout session.");
   }
 
   const { data: pay, error: paymentStatusError } = await supabase
@@ -248,7 +386,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .maybeSingle();
 
   if (paymentStatusError) {
-    throw new Error(`Failed to load payment state for session ${session.id}: ${paymentStatusError.message}`);
+    await failStripeProcessor({
+      source: "stripe.event_processor.payment_state_lookup_failed",
+      publicMessage: "Failed to load Stripe payment state.",
+      error: paymentStatusError,
+      stripeSessionId: session.id,
+      contractId,
+    });
   }
 
   if (pay?.status === "completed") {
@@ -262,11 +406,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .maybeSingle();
 
   if (contractError) {
-    throw new Error(`Failed to load contract ${contractId}: ${contractError.message}`);
+    await failStripeProcessor({
+      source: "stripe.event_processor.contract_lookup_failed",
+      publicMessage: "Failed to load contract for Stripe checkout session.",
+      error: contractError,
+      stripeSessionId: session.id,
+      contractId,
+    });
   }
 
   const contract = contractData as PaymentContractRow | null;
-  assertSourceMatchesContract(session.id, { applicationId, serviceOrderId, sourceType }, contract);
+  assertSourceMatchesContract({ applicationId, serviceOrderId, sourceType }, contract);
 
   if (applicationId && contract?.company_id) {
     const { data: targetApplicationData, error: targetApplicationError } = await supabase
@@ -276,7 +426,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       .single();
 
     if (targetApplicationError || !targetApplicationData) {
-      throw new Error(targetApplicationError?.message ?? `Application ${applicationId} not found for paid session ${session.id}`);
+      await failStripeProcessor({
+        source: "stripe.event_processor.application_lookup_failed",
+        publicMessage: "Failed to load application for Stripe checkout session.",
+        error: targetApplicationError ?? new Error("Missing application for paid Stripe checkout session."),
+        stripeSessionId: session.id,
+        contractId,
+        context: {
+          applicationId,
+        },
+      });
     }
 
     const targetApplication = targetApplicationData as TargetApplicationRow;
@@ -311,14 +470,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   });
   const resolvedFeePln = resolveFeePln(session);
 
-  let milestoneIds: string[] = [];
-  if (milestoneIdsJson) {
-    try {
-      milestoneIds = JSON.parse(milestoneIdsJson);
-    } catch {
-      milestoneIds = [];
-    }
-  }
+  const milestoneIds = parseMilestoneIdsMetadata(milestoneIdsJson);
 
   const { error: rpcError } = await supabase.rpc("process_stripe_payment_v4", {
     p_session_id: session.id,
@@ -333,7 +485,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   });
 
   if (rpcError) {
-    throw new Error(`RPC process_stripe_payment_v4 failed: ${rpcError.message}`);
+    await failStripeProcessor({
+      source: "stripe.event_processor.payment_rpc_failed",
+      publicMessage: "Failed to process Stripe payment atomically.",
+      error: rpcError,
+      stripeSessionId: session.id,
+      contractId,
+      context: {
+        sourceType,
+        applicationId,
+        serviceOrderId,
+      },
+    });
   }
 
   if (serviceOrderId) {
@@ -351,7 +514,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       ]);
 
     if (serviceOrderSyncError) {
-      throw new Error(`Failed to sync service order after payment: ${serviceOrderSyncError.message}`);
+      await failStripeProcessor({
+        source: "stripe.event_processor.service_order_sync_failed",
+        publicMessage: "Failed to sync service order after Stripe payment.",
+        error: serviceOrderSyncError,
+        stripeSessionId: session.id,
+        contractId,
+        context: {
+          serviceOrderId,
+        },
+      });
     }
   }
 
@@ -380,13 +552,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     });
   }
 
-  try {
-    const amountPLN = session.amount_total ? session.amount_total / 100 : 0;
-    const { generateCompanyInvoice } = await import("@/lib/pdf/generate-invoice");
-    await generateCompanyInvoice(contractId, amountPLN, resolvedFeePln, "Stripe");
-  } catch (error) {
-    console.error("Invoice generation failed:", error);
-  }
+  // Company invoices are created after FINAL_STAGE_ACCEPTED_BY_COMPANY, not when escrow is funded.
 }
 
 async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
@@ -397,7 +563,12 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
     .eq("stripe_session_id", session.id);
 
   if (error) {
-    throw new Error(`Failed to mark payment as expired (${session.id}): ${error.message}`);
+    await failStripeProcessor({
+      source: "stripe.event_processor.payment_expire_failed",
+      publicMessage: "Failed to mark Stripe payment as expired.",
+      error,
+      stripeSessionId: session.id,
+    });
   }
 }
 
@@ -410,7 +581,12 @@ async function handleCheckoutFailed(session: Stripe.Checkout.Session) {
     .neq("status", "completed");
 
   if (error) {
-    throw new Error(`Failed to mark payment as failed (${session.id}): ${error.message}`);
+    await failStripeProcessor({
+      source: "stripe.event_processor.payment_failed_update_failed",
+      publicMessage: "Failed to mark Stripe payment as failed.",
+      error,
+      stripeSessionId: session.id,
+    });
   }
 }
 
@@ -426,7 +602,15 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
     .maybeSingle();
 
   if (paymentError) {
-    throw new Error(`Failed to find payment for charge ${charge.id}: ${paymentError.message}`);
+    await failStripeProcessor({
+      source: "stripe.event_processor.refund_payment_lookup_failed",
+      publicMessage: "Failed to load payment for Stripe charge refund.",
+      error: paymentError,
+      context: {
+        chargeId: charge.id,
+        paymentIntentId,
+      },
+    });
   }
 
   if (!payment) return;
@@ -442,7 +626,16 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
     });
 
     if (refundError) {
-      throw new Error(`Failed to process charge refund ${refund.id}: ${refundError.message}`);
+      await failStripeProcessor({
+        source: "stripe.event_processor.charge_refund_rpc_failed",
+        publicMessage: "Failed to process Stripe charge refund.",
+        error: refundError,
+        context: {
+          chargeId: charge.id,
+          refundId: refund.id,
+          paymentIntentId,
+        },
+      });
     }
   }
 }
@@ -464,7 +657,16 @@ async function handleRefundCreated(refund: Stripe.Refund) {
   });
 
   if (error) {
-    throw new Error(`Failed to process refund ${refund.id}: ${error.message}`);
+    await failStripeProcessor({
+      source: "stripe.event_processor.refund_rpc_failed",
+      publicMessage: "Failed to process Stripe refund.",
+      error,
+      context: {
+        refundId: refund.id,
+        paymentIntentId,
+        chargeId,
+      },
+    });
   }
 }
 
@@ -484,11 +686,19 @@ async function handleAccountUpdated(account: Stripe.Account) {
   };
 
   const query = supabase.from("student_profiles").update(payload);
-  const { error } = metadataUserId && UUID_RE.test(metadataUserId)
+  const { error } = metadataUserId && isUuid(metadataUserId)
     ? await query.eq("user_id", metadataUserId)
     : await query.eq("stripe_account_id", account.id);
 
   if (error) {
-    throw new Error(`Failed to sync Stripe account ${account.id}: ${error.message}`);
+    await failStripeProcessor({
+      source: "stripe.event_processor.account_sync_failed",
+      publicMessage: "Failed to sync Stripe account status.",
+      error,
+      context: {
+        stripeAccountId: account.id,
+        metadataUserId,
+      },
+    });
   }
 }

@@ -3,9 +3,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
 import { openChatForOfferInquiry } from "../chat/_actions";
-import { parseCommissionRateInput, resolveCommissionRate } from "@/lib/commission";
+import { resolveCommissionRate } from "@/lib/commission";
+import { SERVICE_CATEGORIES } from "@/lib/constants";
 import { sendNotification } from "@/lib/notifications/server";
+import { UUID_RE } from "@/lib/security/validation";
+import { logCriticalError } from "@/lib/observability/error-log";
 import {
     buildAcceptedQuoteSnapshot,
     buildCompanyCounterSnapshot,
@@ -29,9 +34,213 @@ type ServiceOrderNegotiationRow = {
     student_id: string;
     company_id: string;
     package_id: string | null;
+    status?: string | null;
     quote_snapshot?: ServiceOrderQuoteSnapshot | null;
     package: { title?: string | null } | null;
 };
+
+const SERVICE_STATUS_VALUES = ["active", "inactive"] as const;
+const SERVICE_ORDER_STUDENT_QUOTE_STATUSES = ["inquiry", "pending"] as const;
+const SERVICE_ORDER_COMPANY_ACCEPT_STATUSES = ["proposal_sent"] as const;
+const SERVICE_ORDER_COUNTER_STATUSES = ["proposal_sent"] as const;
+const SERVICE_ORDER_STUDENT_COUNTER_ACCEPT_STATUSES = ["countered"] as const;
+const SERVICE_ORDER_REJECTABLE_STATUSES = [
+    "inquiry",
+    "pending",
+    "pending_selection",
+    "pending_student_confirmation",
+    "pending_confirmation",
+    "proposal_sent",
+    "countered",
+] as const;
+const SERVICE_ORDER_SELECTION_STATUSES = ["pending_selection", "pending"] as const;
+const SERVICE_ORDER_CONFIRMATION_STATUSES = [
+    "pending_student_confirmation",
+    "pending_confirmation",
+    "pending",
+    "inquiry",
+] as const;
+const MAX_SERVICE_AMOUNT_PLN = 100_000;
+const SERVICE_CATEGORY_SET = new Set<string>(SERVICE_CATEGORIES);
+
+const uuidInputSchema = z.string().trim().regex(UUID_RE, "Nieprawidłowy identyfikator.");
+const optionalTextSchema = (max: number, message: string) =>
+    z.preprocess(
+        (value) => (value == null ? "" : value),
+        z.string().trim().max(max, message),
+    );
+const requiredTextSchema = (min: number, max: number, requiredMessage: string, maxMessage: string) =>
+    z.preprocess(
+        (value) => (value == null ? "" : value),
+        z.string().trim().min(min, requiredMessage).max(max, maxMessage),
+    );
+const moneySchema = z.preprocess(
+    (value) => (typeof value === "string" ? value.replace(",", ".") : value),
+    z.coerce
+        .number()
+        .finite("Podaj prawidłową kwotę.")
+        .min(1, "Kwota musi być większa od zera.")
+        .max(MAX_SERVICE_AMOUNT_PLN, "Kwota przekracza limit dla pakietu usług."),
+).transform((value) => Number(value.toFixed(2)));
+const optionalMoneySchema = z.preprocess(
+    (value) => {
+        if (value == null || value === "") return null;
+        return typeof value === "string" ? value.replace(",", ".") : value;
+    },
+    z.coerce
+        .number()
+        .finite("Podaj prawidłową kwotę maksymalną.")
+        .min(1, "Cena maksymalna musi być większa od zera.")
+        .max(MAX_SERVICE_AMOUNT_PLN, "Cena maksymalna przekracza limit dla pakietu usług.")
+        .nullable(),
+).transform((value) => (value == null ? null : Number(value.toFixed(2))));
+const storageOrHttpsRefSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .max(600, "Link do pliku jest zbyt długi.")
+    .refine(
+        (value) => value.startsWith("storage://") || value.startsWith("https://"),
+        "Pliki portfolio muszą używać bezpiecznego adresu storage:// albo HTTPS.",
+    );
+const optionalHttpsUrlSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .max(600, "Link do realizacji jest zbyt długi.")
+    .url("Link do realizacji musi być poprawnym adresem URL.")
+    .refine((value) => value.startsWith("https://"), "Link do realizacji musi używać HTTPS.");
+const serviceQuestionSchema = z
+    .object({
+        id: z.string().trim().regex(/^[a-zA-Z0-9_-]{1,40}$/, "Pytanie ma nieprawidłowy identyfikator."),
+        label: requiredTextSchema(3, 160, "Treść pytania jest za krótka.", "Treść pytania jest zbyt długa."),
+    })
+    .passthrough()
+    .transform((question) => ({
+        id: question.id,
+        label: question.label,
+        type: "text" as const,
+        options: [] as string[],
+    }));
+const servicePackageMutationSchema = z
+    .object({
+        title: requiredTextSchema(5, 120, "Tytuł usługi jest za krótki.", "Tytuł usługi jest zbyt długi."),
+        description: requiredTextSchema(30, 4_000, "Opis usługi jest za krótki.", "Opis usługi jest zbyt długi."),
+        price: moneySchema,
+        price_max: optionalMoneySchema,
+        delivery_time_days: z.coerce
+            .number()
+            .int("Czas realizacji musi być liczbą całkowitą.")
+            .min(1, "Czas realizacji musi wynosić co najmniej 1 dzień.")
+            .max(90, "Czas realizacji nie może przekraczać 90 dni."),
+        requirements: optionalTextSchema(2_000, "Wymagania od klienta są zbyt długie.").transform((value) => value || null),
+        status: z.enum(SERVICE_STATUS_VALUES).default("active"),
+        portfolio_items: z.array(optionalHttpsUrlSchema).max(10, "Możesz dodać maksymalnie 10 linków do realizacji.").default([]),
+        gallery_urls: z.array(storageOrHttpsRefSchema).max(12, "Możesz dodać maksymalnie 12 plików portfolio.").default([]),
+        categories: z
+            .array(z.string().trim().min(1).max(80))
+            .max(6, "Możesz wybrać maksymalnie 6 kategorii.")
+            .transform((categories) => Array.from(new Set(categories)))
+            .refine((categories) => categories.length > 0, "Wybierz przynajmniej jedną kategorię.")
+            .refine(
+                (categories) => categories.every((category) => SERVICE_CATEGORY_SET.has(category)),
+                "Wybrano nieobsługiwaną kategorię usługi.",
+            ),
+        form_schema: z.array(serviceQuestionSchema).max(12, "Możesz dodać maksymalnie 12 pytań do briefu.").default([]),
+    })
+    .transform((payload) => ({
+        ...payload,
+        price_max: payload.price_max != null && payload.price_max > payload.price ? payload.price_max : null,
+    }));
+const privateProposalSchema = z.object({
+    packageId: uuidInputSchema,
+    targetCompanyId: uuidInputSchema,
+    proposalGoal: requiredTextSchema(20, 1_500, "Uzupełnij cel współpracy.", "Cel współpracy jest zbyt długi."),
+    expectedResult: requiredTextSchema(20, 1_500, "Uzupełnij oczekiwany rezultat.", "Oczekiwany rezultat jest zbyt długi."),
+    scopeSummary: requiredTextSchema(30, 2_500, "Uzupełnij zakres propozycji.", "Zakres propozycji jest zbyt długi."),
+    estimatedTimelineDays: z.preprocess(
+        (value) => (value == null || value === "" ? null : value),
+        z.coerce
+            .number()
+            .int("Czas realizacji musi być liczbą całkowitą.")
+            .min(1, "Czas realizacji musi wynosić co najmniej 1 dzień.")
+            .max(90, "Czas realizacji nie może przekraczać 90 dni.")
+            .nullable(),
+    ),
+    proposedAmount: moneySchema,
+    message: optionalTextSchema(1_000, "Wiadomość do firmy jest zbyt długa.").transform((value) => value || null),
+});
+const quoteInputSchema = z.object({
+    orderId: uuidInputSchema,
+    price: moneySchema,
+    message: optionalTextSchema(1_000, "Wiadomość do klienta jest zbyt długa.").transform((value) => value || null),
+});
+const counterInputSchema = z.object({
+    orderId: uuidInputSchema,
+    amount: moneySchema,
+});
+const selectionInputSchema = z.object({
+    orderId: uuidInputSchema,
+    studentId: uuidInputSchema,
+});
+
+function parseOrThrow<T>(parsed: z.ZodSafeParseResult<T>): T {
+    if (!parsed.success) {
+        throw new Error(parsed.error.issues[0]?.message || "Nieprawidłowe dane formularza.");
+    }
+
+    return parsed.data;
+}
+
+async function logServiceActionError(input: {
+    source: string;
+    error: unknown;
+    userId?: string | null;
+    serviceId?: string | null;
+    packageId?: string | null;
+    offerId?: string | null;
+    orderId?: string | null;
+    conversationId?: string | null;
+}) {
+    await logCriticalError({
+        source: input.source,
+        error: input.error,
+        userId: input.userId ?? null,
+        context: {
+            serviceId: input.serviceId ?? null,
+            packageId: input.packageId ?? null,
+            offerId: input.offerId ?? null,
+            orderId: input.orderId ?? null,
+            conversationId: input.conversationId ?? null,
+        },
+    });
+}
+
+async function assertUserRole(
+    supabase: SupabaseClient,
+    userId: string,
+    role: "student" | "company" | "admin",
+    message: string,
+) {
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+    if (error) {
+        await logServiceActionError({
+            source: "services.role_lookup",
+            error,
+            userId,
+        });
+        throw new Error("Nie udalo sie sprawdzic uprawnien konta.");
+    }
+
+    if (profile?.role !== role) {
+        throw new Error(message);
+    }
+}
 
 async function getConversationForOrder(
     supabase: SupabaseClient,
@@ -45,19 +254,47 @@ async function getConversationForOrder(
     });
 }
 
-function getExplicitCommissionRateValue(data: Record<string, unknown>): string | number | null {
-    const value = data["commission_rate"];
-    return typeof value === "string" || typeof value === "number" ? value : null;
-}
+async function insertServiceOrderMessage(
+    supabase: SupabaseClient,
+    input: {
+        source: string;
+        conversationId: string;
+        senderId: string;
+        content: string;
+        event?: string | null;
+        payload?: Record<string, unknown> | null;
+        userId?: string | null;
+        orderId?: string | null;
+    },
+) {
+    const { error } = await supabase.from("messages").insert({
+        conversation_id: input.conversationId,
+        sender_id: input.senderId,
+        content: input.content,
+        event: input.event ?? null,
+        payload: input.payload ?? null,
+    });
 
-function isPlatformServiceInput(data: Record<string, unknown>): boolean {
-    return data["type"] === "platform_service" || data["is_system"] === true;
+    if (error) {
+        await logServiceActionError({
+            source: input.source,
+            error,
+            userId: input.userId ?? input.senderId,
+            orderId: input.orderId ?? null,
+            conversationId: input.conversationId,
+        });
+        return false;
+    }
+
+    return true;
 }
 
 export async function createOfferFromSystemPackage(packageId: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect("/auth");
+    const parsedPackageId = parseOrThrow(uuidInputSchema.safeParse(packageId));
+    await assertUserRole(supabase, user.id, "company", "Tylko firmy moga korzystac z gotowych rozwiazan.");
 
     // Sprawdzamy czy user jest firmą
     const { data: profile } = await supabase
@@ -74,10 +311,20 @@ export async function createOfferFromSystemPackage(packageId: string) {
     const { data: pkg, error: pkgErr } = await supabase
         .from("service_packages")
         .select("*")
-        .eq("id", packageId)
+        .eq("id", parsedPackageId)
         .single();
 
-    if (pkgErr || !pkg) throw new Error("Nie znaleziono pakietu.");
+    if (pkgErr) {
+        await logServiceActionError({
+            source: "services.system_offer.package_lookup",
+            error: pkgErr,
+            userId: user.id,
+            packageId: parsedPackageId,
+        });
+        throw new Error("Nie udalo sie pobrac pakietu.");
+    }
+
+    if (!pkg) throw new Error("Nie znaleziono pakietu.");
 
     // 2. Utwórz ofertę (Zlecenie)
     // Domyślny termin: dzisiaj + czas realizacji * 2 (na zapas) lub sztywno 14 dni
@@ -108,7 +355,15 @@ export async function createOfferFromSystemPackage(packageId: string) {
         .select("id")
         .single();
 
-    if (offerErr) throw new Error(offerErr.message);
+    if (offerErr) {
+        await logServiceActionError({
+            source: "services.system_offer.offer_insert",
+            error: offerErr,
+            userId: user.id,
+            packageId: parsedPackageId,
+        });
+        throw new Error("Nie udalo sie utworzyc oferty z pakietu.");
+    }
 
     revalidatePath("/app/company/offers");
     redirect(`/app/offers/${offer.id}`);
@@ -118,11 +373,22 @@ export async function createInquiryAction(packageId: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect("/auth");
+    const parsedPackageId = parseOrThrow(uuidInputSchema.safeParse(packageId));
+    await assertUserRole(supabase, user.id, "company", "Tylko firmy moga wysylac zapytania.");
 
     const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).single();
     if (profile?.role !== "company") throw new Error("Tylko firmy mogą wysyłać zapytania.");
 
-    const { data: pkg } = await supabase.from("service_packages").select("*").eq("id", packageId).single();
+    const { data: pkg, error: pkgError } = await supabase.from("service_packages").select("*").eq("id", parsedPackageId).single();
+    if (pkgError) {
+        await logServiceActionError({
+            source: "services.inquiry.package_lookup",
+            error: pkgError,
+            userId: user.id,
+            packageId: parsedPackageId,
+        });
+        throw new Error("Nie udalo sie pobrac pakietu.");
+    }
     if (!pkg) throw new Error("Pakiet nie istnieje.");
 
     // Create Service Order Record (So it appears in Student Dashboard)
@@ -136,8 +402,13 @@ export async function createInquiryAction(packageId: string) {
     });
 
     if (orderError) {
-        console.error("Error creating service order:", orderError);
-        throw new Error("Błąd podczas tworzenia zlecenia: " + orderError.message);
+        await logServiceActionError({
+            source: "services.inquiry.service_order_insert",
+            error: orderError,
+            userId: user.id,
+            packageId: parsedPackageId,
+        });
+        throw new Error("Nie udalo sie utworzyc zlecenia dla zapytania.");
     }
 
     // Create PRIVATE offer context for the chat
@@ -158,7 +429,15 @@ export async function createInquiryAction(packageId: string) {
         })
     }).select("id").single();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+        await logServiceActionError({
+            source: "services.inquiry.offer_insert",
+            error,
+            userId: user.id,
+            packageId: parsedPackageId,
+        });
+        throw new Error("Nie udalo sie utworzyc zapytania.");
+    }
 
     // Redirect to chat
     // createConversation will handle creating conversation with offer_id.
@@ -169,7 +448,7 @@ export async function createInquiryAction(packageId: string) {
     // Dashboard Chat Link might fail if conversation.package_id is missing.
     // We'll see.
     // Insert Notification for Student
-    await supabase.from("notifications").insert({
+    const { error: notificationError } = await supabase.from("notifications").insert({
         user_id: pkg.student_id,
         typ: "application_new",
         payload: {
@@ -177,6 +456,16 @@ export async function createInquiryAction(packageId: string) {
             // No conversation ID available yet easily without double fetch, linking to general dashboard implicitly/fallback
         }
     });
+
+    if (notificationError) {
+        await logServiceActionError({
+            source: "services.inquiry.notification_insert",
+            error: notificationError,
+            userId: user.id,
+            packageId: parsedPackageId,
+            offerId: offer.id,
+        });
+    }
 
     await openChatForOfferInquiry(offer.id);
 }
@@ -190,11 +479,25 @@ export async function deleteServiceAction(serviceId: string) {
     }
 
     // Sprawdź czy użytkownik jest właścicielem serwisu
-    const { data: service } = await supabase
+    await assertUserRole(supabase, user.id, "student", "Tylko student może usuwać własne usługi.");
+
+    const parsedServiceId = parseOrThrow(uuidInputSchema.safeParse(serviceId));
+
+    const { data: service, error: serviceLookupError } = await supabase
         .from("service_packages")
         .select("student_id")
-        .eq("id", serviceId)
-        .single();
+        .eq("id", parsedServiceId)
+        .maybeSingle();
+
+    if (serviceLookupError) {
+        await logServiceActionError({
+            source: "services.delete.service_lookup",
+            error: serviceLookupError,
+            userId: user.id,
+            serviceId: parsedServiceId,
+        });
+        throw new Error("Nie udalo sie sprawdzic uslugi.");
+    }
 
     if (!service) {
         throw new Error("Nie znaleziono usługi.");
@@ -207,10 +510,17 @@ export async function deleteServiceAction(serviceId: string) {
     const { error } = await supabase
         .from("service_packages")
         .delete()
-        .eq("id", serviceId);
+        .eq("id", parsedServiceId)
+        .eq("student_id", user.id);
 
     if (error) {
-        throw new Error(error.message);
+        await logServiceActionError({
+            source: "services.delete.service_delete",
+            error,
+            userId: user.id,
+            serviceId: parsedServiceId,
+        });
+        throw new Error("Nie udalo sie usunac uslugi.");
     }
 
     revalidatePath("/app/services/my");
@@ -223,19 +533,29 @@ export async function createServiceAction(data: Record<string, unknown>) {
 
     if (!user) throw new Error("Musisz być zalogowany.");
 
+    await assertUserRole(supabase, user.id, "student", "Tylko student może tworzyć pakiety usług.");
+
+    const payload = parseOrThrow(servicePackageMutationSchema.safeParse(data));
+
     const { error } = await supabase
         .from("service_packages")
         .insert({
-            ...data,
+            ...payload,
             commission_rate: resolveCommissionRate({
-                explicitRate: parseCommissionRateInput(getExplicitCommissionRateValue(data)),
                 sourceType: "service_order",
-                isPlatformService: isPlatformServiceInput(data),
+                isPlatformService: false,
             }),
             student_id: user.id
         });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+        await logServiceActionError({
+            source: "services.create.service_insert",
+            error,
+            userId: user.id,
+        });
+        throw new Error("Nie udalo sie utworzyc uslugi.");
+    }
 
     revalidatePath("/app/services/my");
     return { success: true };
@@ -247,12 +567,27 @@ export async function updateServiceAction(serviceId: string, data: Record<string
 
     if (!user) throw new Error("Musisz być zalogowany.");
 
+    await assertUserRole(supabase, user.id, "student", "Tylko student może edytować własne pakiety usług.");
+
+    const parsedServiceId = parseOrThrow(uuidInputSchema.safeParse(serviceId));
+    const payload = parseOrThrow(servicePackageMutationSchema.safeParse(data));
+
     // Verify ownership
-    const { data: service } = await supabase
+    const { data: service, error: serviceLookupError } = await supabase
         .from("service_packages")
         .select("student_id")
-        .eq("id", serviceId)
-        .single();
+        .eq("id", parsedServiceId)
+        .maybeSingle();
+
+    if (serviceLookupError) {
+        await logServiceActionError({
+            source: "services.update.service_lookup",
+            error: serviceLookupError,
+            userId: user.id,
+            serviceId: parsedServiceId,
+        });
+        throw new Error("Nie udalo sie sprawdzic uslugi.");
+    }
 
     if (!service || service.student_id !== user.id) {
         throw new Error("Nie masz uprawnień.");
@@ -261,16 +596,24 @@ export async function updateServiceAction(serviceId: string, data: Record<string
     const { error } = await supabase
         .from("service_packages")
         .update({
-            ...data,
+            ...payload,
             commission_rate: resolveCommissionRate({
-                explicitRate: parseCommissionRateInput(getExplicitCommissionRateValue(data)),
                 sourceType: "service_order",
-                isPlatformService: isPlatformServiceInput(data),
+                isPlatformService: false,
             }),
         })
-        .eq("id", serviceId);
+        .eq("id", parsedServiceId)
+        .eq("student_id", user.id);
 
-    if (error) throw new Error(error.message);
+    if (error) {
+        await logServiceActionError({
+            source: "services.update.service_update",
+            error,
+            userId: user.id,
+            serviceId: parsedServiceId,
+        });
+        throw new Error("Nie udalo sie zapisac zmian uslugi.");
+    }
 
     revalidatePath("/app/services/my");
     return { success: true };
@@ -282,12 +625,27 @@ export async function toggleServiceStatusAction(serviceId: string, newStatus: st
 
     if (!user) throw new Error("Musisz być zalogowany.");
 
+    await assertUserRole(supabase, user.id, "student", "Tylko student może zmieniać status własnej usługi.");
+
+    const parsedServiceId = parseOrThrow(uuidInputSchema.safeParse(serviceId));
+    const parsedStatus = parseOrThrow(z.enum(SERVICE_STATUS_VALUES).safeParse(newStatus));
+
     // Verify ownership
-    const { data: service } = await supabase
+    const { data: service, error: serviceLookupError } = await supabase
         .from("service_packages")
         .select("student_id")
-        .eq("id", serviceId)
-        .single();
+        .eq("id", parsedServiceId)
+        .maybeSingle();
+
+    if (serviceLookupError) {
+        await logServiceActionError({
+            source: "services.toggle_status.service_lookup",
+            error: serviceLookupError,
+            userId: user.id,
+            serviceId: parsedServiceId,
+        });
+        throw new Error("Nie udalo sie sprawdzic uslugi.");
+    }
 
     if (!service || service.student_id !== user.id) {
         throw new Error("Nie masz uprawnień.");
@@ -295,10 +653,19 @@ export async function toggleServiceStatusAction(serviceId: string, newStatus: st
 
     const { error } = await supabase
         .from("service_packages")
-        .update({ status: newStatus })
-        .eq("id", serviceId);
+        .update({ status: parsedStatus })
+        .eq("id", parsedServiceId)
+        .eq("student_id", user.id);
 
-    if (error) throw new Error(error.message);
+    if (error) {
+        await logServiceActionError({
+            source: "services.toggle_status.service_update",
+            error,
+            userId: user.id,
+            serviceId: parsedServiceId,
+        });
+        throw new Error("Nie udalo sie zmienic statusu uslugi.");
+    }
 
     revalidatePath("/app/services/my");
 }
@@ -310,6 +677,8 @@ export async function createPrivateProposalAction(formData: FormData) {
     if (!user) {
         throw new Error("Musisz byc zalogowany.");
     }
+
+    await assertUserRole(supabase, user.id, "student", "Tylko student może wysyłać prywatne propozycje.");
 
     const packageId = String(formData.get("packageId") || "");
     const targetCompanyId = String(formData.get("companyId") || "");
@@ -338,61 +707,92 @@ export async function createPrivateProposalAction(formData: FormData) {
         throw new Error("Podaj prawidlowa liczbe dni realizacji.");
     }
 
+    const proposal = parseOrThrow(privateProposalSchema.safeParse({
+        packageId,
+        targetCompanyId,
+        proposalGoal,
+        expectedResult,
+        scopeSummary,
+        estimatedTimelineDays,
+        proposedAmount,
+        message,
+    }));
+
     const { data: pkg, error: pkgError } = await supabase
         .from("service_packages")
         .select("id, student_id, title, description")
-        .eq("id", packageId)
+        .eq("id", proposal.packageId)
         .eq("student_id", user.id)
         .single();
 
-    if (pkgError || !pkg) {
+    if (pkgError) {
+        await logServiceActionError({
+            source: "services.private_proposal.package_lookup",
+            error: pkgError,
+            userId: user.id,
+            packageId: proposal.packageId,
+        });
+        throw new Error("Nie udalo sie pobrac wybranej uslugi.");
+    }
+
+    if (!pkg) {
         throw new Error("Nie znaleziono wybranej usługi.");
     }
 
-    await assertStudentCanPrivatelyProposeToCompany(supabase, user.id, targetCompanyId);
+    await assertStudentCanPrivatelyProposeToCompany(supabase, user.id, proposal.targetCompanyId);
 
-    const { data: company } = await supabase
+    const { data: company, error: companyError } = await supabase
         .from("company_profiles")
         .select("nazwa")
-        .eq("user_id", targetCompanyId)
+        .eq("user_id", proposal.targetCompanyId)
         .maybeSingle();
+
+    if (companyError) {
+        await logServiceActionError({
+            source: "services.private_proposal.company_lookup",
+            error: companyError,
+            userId: user.id,
+            packageId: proposal.packageId,
+        });
+        throw new Error("Nie udalo sie pobrac profilu firmy.");
+    }
 
     const requestSnapshot = buildPrivateProposalRequestSnapshot({
         packageId: pkg.id,
         packageTitle: pkg.title || "Usługa",
-        targetCompanyId,
+        targetCompanyId: proposal.targetCompanyId,
         targetCompanyName: company?.nazwa || null,
-        proposalGoal,
-        expectedResult,
-        scopeSummary,
-        estimatedTimelineDays,
-        proposedAmount,
-        message,
+        proposalGoal: proposal.proposalGoal,
+        expectedResult: proposal.expectedResult,
+        scopeSummary: proposal.scopeSummary,
+        estimatedTimelineDays: proposal.estimatedTimelineDays,
+        proposedAmount: proposal.proposedAmount,
+        message: proposal.message,
     });
 
     const requirementsText = buildPrivateProposalLegacyText({
         targetCompanyName: company?.nazwa || null,
-        proposalGoal,
-        expectedResult,
-        scopeSummary,
-        estimatedTimelineDays,
-        proposedAmount,
-        message,
+        proposalGoal: proposal.proposalGoal,
+        expectedResult: proposal.expectedResult,
+        scopeSummary: proposal.scopeSummary,
+        estimatedTimelineDays: proposal.estimatedTimelineDays,
+        proposedAmount: proposal.proposedAmount,
+        message: proposal.message,
     });
 
     const quoteSnapshot = buildStudentProposalSnapshot(null, {
-        amount: proposedAmount,
-        message: message || null,
+        amount: proposal.proposedAmount,
+        message: proposal.message,
     });
 
     const { data: order, error: insertError } = await supabase
         .from("service_orders")
         .insert({
-            company_id: targetCompanyId,
+            company_id: proposal.targetCompanyId,
             student_id: user.id,
-            package_id: packageId,
+            package_id: proposal.packageId,
             title: pkg.title,
-            amount: proposedAmount,
+            amount: proposal.proposedAmount,
             requirements: requirementsText,
             request_snapshot: requestSnapshot,
             quote_snapshot: quoteSnapshot,
@@ -404,17 +804,23 @@ export async function createPrivateProposalAction(formData: FormData) {
         .single();
 
     if (insertError || !order) {
-        throw new Error(insertError?.message || "Nie udało sie zapisać prywatnej propozycji.");
+        await logServiceActionError({
+            source: "services.private_proposal.order_insert",
+            error: insertError ?? new Error("Missing inserted service order"),
+            userId: user.id,
+            packageId: proposal.packageId,
+        });
+        throw new Error("Nie udalo sie zapisac prywatnej propozycji.");
     }
 
     const conversation = await ensureConversationForServiceOrder(supabase, {
         serviceOrderId: order.id,
-        companyId: targetCompanyId,
+        companyId: proposal.targetCompanyId,
         studentId: user.id,
-        packageId,
+        packageId: proposal.packageId,
     });
 
-    await supabase.from("messages").insert([
+    const { error: proposalMessagesError } = await supabase.from("messages").insert([
         {
             conversation_id: conversation.id,
             sender_id: user.id,
@@ -428,7 +834,19 @@ export async function createPrivateProposalAction(formData: FormData) {
         },
     ]);
 
-    await sendNotification(targetCompanyId, "application_new", {
+    if (proposalMessagesError) {
+        await logServiceActionError({
+            source: "services.private_proposal.messages_insert",
+            error: proposalMessagesError,
+            userId: user.id,
+            packageId: proposal.packageId,
+            orderId: order.id,
+            conversationId: conversation.id,
+        });
+        throw new Error("Propozycja zostala zapisana, ale nie udalo sie wyslac wiadomosci.");
+    }
+
+    await sendNotification(proposal.targetCompanyId, "application_new", {
         conversation_id: conversation.id,
         service_order_id: order.id,
         snippet: `Otrzymales prywatną propozycje współpracy: ${pkg.title}`,
@@ -446,43 +864,51 @@ export async function proposeServicePriceAction(orderId: string, price: number, 
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
-        if (!user) throw new Error("Unauthorized");
+        if (!user) throw new Error("Musisz być zalogowany.");
+
+        await assertUserRole(supabase, user.id, "student", "Tylko student może złożyć ofertę realizacji.");
+        const input = parseOrThrow(quoteInputSchema.safeParse({ orderId, price, message }));
 
         // Verify ownership (Student side)
         const { data: orderData } = await supabase
             .from("service_orders")
-            .select("id, student_id, company_id, package_id, quote_snapshot, package:service_packages(title)")
-            .eq("id", orderId)
+            .select("id, student_id, company_id, package_id, status, quote_snapshot, package:service_packages(title)")
+            .eq("id", input.orderId)
             .single();
         const order = orderData as ServiceOrderNegotiationRow | null;
 
         if (!order || order.student_id !== user.id) {
-            console.error("Order not found or unauthorized", order);
             throw new Error("To nie jest twoje zlecenie.");
+        }
+
+        if (!SERVICE_ORDER_STUDENT_QUOTE_STATUSES.includes(order.status as (typeof SERVICE_ORDER_STUDENT_QUOTE_STATUSES)[number])) {
+            throw new Error("Ofertę można złożyć tylko dla zapytania oczekującego na wycenę.");
         }
 
         const quoteSnapshot = buildStudentProposalSnapshot(
             isQuoteSnapshot(order?.quote_snapshot) ? order.quote_snapshot : null,
-            { amount: price, message }
+            { amount: input.price, message: input.message }
         );
 
-        const { error } = await supabase
+        const { data: updatedOrder, error } = await supabase
             .from("service_orders")
             .update({
-                amount: price,
+                amount: input.price,
                 status: "proposal_sent",
                 quote_snapshot: quoteSnapshot,
             })
-            .eq("id", orderId);
+            .eq("id", input.orderId)
+            .in("status", [...SERVICE_ORDER_STUDENT_QUOTE_STATUSES])
+            .select("id")
+            .single();
 
-        if (error) {
-            console.error("Error updating service_orders", error);
-            throw new Error(error.message);
+        if (error || !updatedOrder) {
+            throw new Error("Nie udało się zapisać oferty. Odśwież stronę i spróbuj ponownie.");
         }
 
         // Find Conversation to link notification and message
         const conv = await getConversationForOrder(supabase, {
-            orderId,
+            orderId: input.orderId,
             companyId: order.company_id,
             studentId: user.id,
             packageId: order.package_id,
@@ -494,31 +920,47 @@ export async function proposeServicePriceAction(orderId: string, price: number, 
             const { error: eventError } = await supabase.from("messages").insert({
                 conversation_id: conv.id,
                 sender_id: user.id,
-                content: `Złożył ofertę realizacji: ${price} PLN.`,
+                content: `Złożono ofertę realizacji: ${input.price} PLN.`,
                 event: "negotiation_proposed",
                 payload: {
-                    proposed_stawka: price,
+                    proposed_stawka: input.price,
                     initiator: "student",
-                    service_order_id: orderId // Context if needed
+                    service_order_id: input.orderId
                 }
             });
-            if (eventError) console.error("Error inserting event message", eventError);
+            if (eventError) {
+                await logServiceActionError({
+                    source: "services.propose_price.event_message_insert",
+                    error: eventError,
+                    userId: user.id,
+                    orderId: input.orderId,
+                    conversationId: conv.id,
+                });
+            }
 
             // 2. Send optional text message
-            if (message) {
+            if (input.message) {
                 const { error: msgError } = await supabase.from("messages").insert({
                     conversation_id: conv.id,
                     sender_id: user.id,
-                    content: message
+                    content: input.message
                 });
-                if (msgError) console.error("Error inserting message", msgError);
+                if (msgError) {
+                    await logServiceActionError({
+                        source: "services.propose_price.text_message_insert",
+                        error: msgError,
+                        userId: user.id,
+                        orderId: input.orderId,
+                        conversationId: conv.id,
+                    });
+                }
             }
 
             // 3. Send Notification via RPC (bypasses RLS issues usually)
             await sendNotification(order.company_id, "negotiation_proposed", {
                     conversation_id: conv.id,
-                    snippet: message ? `Nowa oferta (${price} PLN): ${message.slice(0, 40)}...` : `Otrzymałeś ofertę: ${price} PLN`,
-                    proposed_stawka: price,
+                    snippet: input.message ? `Nowa oferta (${input.price} PLN): ${input.message.slice(0, 40)}...` : `Otrzymałeś ofertę: ${input.price} PLN`,
+                    proposed_stawka: input.price,
                     offer_title: order.package?.title || 'Usługa'
             });
         } else {
@@ -529,8 +971,6 @@ export async function proposeServicePriceAction(orderId: string, price: number, 
         revalidatePath("/app/company/orders");
         return { success: true };
     } catch (err: unknown) {
-        console.error("Action Error:", err);
-        // Throw simple error for client toast
         throw new Error(err instanceof Error ? err.message : "Wystąpił błąd po stronie serwera.");
     }
 }
@@ -538,11 +978,24 @@ export async function proposeServicePriceAction(orderId: string, price: number, 
 export async function acceptServiceProposalAction(orderId: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
+    if (!user) throw new Error("Musisz być zalogowany.");
+    await assertUserRole(supabase, user.id, "company", "Tylko firma może zaakceptować ofertę studenta.");
+    const parsedOrderId = parseOrThrow(uuidInputSchema.safeParse(orderId));
 
     // Verify Company
-    const { data: order } = await supabase.from("service_orders").select("*").eq("id", orderId).single();
+    const { data: order } = await supabase
+        .from("service_orders")
+        .select("id, company_id, student_id, package_id, status, amount, quote_snapshot")
+        .eq("id", parsedOrderId)
+        .single();
     if (!order || order.company_id !== user.id) throw new Error("Nie masz uprawnień.");
+
+    if (!SERVICE_ORDER_COMPANY_ACCEPT_STATUSES.includes(order.status as (typeof SERVICE_ORDER_COMPANY_ACCEPT_STATUSES)[number])) {
+        throw new Error("Tę ofertę można zaakceptować tylko na etapie decyzji firmy.");
+    }
+    if (!order.student_id || !order.amount || Number(order.amount) <= 0) {
+        throw new Error("Zamówienie nie ma kompletnej oferty studenta.");
+    }
 
     const acceptedSnapshot = buildAcceptedQuoteSnapshot(
         isQuoteSnapshot(order.quote_snapshot) ? order.quote_snapshot : null,
@@ -550,19 +1003,31 @@ export async function acceptServiceProposalAction(orderId: string) {
     );
 
     // Update Order
-    const { error } = await supabase.from("service_orders")
+    const { data: updatedOrder, error } = await supabase.from("service_orders")
         .update({ status: "accepted", agreed_amount: order.amount, quote_snapshot: acceptedSnapshot })
-        .eq("id", orderId);
-    if (error) throw new Error(error.message);
+        .eq("id", parsedOrderId)
+        .in("status", [...SERVICE_ORDER_COMPANY_ACCEPT_STATUSES])
+        .select("id")
+        .single();
+    if (error || !updatedOrder) throw new Error("Nie udało się zaakceptować oferty. Odśwież stronę i spróbuj ponownie.");
 
     // ✅ [Realization Guard]
-    await supabase.rpc("ensure_contract_for_service_order", {
-        p_service_order_id: orderId,
+    const { error: contractError } = await supabase.rpc("ensure_contract_for_service_order", {
+        p_service_order_id: parsedOrderId,
     });
+    if (contractError) {
+        await logServiceActionError({
+            source: "services.accept_proposal.contract_rpc",
+            error: contractError,
+            userId: user.id,
+            orderId: parsedOrderId,
+        });
+        throw new Error("Oferta została zaakceptowana, ale nie udało się przygotować kontraktu.");
+    }
 
     // Find Convo for Msg
     const conv = await getConversationForOrder(supabase, {
-        orderId,
+        orderId: parsedOrderId,
         companyId: order.company_id,
         studentId: order.student_id,
         packageId: order.package_id,
@@ -570,12 +1035,21 @@ export async function acceptServiceProposalAction(orderId: string) {
 
     if (conv) {
         // System Msg
-        await supabase.from("messages").insert({
+        const { error: acceptedMessageError } = await supabase.from("messages").insert({
             conversation_id: conv.id,
             sender_id: user.id,
             content: `Zaakceptowano ofertę: ${order.amount} PLN.`,
             event: "application_accepted"
         });
+        if (acceptedMessageError) {
+            await logServiceActionError({
+                source: "services.accept_proposal.message_insert",
+                error: acceptedMessageError,
+                userId: user.id,
+                orderId: parsedOrderId,
+                conversationId: conv.id,
+            });
+        }
         // Notif
         await sendNotification(order.student_id, "application_accepted", {
             p_payload: { conversation_id: conv.id, snippet: `Twoja oferta została zaakceptowana!`, offer_title: "Usługa" }
@@ -589,35 +1063,56 @@ export async function acceptServiceProposalAction(orderId: string) {
 export async function rejectServiceProposalAction(orderId: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
+    if (!user) throw new Error("Musisz być zalogowany.");
+    const parsedOrderId = parseOrThrow(uuidInputSchema.safeParse(orderId));
 
-    const { data: order } = await supabase.from("service_orders").select("*").eq("id", orderId).single();
-    if (order?.company_id !== user.id && order?.student_id !== user.id) throw new Error("Nie masz uprawnień.");
+    const { data: order } = await supabase
+        .from("service_orders")
+        .select("id, company_id, student_id, package_id, status, quote_snapshot")
+        .eq("id", parsedOrderId)
+        .single();
+    if (!order || (order.company_id !== user.id && order.student_id !== user.id)) throw new Error("Nie masz uprawnień.");
+
+    if (!SERVICE_ORDER_REJECTABLE_STATUSES.includes(order.status as (typeof SERVICE_ORDER_REJECTABLE_STATUSES)[number])) {
+        throw new Error("Tego zlecenia nie można już odrzucić w tym kroku.");
+    }
 
     const rejectedSnapshot = buildRejectedQuoteSnapshot(
         isQuoteSnapshot(order?.quote_snapshot) ? order.quote_snapshot : null
     );
 
-    const { error } = await supabase
+    const { data: updatedOrder, error } = await supabase
         .from("service_orders")
         .update({ status: "rejected", quote_snapshot: rejectedSnapshot })
-        .eq("id", orderId);
-    if (error) throw new Error(error.message);
+        .eq("id", parsedOrderId)
+        .in("status", [...SERVICE_ORDER_REJECTABLE_STATUSES])
+        .select("id")
+        .single();
+    if (error || !updatedOrder) throw new Error("Nie udało się odrzucić zlecenia. Odśwież stronę i spróbuj ponownie.");
 
     const conv = await getConversationForOrder(supabase, {
-        orderId,
+        orderId: parsedOrderId,
         companyId: order.company_id,
         studentId: order.student_id,
         packageId: order.package_id,
     });
 
     if (conv) {
-        await supabase.from("messages").insert({
+        const { error: rejectedMessageError } = await supabase.from("messages").insert({
             conversation_id: conv.id,
             sender_id: user.id,
             content: "Oferta została odrzucona.",
             event: "application_rejected"
         });
+        if (rejectedMessageError) {
+            await logServiceActionError({
+                source: "services.reject_proposal.message_insert",
+                error: rejectedMessageError,
+                userId: user.id,
+                orderId: parsedOrderId,
+                conversationId: conv.id,
+            });
+        }
     }
     revalidatePath("/app/services/dashboard");
     revalidatePath("/app/company/orders");
@@ -627,42 +1122,64 @@ export async function rejectServiceProposalAction(orderId: string) {
 export async function counterServiceProposalAction(orderId: string, amount: number) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
+    if (!user) throw new Error("Musisz być zalogowany.");
+    await assertUserRole(supabase, user.id, "company", "Tylko firma może złożyć kontrofertę.");
+    const input = parseOrThrow(counterInputSchema.safeParse({ orderId, amount }));
 
     // Company Counters
-    const { data: order } = await supabase.from("service_orders").select("*").eq("id", orderId).single();
+    const { data: order } = await supabase
+        .from("service_orders")
+        .select("id, company_id, student_id, package_id, status, quote_snapshot")
+        .eq("id", input.orderId)
+        .single();
     if (!order || order.company_id !== user.id) throw new Error("Nie masz uprawnień.");
+
+    if (!SERVICE_ORDER_COUNTER_STATUSES.includes(order.status as (typeof SERVICE_ORDER_COUNTER_STATUSES)[number])) {
+        throw new Error("Kontrofertę można złożyć tylko do aktywnej oferty studenta.");
+    }
 
     const counterSnapshot = buildCompanyCounterSnapshot(
         isQuoteSnapshot(order.quote_snapshot) ? order.quote_snapshot : null,
-        { amount }
+        { amount: input.amount }
     );
 
-    const { error } = await supabase.from("service_orders")
-        .update({ status: "countered", counter_amount: amount, quote_snapshot: counterSnapshot })
-        .eq("id", orderId);
+    const { data: updatedOrder, error } = await supabase.from("service_orders")
+        .update({ status: "countered", counter_amount: input.amount, quote_snapshot: counterSnapshot })
+        .eq("id", input.orderId)
+        .in("status", [...SERVICE_ORDER_COUNTER_STATUSES])
+        .select("id")
+        .single();
 
-    if (error) throw new Error(error.message);
+    if (error || !updatedOrder) throw new Error("Nie udało się zapisać kontroferty. Odśwież stronę i spróbuj ponownie.");
 
     const conv = await getConversationForOrder(supabase, {
-        orderId,
+        orderId: input.orderId,
         companyId: order.company_id,
         studentId: order.student_id,
         packageId: order.package_id,
     });
 
     if (conv) {
-        await supabase.from("messages").insert({
+        const { error: counterMessageError } = await supabase.from("messages").insert({
             conversation_id: conv.id,
             sender_id: user.id,
-            content: `Zaproponowano inną stawkę: ${amount} PLN.`,
+            content: `Zaproponowano inną stawkę: ${input.amount} PLN.`,
             event: "counter_offer",
-            payload: { counter_stawka: amount, initiator: "company" }
+            payload: { counter_stawka: input.amount, initiator: "company" }
         });
+        if (counterMessageError) {
+            await logServiceActionError({
+                source: "services.counter_proposal.message_insert",
+                error: counterMessageError,
+                userId: user.id,
+                orderId: input.orderId,
+                conversationId: conv.id,
+            });
+        }
         await sendNotification(order.student_id, "negotiation_proposed", {
             p_user_id: order.student_id,
             p_typ: "negotiation_proposed",
-            p_payload: { conversation_id: conv.id, snippet: `Firma zaproponowała nową stawkę: ${amount} PLN`, proposed_stawka: amount }
+            p_payload: { conversation_id: conv.id, snippet: `Firma zaproponowała nową stawkę: ${input.amount} PLN`, proposed_stawka: input.amount }
         });
     }
     revalidatePath("/app/services/dashboard");
@@ -673,47 +1190,81 @@ export async function counterServiceProposalAction(orderId: string, amount: numb
 export async function acceptServiceCounterAction(orderId: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
+    if (!user) throw new Error("Musisz być zalogowany.");
+    await assertUserRole(supabase, user.id, "student", "Tylko student może zaakceptować kontrofertę.");
+    const parsedOrderId = parseOrThrow(uuidInputSchema.safeParse(orderId));
 
     // Student Accepts Counter
-    const { data: order } = await supabase.from("service_orders").select("*").eq("id", orderId).single();
+    const { data: order } = await supabase
+        .from("service_orders")
+        .select("id, company_id, student_id, package_id, status, counter_amount, quote_snapshot")
+        .eq("id", parsedOrderId)
+        .single();
     if (!order || order.student_id !== user.id) throw new Error("Nie masz uprawnień.");
+
+    if (!SERVICE_ORDER_STUDENT_COUNTER_ACCEPT_STATUSES.includes(order.status as (typeof SERVICE_ORDER_STUDENT_COUNTER_ACCEPT_STATUSES)[number])) {
+        throw new Error("Kontrofertę można zaakceptować tylko, gdy firma ją aktywnie zaproponowała.");
+    }
+    if (!order.counter_amount || Number(order.counter_amount) <= 0) {
+        throw new Error("Kontroferta nie ma poprawnej kwoty.");
+    }
 
     const acceptedSnapshot = buildAcceptedQuoteSnapshot(
         isQuoteSnapshot(order.quote_snapshot) ? order.quote_snapshot : null,
         { amount: order.counter_amount, acceptedBy: "student" }
     );
 
-    const { error } = await supabase.from("service_orders")
+    const { data: updatedOrder, error } = await supabase.from("service_orders")
         .update({
             status: "accepted",
             agreed_amount: order.counter_amount,
             amount: order.counter_amount,
             quote_snapshot: acceptedSnapshot
         })
-        .eq("id", orderId);
+        .eq("id", parsedOrderId)
+        .in("status", [...SERVICE_ORDER_STUDENT_COUNTER_ACCEPT_STATUSES])
+        .select("id")
+        .single();
 
-    if (error) throw new Error(error.message);
+    if (error || !updatedOrder) throw new Error("Nie udało się zaakceptować kontroferty. Odśwież stronę i spróbuj ponownie.");
 
     // ✅ [Realization Guard] — same as acceptServiceProposalAction
-    await supabase.rpc("ensure_contract_for_service_order", {
-        p_service_order_id: orderId,
+    const { error: contractError } = await supabase.rpc("ensure_contract_for_service_order", {
+        p_service_order_id: parsedOrderId,
     });
+    if (contractError) {
+        await logServiceActionError({
+            source: "services.accept_counter.contract_rpc",
+            error: contractError,
+            userId: user.id,
+            orderId: parsedOrderId,
+        });
+        throw new Error("Kontroferta została zaakceptowana, ale nie udało się przygotować kontraktu.");
+    }
 
     const conv = await getConversationForOrder(supabase, {
-        orderId,
+        orderId: parsedOrderId,
         companyId: order.company_id,
         studentId: order.student_id,
         packageId: order.package_id,
     });
 
     if (conv) {
-        await supabase.from("messages").insert({
+        const { error: acceptedCounterMessageError } = await supabase.from("messages").insert({
             conversation_id: conv.id,
             sender_id: user.id,
             content: `Zaakceptowano kontrofertę: ${order.counter_amount} PLN.`,
             event: "counter_accepted"
         });
+        if (acceptedCounterMessageError) {
+            await logServiceActionError({
+                source: "services.accept_counter.message_insert",
+                error: acceptedCounterMessageError,
+                userId: user.id,
+                orderId: parsedOrderId,
+                conversationId: conv.id,
+            });
+        }
         await sendNotification(order.company_id, "application_accepted", {
             p_user_id: order.company_id,
             p_typ: "application_accepted",
@@ -735,8 +1286,9 @@ export async function selectCompanyOrderStudentAction(formData: FormData) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-        throw new Error("Unauthorized");
+        throw new Error("Musisz być zalogowany.");
     }
+    await assertUserRole(supabase, user.id, "company", "Tylko firma może wybrać studenta do zlecenia.");
 
     const orderId = String(formData.get("orderId") || "");
     const studentId = String(formData.get("studentId") || "");
@@ -745,10 +1297,12 @@ export async function selectCompanyOrderStudentAction(formData: FormData) {
         throw new Error("Brak danych wyboru studenta.");
     }
 
+    const input = parseOrThrow(selectionInputSchema.safeParse({ orderId, studentId }));
+
     const { data: order } = await supabase
         .from("service_orders")
         .select("id, company_id, student_id, status, package_id, title")
-        .eq("id", orderId)
+        .eq("id", input.orderId)
         .single();
 
     if (!order || order.company_id !== user.id) {
@@ -759,15 +1313,15 @@ export async function selectCompanyOrderStudentAction(formData: FormData) {
         throw new Error("Do tego zamowienia student jest już przypisany.");
     }
 
-    if (!["pending_selection", "pending"].includes(order.status)) {
+    if (!SERVICE_ORDER_SELECTION_STATUSES.includes(order.status as (typeof SERVICE_ORDER_SELECTION_STATUSES)[number])) {
         throw new Error("To zamowienie nie jest już na etapie wyboru studenta.");
     }
 
     const maxActiveOrders = order.package_id === LOGO_PACKAGE_ID ? 1 : 2;
     const { data: lockResult, error: lockError } = await supabase.rpc("assign_service_order_student_locked", {
-        p_order_id: orderId,
+        p_order_id: input.orderId,
         p_company_id: user.id,
-        p_student_id: studentId,
+        p_student_id: input.studentId,
         p_max_active_orders: maxActiveOrders,
         p_preferred_status: "pending_student_confirmation",
         p_fallback_status: "pending",
@@ -775,111 +1329,148 @@ export async function selectCompanyOrderStudentAction(formData: FormData) {
 
     const assignedRow = Array.isArray(lockResult) ? lockResult[0] : null;
     if (lockError || !assignedRow?.order_id) {
-        throw new Error(lockError?.message || "Nie udało sie przypisac studenta.");
+        await logServiceActionError({
+            source: "services.select_student.assign_locked",
+            error: lockError ?? new Error("Missing assigned order row"),
+            userId: user.id,
+            orderId: input.orderId,
+        });
+        throw new Error("Nie udalo sie przypisac studenta.");
     }
 
     const existingConversation = await findConversationForServiceOrder(supabase, {
-        serviceOrderId: orderId,
+        serviceOrderId: input.orderId,
         companyId: user.id,
-        studentId,
+        studentId: input.studentId,
         packageId: order.package_id,
     });
 
     let conversationId = existingConversation?.id ?? null;
     if (!conversationId) {
         const createdConversation = await ensureConversationForServiceOrder(supabase, {
-            serviceOrderId: orderId,
+            serviceOrderId: input.orderId,
             companyId: user.id,
-            studentId,
+            studentId: input.studentId,
             packageId: order.package_id,
         });
 
         conversationId = createdConversation.id;
     }
 
-    await supabase.from("notifications").insert({
-        user_id: studentId,
+    const { error: studentNotificationError } = await supabase.from("notifications").insert({
+        user_id: input.studentId,
         typ: "application_new",
         payload: {
             snippet: `Firma wybrala Cie do realizacji usługi: ${order.title || "Usługa"}`,
-            service_order_id: orderId,
+            service_order_id: input.orderId,
             conversation_id: conversationId,
         },
     });
 
+    if (studentNotificationError) {
+        await logServiceActionError({
+            source: "services.select_student.notification_insert",
+            error: studentNotificationError,
+            userId: user.id,
+            orderId: input.orderId,
+            conversationId,
+        });
+    }
+
     revalidatePath("/app/company/orders");
-    revalidatePath(`/app/company/orders/${orderId}`);
+    revalidatePath(`/app/company/orders/${input.orderId}`);
     revalidatePath("/app/services/dashboard");
-    redirect(`/app/company/orders/${orderId}`);
+    redirect(`/app/company/orders/${input.orderId}`);
 }
 
 export async function confirmStudentSelectionAction(orderId: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
+    if (!user) throw new Error("Musisz być zalogowany.");
+    await assertUserRole(supabase, user.id, "student", "Tylko wybrany student może potwierdzić realizację.");
+    const parsedOrderId = parseOrThrow(uuidInputSchema.safeParse(orderId));
 
     const { data: order } = await supabase
         .from("service_orders")
         .select("id, student_id, company_id, package_id, status, amount, title")
-        .eq("id", orderId)
+        .eq("id", parsedOrderId)
         .single();
 
     if (!order || order.student_id !== user.id) {
         throw new Error("Nie masz uprawnien do tego zamowienia.");
     }
 
-    if (!["pending_student_confirmation", "pending_confirmation", "pending", "inquiry"].includes(order.status)) {
+    if (!SERVICE_ORDER_CONFIRMATION_STATUSES.includes(order.status as (typeof SERVICE_ORDER_CONFIRMATION_STATUSES)[number])) {
         throw new Error("To zamowienie nie czeka na potwierdzenie.");
     }
 
-    let { error: updateError } = await supabase
+    let { data: updatedOrder, error: updateError } = await supabase
         .from("service_orders")
         .update({ status: "active" })
-        .eq("id", orderId)
-        .eq("student_id", user.id);
+        .eq("id", parsedOrderId)
+        .eq("student_id", user.id)
+        .in("status", [...SERVICE_ORDER_CONFIRMATION_STATUSES])
+        .select("id")
+        .single();
 
     if (updateError?.message?.includes("service_orders_status_check")) {
         const fallback = await supabase
             .from("service_orders")
             .update({ status: "accepted" })
-            .eq("id", orderId)
-            .eq("student_id", user.id);
+            .eq("id", parsedOrderId)
+            .eq("student_id", user.id)
+            .in("status", [...SERVICE_ORDER_CONFIRMATION_STATUSES])
+            .select("id")
+            .single();
+        updatedOrder = fallback.data;
         updateError = fallback.error;
     }
 
-    if (updateError) {
-        throw new Error(updateError.message);
+    if (updateError || !updatedOrder) {
+        throw new Error("Nie udało się potwierdzić realizacji. Odśwież stronę i spróbuj ponownie.");
     }
 
-    await supabase.rpc("ensure_contract_for_service_order", {
-        p_service_order_id: orderId,
+    const { error: contractError } = await supabase.rpc("ensure_contract_for_service_order", {
+        p_service_order_id: parsedOrderId,
     });
+    if (contractError) {
+        await logServiceActionError({
+            source: "services.confirm_selection.contract_rpc",
+            error: contractError,
+            userId: user.id,
+            orderId: parsedOrderId,
+        });
+        throw new Error("Realizacja została potwierdzona, ale nie udało się przygotować kontraktu.");
+    }
 
     const conversation = await findConversationForServiceOrder(supabase, {
-        serviceOrderId: orderId,
+        serviceOrderId: parsedOrderId,
         companyId: order.company_id,
         studentId: user.id,
         packageId: order.package_id,
     });
 
     if (conversation?.id) {
-        await supabase.from("messages").insert({
-            conversation_id: conversation.id,
-            sender_id: user.id,
+        await insertServiceOrderMessage(supabase, {
+            source: "services.confirm_selection.message_insert",
+            conversationId: conversation.id,
+            senderId: user.id,
             content: "Potwierdzono rozpoczecie realizacji.",
             event: "application_accepted",
+            userId: user.id,
+            orderId: parsedOrderId,
         });
 
         await sendNotification(order.company_id, "application_accepted", {
             conversation_id: conversation.id,
-            service_order_id: orderId,
+            service_order_id: parsedOrderId,
             snippet: `Student potwierdzil realizacje: ${order.title || "Usługa"}`,
             offer_title: order.title || "Usługa",
         });
     }
 
     revalidatePath("/app/services/dashboard");
-    revalidatePath(`/app/services/dashboard/${orderId}`);
+    revalidatePath(`/app/services/dashboard/${parsedOrderId}`);
     revalidatePath("/app/company/orders");
     return { success: true };
 }

@@ -9,26 +9,21 @@ import { toast } from "sonner";
 interface PaymentModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onConfirm: () => Promise<void>; // Kept for backward compatibility (mock mode)
     amount: number;
     title: string;
-    // Stripe integration props
     contractId?: string;
     applicationId?: string;
     serviceOrderId?: string;
-    useStripe?: boolean; // Toggle between mock and real Stripe
 }
 
 export function PaymentModal({
     isOpen,
     onClose,
-    onConfirm,
     amount,
     title,
     contractId,
     applicationId,
     serviceOrderId,
-    useStripe = true // Default to Stripe in production
 }: PaymentModalProps) {
     const [step, setStep] = useState<'confirm' | 'processing' | 'success' | 'error'>('confirm');
     const [errorMessage, setErrorMessage] = useState<string>("");
@@ -124,11 +119,10 @@ export function PaymentModal({
                     contractId,
                     applicationId,
                     serviceOrderId,
-                    amount,
                 }),
             });
 
-            const data = await response.json();
+            const data = await response.json() as { url?: string; error?: string };
 
             if (!response.ok) {
                 throw new Error(data.error || 'Nie udało się utworzyć sesji płatności');
@@ -148,35 +142,7 @@ export function PaymentModal({
         }
     };
 
-    const handleMockPayment = async () => {
-        setStep('processing');
-
-        // Simulate processing delay
-        setTimeout(async () => {
-            try {
-                await onConfirm();
-                setStep('success');
-
-                // Close after success
-                setTimeout(() => {
-                    onClose();
-                }, 2000);
-            } catch (caught: unknown) {
-                const error = caught instanceof Error ? caught : new Error("Wystąpił nieznany błąd.");
-                console.error(error);
-                setErrorMessage(error.message || 'Błąd płatności');
-                setStep('error');
-            }
-        }, 2000);
-    };
-
-    const handlePay = () => {
-        if (useStripe && contractId && (applicationId || serviceOrderId)) {
-            handleStripePayment();
-        } else {
-            handleMockPayment();
-        }
-    };
+    const hasPaymentContext = Boolean(contractId && (applicationId || serviceOrderId));
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -185,9 +151,9 @@ export function PaymentModal({
                     <div className="mx-auto bg-slate-100 p-3 rounded-full mb-2">
                         <ShieldCheck className="w-6 h-6 text-indigo-600" />
                     </div>
-                    <DialogTitle className="text-center text-xl">Bezpieczna Płatność</DialogTitle>
+                    <DialogTitle className="text-center text-xl">Bezpieczna płatność</DialogTitle>
                     <DialogDescription className="text-center">
-                        Student Impact Escrow
+                        Depozyt Student2Work
                     </DialogDescription>
                 </DialogHeader>
 
@@ -213,7 +179,8 @@ export function PaymentModal({
                         </div>
 
                         <Button
-                            onClick={handlePay}
+                            onClick={handleStripePayment}
+                            disabled={!hasPaymentContext}
                             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-12 text-lg shadow-lg shadow-indigo-200"
                         >
                             <span className="mr-2">Przejdź do płatności</span>
@@ -227,7 +194,7 @@ export function PaymentModal({
 
                         <p className="text-xs text-center text-slate-400">
                             Po kliknięciu zostaniesz przekierowany na bezpieczną stronę płatności Stripe.
-                            Środki zostaną zabezpieczone w Escrow do czasu akceptacji prac.
+                            Środki zostaną zapisane jako depozyt do czasu akceptacji prac.
                         </p>
                     </div>
                 )}
@@ -251,8 +218,8 @@ export function PaymentModal({
                             <CheckCircle2 className="w-12 h-12 text-emerald-600" />
                         </div>
                         <div>
-                            <h3 className="text-2xl font-bold text-emerald-700">Płatność Przyjęta!</h3>
-                            <p className="text-slate-600">Środki zostały zabezpieczone w Escrow.</p>
+                            <h3 className="text-2xl font-bold text-emerald-700">Płatność przyjęta!</h3>
+                            <p className="text-slate-600">Depozyt został zasilony.</p>
                         </div>
                     </div>
                 )}

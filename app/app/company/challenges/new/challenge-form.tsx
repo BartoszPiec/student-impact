@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { JOB_CATEGORIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { createChallengeOffer } from "./_actions";
 
@@ -122,6 +123,28 @@ export function ChallengeForm() {
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">
+            <div className="flex flex-col gap-3">
+              <Label htmlFor="category" className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+                Kategoria
+              </Label>
+              <select
+                id="category"
+                name="category"
+                required
+                defaultValue=""
+                className="h-14 rounded-2xl border border-slate-200 bg-white px-5 font-semibold text-slate-900 outline-none focus:ring-4 focus:ring-amber-100"
+              >
+                <option value="" disabled>
+                  Wybierz kategorie
+                </option>
+                {JOB_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex flex-col gap-3">
               <Label htmlFor="problemLocation" className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">
                 Gdzie lezy problem?
@@ -259,7 +282,7 @@ export function ChallengeForm() {
             Bez platnosci na tym etapie
           </div>
           <p className="text-sm font-semibold leading-6 text-amber-900/80">
-            Ten formularz tworzy brief do wyceny. Escrow Stripe, umowy i capture startuja dopiero po wyborze
+            Ten formularz tworzy brief do wyceny. Depozyt Student2Work, umowy i realizacja płatności startują dopiero po wyborze
             konkretnej propozycji, zgodnie z glownym flow platformy.
           </p>
         </div>

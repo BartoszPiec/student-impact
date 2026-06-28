@@ -6,27 +6,81 @@ import { useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, X, CheckCircle2, Briefcase, Zap } from "lucide-react";
+import { Search, Filter, X, CheckCircle2, Briefcase, Zap, SearchCheck, ChevronRight } from "lucide-react";
 import { JobCard, JobOffer } from "./job-card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { JOB_CATEGORIES, JOB_CATEGORY_GROUPS, inferJobCategoryFromText, normalizeCategoryKey, resolveJobCategoryLabel } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const POPULAR_CITIES = ["Warszawa", "Kraków", "Wrocław", "Poznań", "Gdańsk", "Łódź", "Katowice", "Lublin", "Bydgoszcz", "Szczecin"];
-const POPULAR_CATEGORIES = ["IT / Programowanie", "Grafika & Design", "Marketing & Social Media", "Copywriting", "Wideo & Animacja", "Tłumaczenia", "Administracja"];
 const POPULAR_CONTRACTS = ["Umowa o pracę", "B2B", "Umowa zlecenie", "Umowa o dzieło", "Praktyki"];
 const JOBS_PAGE_SIZE = 24;
+type BoardMode = "micro" | "challenge" | "job";
+type AssignmentType = "all" | "platform" | "regular" | "challenge";
 
 function normalizeSearchText(value: unknown) {
-    return String(value ?? "").toLocaleLowerCase("pl-PL").trim();
+    return String(value ?? "")
+        .toLocaleLowerCase("pl-PL")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
 }
 
 function isJobOffer(offer: Pick<JobOffer, "typ">) {
     const type = normalizeSearchText(offer.typ);
-    return type.includes("job") || type.includes("praca") || type.includes("staż") || type.includes("staż");
+    return type.includes("job") || type.includes("praca") || type.includes("staz");
+}
+
+function isChallengeOffer(offer: Pick<JobOffer, "typ">) {
+    const type = normalizeSearchText(offer.typ);
+    return type.includes("challenge") || type.includes("wyzwan");
+}
+
+function getOfferResolvedCategory(offer: Pick<JobOffer, "category" | "tytul" | "opis" | "obligations">) {
+    return resolveJobCategoryLabel(offer.category) ?? inferJobCategoryFromText(`${offer.category ?? ""} ${offer.tytul} ${offer.opis ?? ""} ${offer.obligations ?? ""}`);
+}
+
+function getOfferCategory(offer: Pick<JobOffer, "category" | "tytul" | "opis" | "obligations">) {
+    return getOfferResolvedCategory(offer) ?? offer.category?.trim() ?? "Inne";
+}
+
+function getSubcategoryId(subcategory: { readonly label: string; readonly url: string }) {
+    return subcategory.url.split("/").filter(Boolean).at(-1) ?? normalizeCategoryKey(subcategory.label).replace(/\s+/g, "-");
+}
+
+function getCategoryGroupByLabel(label: string) {
+    return JOB_CATEGORY_GROUPS.find((category) => category.label === label) ?? null;
+}
+
+function getSubcategoryById(id: string) {
+    for (const category of JOB_CATEGORY_GROUPS) {
+        const subcategory = category.subcategories.find((item) => getSubcategoryId(item) === id);
+        if (subcategory) return subcategory;
+    }
+
+    return null;
+}
+
+function offerMatchesSubcategory(offer: JobOffer, subcategoryId: string) {
+    const subcategory = getSubcategoryById(subcategoryId);
+    if (!subcategory) return false;
+
+    const source = normalizeCategoryKey([
+        offer.tytul,
+        offer.category,
+        offer.opis,
+        offer.obligations,
+        ...(offer.technologies ?? []),
+    ].join(" "));
+    const subcategoryTokens = normalizeCategoryKey(`${subcategory.label} ${subcategory.url} ${subcategory.description}`)
+        .split(" ")
+        .filter((token) => token.length >= 4);
+
+    return subcategoryTokens.some((token) => source.includes(token));
 }
 
 function getOfferAmount(offer: JobOffer) {
@@ -52,7 +106,7 @@ export function JobBoardView({
     const companyIdFromUrl = searchParams.get("companyId");
 
     const offers = initialOffers;
-    const [mode, setMode] = useState<"job" | "micro">("micro");
+    const [mode, setMode] = useState<BoardMode>("micro");
     const [subFilter, setSubFilter] = useState<"all" | "platform" | "regular">("all");
     const [search, setSearch] = useState("");
     const deferredSearch = useDeferredValue(search);
@@ -61,6 +115,7 @@ export function JobBoardView({
     const [techFilters, setTechFilters] = useState<string[]>([]);
     const [contractFilters, setContractFilters] = useState<string[]>([]);
     const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+    const [subcategoryFilter, setSubcategoryFilter] = useState<string[]>([]);
     const [salaryMin, setSalaryMin] = useState<number | "">("");
     const [salaryMax, setSalaryMax] = useState<number | "">("");
 
@@ -70,6 +125,7 @@ export function JobBoardView({
     const [showApplied, setShowApplied] = useState(false);
 
     const [companyIdFilter, setCompanyIdFilter] = useState(initialCompanyId || companyIdFromUrl || "");
+    const activeAssignmentType: AssignmentType = mode === "challenge" ? "challenge" : subFilter;
     const nextPageHref = useMemo(() => {
         const params = new URLSearchParams(searchParams.toString());
         params.set("page", String(currentPage + 1));
@@ -90,6 +146,7 @@ export function JobBoardView({
         Number(search.trim().length > 0) +
         Number(Boolean(locationFilter)) +
         categoryFilter.length +
+        subcategoryFilter.length +
         contractFilters.length +
         techFilters.length +
         Number(Boolean(salaryMin)) +
@@ -102,24 +159,30 @@ export function JobBoardView({
     const { locations, contracts, categories } = useMemo(() => {
         const locs = new Set<string>(POPULAR_CITIES);
         const conts = new Set<string>(POPULAR_CONTRACTS);
-        const cats = new Set<string>(POPULAR_CATEGORIES);
+        const cats = new Set<string>(JOB_CATEGORIES);
+        const unknownCats = new Set<string>();
 
         offers.forEach(o => {
             const isJob = isJobOffer(o);
-            const matchesMode = mode === "job" ? isJob : !isJob;
+            const isChallenge = isChallengeOffer(o);
+            const matchesMode =
+                mode === "job" ? isJob :
+                    mode === "challenge" ? isChallenge :
+                        !isJob && !isChallenge;
 
             if (matchesMode) {
                 if (o.location) locs.add(o.location);
                 if (o.is_remote) locs.add("Remote");
                 if (o.contract_type) conts.add(o.contract_type);
-                if (o.category) cats.add(o.category);
+                const category = getOfferCategory(o);
+                if (category && !cats.has(category)) unknownCats.add(category);
             }
         });
 
         return {
             locations: Array.from(locs).sort(),
             contracts: Array.from(conts).sort(),
-            categories: Array.from(cats).sort()
+            categories: [...JOB_CATEGORIES, ...Array.from(unknownCats).sort()]
         };
     }, [offers, mode]);
 
@@ -132,10 +195,14 @@ export function JobBoardView({
             if (!showApplied && appliedOfferIds?.has(o.id)) return false;
 
             const isJob = isJobOffer(o);
+            const isChallenge = isChallengeOffer(o);
+            const offerCategory = getOfferCategory(o);
+            const resolvedOfferCategory = getOfferResolvedCategory(o);
 
             if (!companyIdFilter) {
                 if (mode === "job" && !isJob) return false;
-                if (mode === "micro" && isJob) return false;
+                if (mode === "challenge" && !isChallenge) return false;
+                if (mode === "micro" && (isJob || isChallenge)) return false;
             }
 
             if (mode === "micro" && !companyIdFilter) {
@@ -150,6 +217,7 @@ export function JobBoardView({
                     o.tytul,
                     o.company_name,
                     o.category,
+                    offerCategory,
                     o.location,
                     o.typ,
                     o.contract_type,
@@ -172,7 +240,14 @@ export function JobBoardView({
                     }
                 }
                 if (categoryFilter.length > 0) {
-                    if (!o.category || !categoryFilter.includes(o.category)) return false;
+                    const matchesCategory = categoryFilter.some((category) => {
+                        if (category === "Inne") return !resolvedOfferCategory || resolvedOfferCategory === "Inne";
+                        return offerCategory === category;
+                    });
+                    if (!matchesCategory) return false;
+                }
+                if (subcategoryFilter.length > 0) {
+                    if (!subcategoryFilter.some((subcategoryId) => offerMatchesSubcategory(o, subcategoryId))) return false;
                 }
                 if (techFilters.length > 0) {
                     const hasTech = o.technologies?.some(t => techFilters.includes(t));
@@ -199,7 +274,14 @@ export function JobBoardView({
                     }
                 }
                 if (categoryFilter.length > 0) {
-                    if (!o.category || !categoryFilter.includes(o.category)) return false;
+                    const matchesCategory = categoryFilter.some((category) => {
+                        if (category === "Inne") return !resolvedOfferCategory || resolvedOfferCategory === "Inne";
+                        return offerCategory === category;
+                    });
+                    if (!matchesCategory) return false;
+                }
+                if (subcategoryFilter.length > 0) {
+                    if (!subcategoryFilter.some((subcategoryId) => offerMatchesSubcategory(o, subcategoryId))) return false;
                 }
                 const rate = getOfferAmount(o);
                 if (budgetMin !== "" && rate < Number(budgetMin)) return false;
@@ -208,10 +290,22 @@ export function JobBoardView({
 
             return true;
         });
-    }, [offers, mode, deferredSearch, locationFilter, techFilters, contractFilters, categoryFilter, salaryMin, salaryMax, budgetMin, budgetMax, subFilter, companyIdFilter, showApplied, appliedOfferIds]);
+    }, [offers, mode, deferredSearch, locationFilter, techFilters, contractFilters, categoryFilter, subcategoryFilter, salaryMin, salaryMax, budgetMin, budgetMax, subFilter, companyIdFilter, showApplied, appliedOfferIds]);
 
     const toggleContract = (c: string) => setContractFilters(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
-    const toggleCategory = (c: string) => setCategoryFilter(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
+    const toggleCategory = (c: string) => {
+        const categoryGroup = getCategoryGroupByLabel(c);
+        const subcategoryIds = new Set(categoryGroup?.subcategories.map(getSubcategoryId) ?? []);
+
+        setCategoryFilter(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
+        if (subcategoryIds.size > 0) {
+            setSubcategoryFilter(prev => prev.filter((id) => !subcategoryIds.has(id)));
+        }
+    };
+    const toggleSubcategory = (category: string, subcategoryId: string) => {
+        setCategoryFilter(prev => prev.includes(category) ? prev : [...prev, category]);
+        setSubcategoryFilter(prev => prev.includes(subcategoryId) ? prev.filter((id) => id !== subcategoryId) : [...prev, subcategoryId]);
+    };
 
     const clearFilters = () => {
         setSearch("");
@@ -219,6 +313,7 @@ export function JobBoardView({
         setTechFilters([]);
         setContractFilters([]);
         setCategoryFilter([]);
+        setSubcategoryFilter([]);
         setSalaryMin("");
         setSalaryMax("");
         setBudgetMin("");
@@ -230,12 +325,23 @@ export function JobBoardView({
         setLocationFilter(value === "all_locations" ? "" : value);
     };
 
+    const handleAssignmentTypeChange = (value: AssignmentType) => {
+        if (value === "challenge") {
+            setMode("challenge");
+            setSubFilter("all");
+            return;
+        }
+
+        setMode("micro");
+        setSubFilter(value);
+    };
+
 
 
     return (
         <div className="flex flex-col gap-4 sm:gap-5">
 
-            <div className="-mt-24 space-y-4 lg:hidden">
+            <div className="-mt-20 space-y-4 lg:hidden">
                 <div className="rounded-2xl border border-white/15 bg-[#233a78] p-3 shadow-sm">
                     <div className="hidden">
                         <div>
@@ -243,7 +349,7 @@ export function JobBoardView({
                                 Wyszukiwarka ofert
                             </p>
                             <h2 className="mt-1 text-lg font-black leading-tight text-slate-900">
-                                {mode === "micro" ? "Znajdź mikrozlecenie" : "Znajdź pracę lub staż"}
+                                {mode === "job" ? "Znajdź pracę lub staż" : mode === "challenge" ? "Znajdź wyzwanie" : "Znajdź mikrozlecenie"}
                             </h2>
                         </div>
                         <Badge
@@ -268,33 +374,31 @@ export function JobBoardView({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setMode("micro")}
-                        className={cn(
-                            "flex min-h-14 items-center justify-start gap-3 rounded-2xl border px-3 text-sm font-black transition-all",
-                            mode === "micro"
-                                ? "border-lime-200 bg-lime-100 text-[#0b1b47] shadow-sm"
-                                : "border-slate-200 bg-white text-slate-600",
-                        )}
-                    >
-                        <Zap className="h-4 w-4" />
-                        Mikro
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setMode("job")}
-                        className={cn(
-                            "flex min-h-14 items-center justify-start gap-3 rounded-2xl border px-3 text-sm font-black transition-all",
-                            mode === "job"
-                                ? "border-lime-200 bg-lime-100 text-[#0b1b47] shadow-sm"
-                                : "border-slate-200 bg-white text-slate-600",
-                        )}
-                    >
-                        <Briefcase className="h-4 w-4" />
-                        Praca
-                    </button>
+                <div className="grid grid-cols-3 gap-2">
+                    {[
+                        { id: "micro" as const, label: "Mikro", icon: Zap },
+                        { id: "challenge" as const, label: "Wyzwania", icon: SearchCheck },
+                        { id: "job" as const, label: "Praca", icon: Briefcase },
+                    ].map((item) => {
+                        const Icon = item.icon;
+
+                        return (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => setMode(item.id)}
+                                className={cn(
+                                    "flex min-h-14 items-center justify-center gap-1.5 rounded-2xl border px-2 text-xs font-black transition-all",
+                                    mode === item.id
+                                        ? "border-lime-200 bg-lime-100 text-[#0b1b47] shadow-sm"
+                                        : "border-slate-200 bg-white text-slate-600",
+                                )}
+                            >
+                                <Icon className="h-4 w-4" />
+                                {item.label}
+                            </button>
+                        );
+                    })}
                 </div>
 
                 <Sheet>
@@ -337,22 +441,23 @@ export function JobBoardView({
                                     </Select>
                                 </div>
 
-                                {mode === "micro" && (
+                                {mode !== "job" && (
                                     <div className="space-y-3">
                                         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Rodzaj zlecenia</label>
-                                        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-100/80 p-1.5">
+                                        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-100/80 p-1.5">
                                             {[
                                                 { id: "all", label: "Wszystkie" },
                                                 { id: "platform", label: "Systemowe" },
                                                 { id: "regular", label: "Firmy" },
+                                                { id: "challenge", label: "Wyzwania" },
                                             ].map((tab) => (
                                                 <button
                                                     key={tab.id}
                                                     type="button"
-                                                    onClick={() => setSubFilter(tab.id as "all" | "platform" | "regular")}
+                                                    onClick={() => handleAssignmentTypeChange(tab.id as AssignmentType)}
                                                     className={cn(
                                                         "min-h-10 rounded-xl px-2 text-[11px] font-black transition-all",
-                                                        subFilter === tab.id
+                                                        activeAssignmentType === tab.id
                                                             ? "bg-white text-amber-700 shadow-sm ring-1 ring-amber-100"
                                                             : "text-slate-500",
                                                     )}
@@ -399,12 +504,43 @@ export function JobBoardView({
                                     <div className="space-y-4">
                                         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Kategorie</label>
                                         <div className="grid grid-cols-1 gap-3">
-                                            {categories.map(c => (
-                                                <div key={c} className="flex items-center space-x-3 rounded-xl border border-slate-100 p-3 transition-colors hover:bg-slate-50">
-                                                    <Checkbox id={`m-cat-${c}`} checked={categoryFilter.includes(c)} onCheckedChange={() => toggleCategory(c)} />
-                                                    <Label htmlFor={`m-cat-${c}`} className="flex-1 cursor-pointer text-sm font-medium text-slate-700">{c}</Label>
-                                                </div>
-                                            ))}
+                                            {categories.map(c => {
+                                                const categoryGroup = getCategoryGroupByLabel(c);
+                                                const isSelected = categoryFilter.includes(c);
+
+                                                return (
+                                                    <div key={c} className="rounded-xl border border-slate-100 p-3 transition-colors hover:bg-slate-50">
+                                                        <div className="flex items-center space-x-3">
+                                                            <Checkbox id={`m-cat-${c}`} checked={isSelected} onCheckedChange={() => toggleCategory(c)} />
+                                                            <Label htmlFor={`m-cat-${c}`} className="flex-1 cursor-pointer text-sm font-medium text-slate-700">{c}</Label>
+                                                            {isSelected && categoryGroup && categoryGroup.subcategories.length > 0 ? (
+                                                                <ChevronRight className="h-4 w-4 rotate-90 text-slate-400" />
+                                                            ) : null}
+                                                        </div>
+
+                                                        {isSelected && categoryGroup && categoryGroup.subcategories.length > 0 ? (
+                                                            <div className="mt-3 space-y-2 border-l border-slate-200 pl-4">
+                                                                {categoryGroup.subcategories.map((subcategory) => {
+                                                                    const subcategoryId = getSubcategoryId(subcategory);
+
+                                                                    return (
+                                                                        <div key={subcategory.url} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                                                                            <Checkbox
+                                                                                id={`m-subcat-${subcategoryId}`}
+                                                                                checked={subcategoryFilter.includes(subcategoryId)}
+                                                                                onCheckedChange={() => toggleSubcategory(c, subcategoryId)}
+                                                                            />
+                                                                            <Label htmlFor={`m-subcat-${subcategoryId}`} className="flex-1 cursor-pointer text-xs font-bold leading-5 text-slate-500">
+                                                                                {subcategory.label}
+                                                                            </Label>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 )}
@@ -434,7 +570,7 @@ export function JobBoardView({
                 </Sheet>
             </div>
 
-            <div className="hidden grid-cols-1 gap-4 lg:grid lg:grid-cols-2">
+            <div className="hidden grid-cols-1 gap-4 lg:grid lg:grid-cols-3">
                 <div
                     onClick={() => setMode("micro")}
                     className={cn(
@@ -458,6 +594,33 @@ export function JobBoardView({
                         </h3>
                         <p className="text-xs font-semibold leading-5 text-slate-500">
                             Szybkie zadania z konkretną wyceną, płatne od ręki po realizacji.
+                        </p>
+                    </div>
+                </div>
+
+                <div
+                    onClick={() => setMode("challenge")}
+                    className={cn(
+                        "group relative flex cursor-pointer items-center gap-4 overflow-hidden rounded-2xl border p-4 transition-all duration-300",
+                        mode === "challenge"
+                            ? "border-lime-200 bg-lime-100 shadow-sm"
+                            : "border-slate-200 bg-white hover:border-lime-200 hover:shadow-sm"
+                    )}
+                >
+                    <div className="flex items-start justify-between">
+                        <div className={cn(
+                            "flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-300",
+                            mode === "challenge" ? "bg-lime-300 text-[#0b1b47]" : "bg-slate-50 text-[#0b1b47]"
+                        )}>
+                            <SearchCheck className="h-5 w-5" />
+                        </div>
+                    </div>
+                    <div>
+                        <h3 className={cn("mb-1 text-base font-extrabold", mode === "challenge" ? "text-[#0b1b47]" : "text-slate-900")}>
+                            Wyzwania
+                        </h3>
+                        <p className="text-xs font-semibold leading-5 text-slate-500">
+                            Nietypowe problemy do pitcha, wyceny i doprecyzowania zakresu.
                         </p>
                     </div>
                 </div>
@@ -499,7 +662,7 @@ export function JobBoardView({
                             <div className="relative group">
                                 <Search className="absolute left-3 top-3.5 h-5 w-5 text-slate-300 group-focus-within:text-indigo-500 transition-colors" />
                                 <Input
-                                    placeholder={mode === "job" ? "Stanowisko, firma..." : "Czego szukasz?"}
+                                    placeholder={mode === "job" ? "Stanowisko, firma..." : mode === "challenge" ? "Problem, branża, narzędzie..." : "Czego szukasz?"}
                                     className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-10 transition-all focus:border-indigo-500 focus:bg-white"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
@@ -523,15 +686,16 @@ export function JobBoardView({
                             </Select>
                         </div>
 
-                        {mode === "micro" && (
+                        {mode !== "job" && (
                             <div className="space-y-3 animate-in zoom-in-95 duration-300">
                                 <label className="text-xs font-bold uppercase tracking-normal text-slate-400">Rodzaj zlecenia</label>
-                                <Tabs value={subFilter} onValueChange={(value) => setSubFilter(value as "all" | "platform" | "regular")} className="w-full">
+                                <Tabs value={activeAssignmentType} onValueChange={(value) => handleAssignmentTypeChange(value as AssignmentType)} className="w-full">
                                     <TabsList className="grid w-full grid-cols-1 gap-2 bg-transparent h-auto p-0">
                                         {[
                                             { id: 'all', label: 'Wszystkie' },
                                             { id: 'platform', label: '🛡️ Systemowe' },
-                                            { id: 'regular', label: '🏢 Zlecenia firm' }
+                                            { id: 'regular', label: '🏢 Zlecenia firm' },
+                                            { id: 'challenge', label: 'Wyzwania' }
                                         ].map(tab => (
                                             <TabsTrigger
                                                 key={tab.id}
@@ -550,17 +714,58 @@ export function JobBoardView({
                             <div className="space-y-4">
                                 <label className="text-xs font-bold uppercase tracking-normal text-slate-400">Kategorie</label>
                                 <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                                    {categories.map(c => (
-                                        <div key={c} className="flex items-center space-x-3 group cursor-pointer" onClick={() => toggleCategory(c)}>
-                                            <div className={cn(
-                                                "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
-                                                categoryFilter.includes(c) ? "border-[#10245f] bg-[#10245f] shadow-sm" : "border-slate-200 bg-white group-hover:border-[#10245f]"
-                                            )}>
-                                                {categoryFilter.includes(c) && <CheckCircle2 className="h-3 w-3 text-white" />}
+                                    {categories.map(c => {
+                                        const categoryGroup = getCategoryGroupByLabel(c);
+                                        const isSelected = categoryFilter.includes(c);
+
+                                        return (
+                                            <div key={c}>
+                                                <div className="flex cursor-pointer items-center space-x-3 group" onClick={() => toggleCategory(c)}>
+                                                    <div className={cn(
+                                                        "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+                                                        isSelected ? "border-[#10245f] bg-[#10245f] shadow-sm" : "border-slate-200 bg-white group-hover:border-[#10245f]"
+                                                    )}>
+                                                        {isSelected && <CheckCircle2 className="h-3 w-3 text-white" />}
+                                                    </div>
+                                                    <span className={cn("flex-1 text-sm font-medium transition-colors", isSelected ? "text-indigo-900" : "text-slate-600 group-hover:text-indigo-600")}>{c}</span>
+                                                    {isSelected && categoryGroup && categoryGroup.subcategories.length > 0 ? (
+                                                        <ChevronRight className="h-3.5 w-3.5 rotate-90 text-slate-400" />
+                                                    ) : null}
+                                                </div>
+
+                                                {isSelected && categoryGroup && categoryGroup.subcategories.length > 0 ? (
+                                                    <div className="mt-2 space-y-1 border-l border-slate-200 pl-4">
+                                                        {categoryGroup.subcategories.map((subcategory) => {
+                                                            const subcategoryId = getSubcategoryId(subcategory);
+                                                            const isSubcategorySelected = subcategoryFilter.includes(subcategoryId);
+
+                                                            return (
+                                                                <button
+                                                                    key={subcategory.url}
+                                                                    type="button"
+                                                                    onClick={() => toggleSubcategory(c, subcategoryId)}
+                                                                    className={cn(
+                                                                        "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-bold leading-5 transition",
+                                                                        isSubcategorySelected
+                                                                            ? "bg-[#10245f] text-white"
+                                                                            : "text-slate-500 hover:bg-slate-50 hover:text-[#10245f]",
+                                                                    )}
+                                                                >
+                                                                    <span
+                                                                        className={cn(
+                                                                            "h-2.5 w-2.5 rounded-full border",
+                                                                            isSubcategorySelected ? "border-white bg-white" : "border-slate-300 bg-white",
+                                                                        )}
+                                                                    />
+                                                                    {subcategory.label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : null}
                                             </div>
-                                            <span className={cn("text-sm font-medium transition-colors", categoryFilter.includes(c) ? "text-indigo-900" : "text-slate-600 group-hover:text-indigo-600")}>{c}</span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
@@ -626,7 +831,7 @@ export function JobBoardView({
                                 "flex h-9 items-center rounded-full px-4 text-sm font-extrabold shadow-sm",
                                 mode === "job" ? "bg-lime-300 text-[#0b1b47]" : "bg-lime-300 text-[#0b1b47]"
                             )}>
-                                {mode === "job" ? "💼 Praca & Staże" : "⚡ Mikrozlecenia"}
+                                {mode === "job" ? "Praca i staże" : mode === "challenge" ? "Wyzwania" : "Mikrozlecenia"}
                             </div>
                             <div className="text-sm font-bold text-slate-500">
                                 Odkryto <span className="text-slate-900 font-extrabold">{filtered.length}</span> ofert

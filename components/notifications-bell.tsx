@@ -27,7 +27,17 @@ interface Notification {
   payload?: Record<string, unknown>;
 }
 
-export default function NotificationsBell({ unread }: { unread: number }) {
+type NotificationsBellProps = {
+  unread: number;
+  triggerClassName?: string;
+  badgeClassName?: string;
+};
+
+export default function NotificationsBell({
+  unread,
+  triggerClassName,
+  badgeClassName,
+}: NotificationsBellProps) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -95,23 +105,35 @@ export default function NotificationsBell({ unread }: { unread: number }) {
         <Button
           variant="ghost"
           size="icon"
-          className="relative text-slate-500 hover:text-indigo-600 hover:bg-indigo-50/50"
+          className={cn(
+            "relative text-slate-500 hover:bg-indigo-50/50 hover:text-indigo-600",
+            triggerClassName,
+          )}
         >
           <Bell className="h-5 w-5" />
           {unread > 0 && !cleared && (
-            <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm ring-2 ring-white">
+            <span
+              className={cn(
+                "absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm ring-2 ring-white",
+                badgeClassName,
+              )}
+            >
               {unread > 9 ? "9+" : unread}
             </span>
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0 shadow-xl border-slate-100 bg-white" align="end">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-          <h4 className="font-semibold text-sm text-slate-900">Powiadomienia</h4>
+      <PopoverContent
+        className="w-80 overflow-hidden rounded-2xl border-slate-100 bg-white p-0 shadow-[0_24px_70px_-34px_rgba(7,20,47,0.75)]"
+        align="end"
+        sideOffset={12}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3">
+          <h4 className="text-sm font-black text-[#07142f]">Powiadomienia</h4>
           {unread > 0 && (
             <button
               onClick={handleMarkAllRead}
-              className="text-[10px] uppercase font-bold text-indigo-600 hover:text-indigo-700 tracking-wide"
+              className="text-[10px] font-black text-indigo-600 hover:text-indigo-700"
             >
               Oznacz wszystkie
             </button>
@@ -120,39 +142,39 @@ export default function NotificationsBell({ unread }: { unread: number }) {
 
         <div className="max-h-[300px] overflow-y-auto py-1">
           {loading ? (
-            <div className="p-2 space-y-1" aria-label="Ładowanie powiadomien">
+            <div className="space-y-1 p-2" aria-label="Ładowanie powiadomień">
               {[1, 2, 3].map((item) => (
-                <div key={item} className="flex gap-3 items-start px-4 py-3 animate-pulse">
-                  <div className="h-7 w-7 rounded-full bg-slate-100 shrink-0" />
+                <div key={item} className="flex animate-pulse items-start gap-3 px-4 py-3">
+                  <div className="h-7 w-7 shrink-0 rounded-full bg-slate-100" />
                   <div className="flex-1 space-y-2">
-                    <div className="h-3 bg-slate-100 rounded w-3/4" />
-                    <div className="h-2 bg-slate-100 rounded w-1/3" />
+                    <div className="h-3 w-3/4 rounded bg-slate-100" />
+                    <div className="h-2 w-1/3 rounded bg-slate-100" />
                   </div>
                 </div>
               ))}
             </div>
           ) : notifications.length === 0 ? (
             <div className="p-8 text-center">
-              <Bell className="h-8 w-8 text-slate-200 mx-auto mb-2" />
-              <p className="text-xs text-slate-400">Brak nowych powiadomien</p>
+              <Bell className="mx-auto mb-2 h-8 w-8 text-slate-200" />
+              <p className="text-xs text-slate-400">Brak nowych powiadomień</p>
             </div>
           ) : (
             notifications.map((notification) => (
               <div
                 key={notification.id}
                 className={cn(
-                  "px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-50 last:border-0",
-                  !notification.read_at && "bg-indigo-50/30"
+                  "cursor-pointer border-b border-slate-50 px-4 py-3 transition-colors last:border-0 hover:bg-slate-50",
+                  !notification.read_at && "bg-[#f0ffbd]/70"
                 )}
                 onClick={() =>
                   handleMarkRead(notification.id, notification.read_at)
                 }
               >
-                <div className="flex gap-3 items-start">
+                <div className="flex items-start gap-3">
                   <div
                     className={cn(
-                      "mt-0.5 p-1.5 rounded-full bg-white border shadow-sm",
-                      !notification.read_at && "border-indigo-100 bg-indigo-50"
+                      "mt-0.5 rounded-full border bg-white p-1.5 shadow-sm",
+                      !notification.read_at && "border-lime-200 bg-white"
                     )}
                   >
                     {getIcon(notification.typ)}
@@ -160,8 +182,8 @@ export default function NotificationsBell({ unread }: { unread: number }) {
                   <div className="flex-1 space-y-1">
                     <p
                       className={cn(
-                        "text-xs text-slate-700 leading-snug",
-                        !notification.read_at && "font-medium text-slate-900"
+                        "text-xs leading-snug text-slate-700",
+                        !notification.read_at && "font-black text-[#07142f]"
                       )}
                     >
                       {getNotificationTitle(notification)}
@@ -175,7 +197,7 @@ export default function NotificationsBell({ unread }: { unread: number }) {
                     </p>
                   </div>
                   {!notification.read_at && (
-                    <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 mt-2 shrink-0" />
+                    <div className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#c5fb37]" />
                   )}
                 </div>
               </div>
@@ -183,11 +205,11 @@ export default function NotificationsBell({ unread }: { unread: number }) {
           )}
         </div>
 
-        <div className="p-2 border-t border-slate-100 bg-slate-50/30">
+        <div className="border-t border-slate-100 bg-white p-2">
           <Link href="/app/notifications" onClick={() => setOpen(false)}>
             <Button
               variant="ghost"
-              className="w-full h-8 text-xs font-medium text-slate-600 hover:text-indigo-600"
+              className="h-8 w-full text-xs font-black text-[#07142f] hover:text-indigo-600"
             >
               Zobacz wszystkie
             </Button>

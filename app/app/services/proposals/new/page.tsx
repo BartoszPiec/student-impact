@@ -98,7 +98,7 @@ export default async function NewPrivateProposalPage({ searchParams }: PageProps
               <h1 className="text-4xl font-black tracking-tight md:text-5xl">Zaproponuj współpracę firmie</h1>
               <p className="max-w-2xl text-lg font-medium text-indigo-100/70">
                 Wysylasz prywatną propozycje z już istniejacego pakietu usług. Po akceptacji wszystko wpada do tego samego
-                flow: negocjacja, kontrakt, escrow i realizacja.
+                flow: negocjacja, kontrakt, depozyt i realizacja.
               </p>
             </div>
           </div>

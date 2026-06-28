@@ -28,12 +28,14 @@ interface CompanyOrderDetailActionsProps {
   };
   chatLink: string;
   canMessage?: boolean;
+  canSelectStudent?: boolean;
 }
 
 export default function CompanyOrderDetailActions({
   order,
   chatLink,
   canMessage = true,
+  canSelectStudent = false,
 }: CompanyOrderDetailActionsProps) {
   const router = useRouter();
   const [counterAmount, setCounterAmount] = useState(String(order.counter_amount ?? order.amount ?? ""));
@@ -177,7 +179,7 @@ export default function CompanyOrderDetailActions({
 
       {isPendingSelection ? (
         <Button disabled variant="secondary" className="cursor-not-allowed opacity-80">
-          Wybierz studenta z listy ponizej
+          {canSelectStudent ? "Wybierz studenta z listy poniżej" : "Czekasz na zgłoszenia studentów"}
         </Button>
       ) : null}
 

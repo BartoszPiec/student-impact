@@ -16,7 +16,7 @@ export default async function NewJobPage() {
             <CompanyHero
                 tourId="company-create-offer"
                 title="Dodaj ofertę"
-                description="Wybierz, jak chcesz delegować zadanie. Każda ścieżka jest objęta escrow i kontrolą jakości."
+                description="Wybierz, jak chcesz delegować zadanie. Każda ścieżka jest objęta depozytem Student2Work i kontrolą jakości."
                 badge="Panel firmy"
                 icon={Plus}
             />

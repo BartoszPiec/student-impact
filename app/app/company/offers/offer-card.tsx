@@ -129,7 +129,21 @@ function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
     };
   }
 
-  if (["pending_selection", "pending"].includes(status)) {
+  if (status === "pending_selection") {
+    return {
+      workState: "collecting",
+      stage: "candidates",
+      stageLabel: "Zgłoszenia",
+      label: "Czeka na zgłoszenia",
+      tone: "indigo",
+      actionRequired: false,
+      actionLabel: "Szczegoly",
+      actionHref: detailHref,
+      note: "Na razie nie ma przypisanego wykonawcy.",
+    };
+  }
+
+  if (status === "pending") {
     return {
       workState: "action",
       stage: "candidates",
@@ -312,10 +326,13 @@ export default function OfferCard({
   const chatAction = stats.acceptedAppId ? openChatForApplication.bind(null, stats.acceptedAppId) : null;
   const detailHref = getDetailHref(offer);
   const isServiceOrder = offer.itemType === "service_order";
+  const isPendingServiceSelection = isServiceOrder && offer.status === "pending_selection";
   const itemLabel = offer.itemLabel || (isServiceOrder ? "Usluga" : isChallengeOffer(offer) ? "Wyzwanie" : "Ogloszenie");
   const performerFallback =
-    isServiceOrder && ["pending_selection", "pending"].includes(offer.status ?? "")
-      ? "Do wyboru wykonawcy"
+    isPendingServiceSelection
+      ? "Brak zgłoszeń"
+      : isServiceOrder && offer.status === "pending"
+        ? "Do wyboru wykonawcy"
       : isServiceOrder
         ? "Szczegoly w zamowieniu"
         : "Bez wykonawcy";
@@ -340,9 +357,13 @@ export default function OfferCard({
         : model.stage === "candidates"
           ? {
               icon: <Users className="h-4 w-4" />,
-              title: model.actionRequired ? "Nowe zgłoszenia do przejrzenia" : "Ogloszenie zbiera kandydatow",
+              title: model.actionRequired
+                ? "Nowe zgłoszenia do przejrzenia"
+                : isPendingServiceSelection
+                  ? "Czekamy na zgłoszenia"
+                  : "Ogloszenie zbiera kandydatow",
               sub: model.note,
-              pill: model.actionRequired ? "Wymagana akcja" : "Nowe zgłoszenia",
+              pill: model.actionRequired ? "Wymagana akcja" : isPendingServiceSelection ? "Brak zgłoszeń" : "Nowe zgłoszenia",
               pillIcon: model.actionRequired ? null : <Sparkles className="h-3 w-3" />,
             }
           : model.stage === "delivery"
@@ -460,15 +481,26 @@ export default function OfferCard({
             </div>
 
             <div className="flex w-full flex-col gap-3 xl:w-[248px] xl:shrink-0">
-              <div className="flex gap-2">
+              <div className="grid min-w-0 grid-cols-2 gap-2">
                 <CompanyMetricTile
                   label={isInProgress && stats.agreedStawka ? "Stawka uzgodniona" : "Budzet"}
                   value={getBudgetLabel(offer, stats, isInProgress)}
                   sub={isServiceOrder ? "Zamowienie firmy" : "Kwota oferty"}
+                  className="min-w-0"
                   noWrapValue
                 />
                 {model.actionRequired ? (
-                  <CompanyMetricTile label="Status" value={model.stageLabel} sub={model.label} tone={model.tone} emphasize />
+                  <CompanyMetricTile
+                    label="Status"
+                    value={model.stageLabel}
+                    sub={model.label}
+                    tone={model.tone}
+                    emphasize
+                    className="min-w-0"
+                    valueFontSize="clamp(15px, 1.25vw, 18px)"
+                    valueLineHeight={1.08}
+                    allowBreakValue
+                  />
                 ) : null}
               </div>
 

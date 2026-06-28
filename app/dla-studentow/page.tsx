@@ -11,7 +11,6 @@ import {
   FileText,
   Handshake,
   LockKeyhole,
-  Menu,
   MonitorPlay,
   Palette,
   Search,
@@ -24,6 +23,7 @@ import {
 } from "lucide-react";
 
 import { AnimateOnScroll } from "@/components/animate-on-scroll";
+import { LandingNavbar } from "@/components/landing-navbar";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
@@ -53,13 +53,6 @@ type Testimonial = {
   name: string;
   text: string;
 };
-
-const navLinks = [
-  { label: "Jak to działa", href: "#jak-zaczac" },
-  { label: "Kategorie zleceń", href: "#zlecenia" },
-  { label: "Opinie", href: "#opinie" },
-  { label: "Dla firm", href: "/" },
-];
 
 const jobs: JobCard[] = [
   {
@@ -187,52 +180,7 @@ function SectionBadge({ children, dark = false }: { children: string; dark?: boo
 }
 
 function StudentNav() {
-  return (
-    <nav className="landing-nav sticky top-0 z-50 border-b border-slate-100 bg-white/95 shadow-[0_8px_30px_-28px_rgba(15,36,96,0.35)] backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="shrink-0">
-          <LogoMark />
-        </Link>
-
-        <div className="hidden items-center gap-8 lg:flex">
-          {navLinks.map((link) => (
-            <Link key={link.href} href={link.href} className="text-sm font-black text-slate-500 transition hover:text-[#0f2460]">
-              {link.label}
-            </Link>
-          ))}
-        </div>
-
-        <div className="hidden items-center gap-3 md:flex">
-          <Button asChild variant="ghost" className="rounded-full px-5 font-black text-[#0f2460] hover:bg-slate-50">
-            <Link href="/auth">Zaloguj się</Link>
-          </Button>
-          <Button asChild className="landing-hover-lift h-11 rounded-full bg-[#c5fb37] px-7 font-black text-[#0f2460] shadow-[0_16px_42px_-18px_rgba(197,251,55,0.9)] hover:bg-[#b7f22b]">
-            <Link href="/auth?role=student">Dołącz jako student</Link>
-          </Button>
-        </div>
-
-        <details className="group md:hidden">
-          <summary className="flex cursor-pointer list-none rounded-xl p-2 text-[#0f2460] hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-            <span className="sr-only">Otwórz menu</span>
-            <Menu className="h-6 w-6 group-open:hidden" />
-            <X className="hidden h-6 w-6 group-open:block" />
-          </summary>
-          <div className="fixed inset-x-3 top-16 hidden rounded-2xl border border-slate-100 bg-white px-4 py-5 shadow-2xl group-open:block">
-            <div className="grid gap-1">
-              {navLinks.map((link) => (
-                <Link key={link.href} href={link.href} className="rounded-xl px-3 py-3 text-sm font-black text-slate-600 hover:bg-slate-50">
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-            <Button asChild className="mt-4 h-12 w-full rounded-full bg-[#c5fb37] font-black text-[#0f2460] hover:bg-[#b7f22b]">
-              <Link href="/auth?role=student">Dołącz jako student</Link>
-            </Button>
-          </div>
-        </details>
-      </div>
-    </nav>
-  );
+  return <LandingNavbar audience="student" />;
 }
 
 function PhoneMockup() {
@@ -292,7 +240,7 @@ function PhoneMockup() {
 
 function StudentHero() {
   return (
-    <section className="overflow-hidden bg-[radial-gradient(circle_at_72%_20%,rgba(77,129,142,0.34),transparent_28%),linear-gradient(135deg,#071739_0%,#132d70_100%)] px-4 py-16 text-white sm:px-6 lg:px-8 lg:py-20">
+    <section className="overflow-hidden bg-[radial-gradient(circle_at_72%_20%,rgba(77,129,142,0.34),transparent_28%),linear-gradient(135deg,#071739_0%,#132d70_100%)] px-4 pb-16 pt-28 text-white sm:px-6 lg:px-8 lg:pb-20 lg:pt-32">
       <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1fr_0.9fr]">
         <div>
           <div className="landing-enter-up">
@@ -386,7 +334,7 @@ function JobsMarquee() {
 
 function ComparisonSection() {
   const rows = [
-    "Gwarancja wypłaty (escrow)",
+    "Gwarancja wypłaty z depozytu",
     "Umowa, rachunek i PIT po naszej stronie",
     "Kontrola jakości i feedback do pracy",
     "Tylko zweryfikowane firmy",
@@ -402,11 +350,11 @@ function ComparisonSection() {
             To nie kolejna giełda zleceń. To bezpieczna praca.
           </h2>
           <p className="mt-6 max-w-lg text-lg font-semibold leading-8 text-slate-600">
-            Na zwykłych platformach sam pilnujesz wypłaty, umowy i podatków. U nas chroni Cię ten sam system, co firmy: escrow, umowy i kontrola jakości.
+            Na zwykłych platformach sam pilnujesz wypłaty, umowy i podatków. U nas chroni Cię ten sam system, co firmy: depozyt, umowy i kontrola jakości.
           </p>
           <div className="mt-8 space-y-5">
             {[
-              ["Pieniądze czekają, zanim zaczniesz", "Firma blokuje budżet w escrow na starcie. Realizujesz spokojnie, wypłata jest pewna."],
+              ["Pieniądze czekają, zanim zaczniesz", "Firma zasila depozyt na starcie. Realizujesz spokojnie, a wypłata jest przygotowana do uruchomienia po akceptacji."],
               ["Legalnie i bez papierologii", "Umowę, rachunek i rozliczenie PIT bierzemy na siebie. Ty robisz to, co umiesz najlepiej."],
               ["Budujesz realne, zweryfikowane portfolio", "Każde ukończone zlecenie ląduje w Twoim profilu z pieczęcią Student2Work."],
             ].map(([title, text], index) => (
@@ -500,7 +448,7 @@ function PayoutSection() {
     "Czat bezpośrednio z firmą",
     "Szybkie wsparcie platformy",
     "Nieograniczona liczba zleceń",
-    "Bezpieczne płatności (escrow)",
+    "Bezpieczne płatności przez depozyt",
     "Bez opłat - prowizja po wypłacie",
   ];
 
@@ -517,7 +465,7 @@ function PayoutSection() {
             <div>
               <h2 className="text-4xl font-black leading-tight sm:text-5xl">Wypłata zaraz po akceptacji</h2>
               <p className="mt-5 text-lg font-semibold leading-8 text-white/65">
-                Nie czekasz do końca miesiąca. Środki czekają zablokowane w escrow już od startu, a po akceptacji efektu trafiają prosto na Twoje konto.
+                Nie czekasz do końca miesiąca. Środki są zabezpieczone w depozycie już od startu, a po akceptacji efektu trafiają prosto na Twoje konto.
               </p>
               <div className="mt-7 grid gap-4 sm:grid-cols-2">
                 {points.map((point, index) => (
@@ -627,7 +575,7 @@ function StudentFooter() {
           <div className="grid gap-8 sm:grid-cols-3">
             {[
               { title: "Platforma", links: [["Jak to działa", "#jak-zaczac"], ["Kategorie zleceń", "#zlecenia"], ["Opinie", "#opinie"]] },
-              { title: "Dla firm", links: [["Deleguj zadanie", "/"], ["Jak działa escrow", "/#bezpieczenstwo"], ["Cennik", "/#cennik"]] },
+              { title: "Dla firm", links: [["Deleguj zadanie", "/"], ["Jak działa depozyt", "/#bezpieczenstwo"], ["Cennik", "/#cennik"]] },
               { title: "Dla studentów", links: [["Giełda zleceń", "#zlecenia"], ["Jak zacząć", "#jak-zaczac"], ["Wypłaty i PIT", "#wyplata"]] },
             ].map((group) => (
               <div key={group.title}>
@@ -652,7 +600,7 @@ function StudentFooter() {
           </div>
           <p className="inline-flex items-center gap-2 text-emerald-300">
             <LockKeyhole className="h-4 w-4" />
-            Płatności chronione systemem escrow (Stripe)
+            Płatności chronione przez depozyt Student2Work i Stripe
           </p>
         </div>
       </div>
@@ -662,7 +610,7 @@ function StudentFooter() {
 
 export default function StudentLandingPage() {
   return (
-    <div className="landing-page min-h-screen overflow-x-hidden bg-white font-sans text-slate-950">
+    <div className="landing-page min-h-screen overflow-x-clip bg-white font-sans text-slate-950">
       <StudentNav />
       <main>
         <StudentHero />

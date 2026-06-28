@@ -65,7 +65,7 @@ export function getNotificationTitle(n: { typ: string; payload?: NotificationPay
         case "terms_agreed":
             return `Warunki uzgodnione: ${p.offer_title || "Oferta"}`;
 
-        // ── Escrow / Finansowanie ────────────────────────────────────────
+        // ── Depozyt / finansowanie ───────────────────────────────────────
         case "escrow_funded":
         case "contract_funded":
             return `Środki w depozycie – zacznij pracę! ${p.offer_title ? `(${p.offer_title})` : ""}`;

@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { jsonError, noStoreJson } from "@/lib/security/api-response";
 import { transferPayoutViaStripe } from "@/lib/stripe/payouts";
-import { NextRequest, NextResponse } from "next/server";
+import { logCriticalError } from "@/lib/observability/error-log";
+import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -29,14 +31,16 @@ function extractPayoutIds(value: unknown): string[] {
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error("CRON_SECRET environment variable is not set");
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+    await logCriticalError({
+      source: "cron.auto_accept.missing_secret",
+      message: "CRON_SECRET is not configured.",
+    });
+    return jsonError("Konfiguracja zadania cyklicznego jest niekompletna.", 500);
   }
 
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${cronSecret}`) {
-    console.warn("Unauthorized cron attempt from:", req.headers.get("x-forwarded-for") || "unknown");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonError("Brak autoryzacji zadania cyklicznego.", 401);
   }
 
   try {
@@ -48,8 +52,13 @@ export async function GET(req: NextRequest) {
     });
 
     if (error) {
-      console.error("[cron:auto-accept] rpc error:", error.message);
-      return NextResponse.json({ ok: false, error: "Nie udało sie wykonac zadania cyklicznego." }, { status: 500 });
+      await logCriticalError({
+        source: "cron.auto_accept.rpc_failed",
+        error,
+        errorCode: error.code,
+        message: "auto_accept_due_milestones_v2 failed.",
+      });
+      return noStoreJson({ ok: false, error: "Nie udało się wykonać zadania cyklicznego." }, { status: 500 });
     }
 
     const payoutTransfers: PayoutTransferSummary[] = [];
@@ -60,8 +69,20 @@ export async function GET(req: NextRequest) {
       for (let index = 0; index < payoutIds.length; index += concurrency) {
         const batch = payoutIds.slice(index, index + concurrency);
         const batchResults = await Promise.all(batch.map(async (payoutId) => {
-          const transferResult = await transferPayoutViaStripe(payoutId);
-          return { payoutId, status: transferResult.status };
+          try {
+            const transferResult = await transferPayoutViaStripe(payoutId);
+            return { payoutId, status: transferResult.status };
+          } catch (transferError) {
+            await logCriticalError({
+              source: "cron.auto_accept.payout_transfer_failed",
+              error: transferError,
+              message: "Stripe payout transfer failed during auto-accept cron.",
+              context: {
+                payoutId,
+              },
+            });
+            return { payoutId, status: "failed" };
+          }
         }));
         payoutTransfers.push(...batchResults);
       }
@@ -72,19 +93,27 @@ export async function GET(req: NextRequest) {
     );
 
     if (reconciliationError) {
-      console.error("[cron:auto-accept] reconciliation error:", reconciliationError.message);
-      return NextResponse.json({ ok: false, error: "Nie udało się uzgodnić statusów zleceń." }, { status: 500 });
+      await logCriticalError({
+        source: "cron.auto_accept.reconciliation_failed",
+        error: reconciliationError,
+        errorCode: reconciliationError.code,
+        message: "reconcile_contract_statuses_v1 failed after auto-accept.",
+      });
+      return noStoreJson({ ok: false, error: "Nie udało się uzgodnić statusów zleceń." }, { status: 500 });
     }
 
-    return NextResponse.json({
+    return noStoreJson({
       ok: true,
       autoAccept: data,
       payoutTransfers,
       reconciliation,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error("[cron:auto-accept] unexpected error:", msg);
-    return NextResponse.json({ ok: false, error: "Nie udało sie wykonac zadania cyklicznego." }, { status: 500 });
+    await logCriticalError({
+      source: "cron.auto_accept.unexpected",
+      error: err,
+      message: "Unexpected auto-accept cron failure.",
+    });
+    return noStoreJson({ ok: false, error: "Nie udało się wykonać zadania cyklicznego." }, { status: 500 });
   }
 }

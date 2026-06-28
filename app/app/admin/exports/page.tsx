@@ -43,9 +43,8 @@ export default function AdminExportsPage() {
       link.click();
       URL.revokeObjectURL(link.href);
       toast.success(`Pobrano ${filename}.`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Nieznany błąd pobierania.";
-      toast.error(`Błąd: ${message}`);
+    } catch {
+      toast.error("Nie udało się pobrać pliku. Spróbuj ponownie.");
     } finally {
       setLoading(false);
     }
@@ -68,9 +67,8 @@ export default function AdminExportsPage() {
               Eksporty
             </h1>
             <p className="max-w-2xl font-medium leading-relaxed text-slate-400">
-              Pobieraj gotowe eksporty CSV dla rozliczen podatkowych i ksiegowosci.
-              Ten panel odzwierciedla aktualny stan endpointow eksportowych bez obiecywania
-              nieistniejacych jeszcze paczek PDF.
+              Pobieraj gotowe eksporty dla rozliczeń podatkowych i księgowości.
+              Panel pokazuje tylko formaty, które są obecnie obsługiwane w systemie.
             </p>
           </div>
         </div>
@@ -90,7 +88,7 @@ export default function AdminExportsPage() {
             className="h-11 rounded-xl border border-white/10 bg-slate-900/60 px-4 text-sm font-bold text-white outline-none focus:border-indigo-400/40"
           />
           <p className="text-sm text-slate-500">
-            Eksporty obejmuja dane tylko z wybranego miesiaca.
+            Eksporty obejmują dane tylko z wybranego miesiąca.
           </p>
         </div>
       </div>
@@ -103,20 +101,20 @@ export default function AdminExportsPage() {
             </div>
             <div>
               <h2 className="text-lg font-black text-white">PIT-11 CSV</h2>
-              <p className="text-sm text-slate-400">Eksport danych do rozliczen podatkowych studentow.</p>
+              <p className="text-sm text-slate-400">Eksport danych do rozliczeń podatkowych studentów.</p>
             </div>
           </div>
 
           <p className="text-sm leading-relaxed text-slate-400">
             Plik zawiera dane osobowe i podatkowe potrzebne do przygotowania zestawienia PIT-11:
-            brutto, zaliczke PIT, netto oraz identyfikator kontraktu.
+            brutto, zaliczkę PIT, netto oraz identyfikator kontraktu.
           </p>
 
           <ul className="mt-4 space-y-1 text-xs text-slate-500">
             <li>Imię i nazwisko, PESEL, data urodzenia</li>
             <li>Rezydencja podatkowa PL i zwolnienie PIT u26</li>
             <li>Kwota brutto, zaliczka PIT i kwota netto</li>
-            <li>ID kontraktu dla latwego powiazania z operacjami</li>
+            <li>ID kontraktu dla łatwego powiązania z operacjami</li>
           </ul>
 
           <Button
@@ -137,28 +135,28 @@ export default function AdminExportsPage() {
               <FileText className="h-5 w-5 text-indigo-300" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-white">Rejestr faktur CSV</h2>
-              <p className="text-sm text-slate-400">Eksport danych płatności Stripe i prowizji platformy.</p>
+              <h2 className="text-lg font-black text-white">Faktury ZIP</h2>
+              <p className="text-sm text-slate-400">Paczka PDF z manifestem CSV dla księgowości.</p>
             </div>
           </div>
 
           <p className="text-sm leading-relaxed text-slate-400">
-            Ten eksport zwraca obecnie plik CSV z danymi faktur i wpisow finansowych za wybrany miesiac.
-            Endpoint nadal nazywa sie `invoices-zip`, ale aktualny output jest CSV.
+            Ten eksport zwraca plik ZIP z PDF-ami faktur i rachunków za wybrany miesiąc oraz
+            manifest CSV ułatwiający kontrolę dokumentów.
           </p>
 
           <ul className="mt-4 space-y-1 text-xs text-slate-500">
-            <li>Numer faktury i data wystawienia</li>
-            <li>Dane firmy i dane studenta</li>
-            <li>Stripe Session ID oraz Payment Intent ID</li>
-            <li>Kwota i typ wpisu finansowego</li>
+            <li>PDF-y faktur firm i rachunków studentów</li>
+            <li>Manifest CSV z numerem, statusem i kwotami</li>
+            <li>Dane wystawcy i odbiorcy dokumentu</li>
+            <li>ID kontraktu oraz etapu dla kontroli księgowej</li>
           </ul>
 
           <Button
             onClick={() =>
               downloadFile(
                 `/api/admin/export/invoices-zip?month=${month}`,
-                `faktury_${month}.csv`,
+                `faktury_${month}.zip`,
                 setLoadingInvoices,
               )
             }
@@ -166,15 +164,15 @@ export default function AdminExportsPage() {
             className="mt-6 w-full bg-indigo-600 text-white hover:bg-indigo-700"
           >
             <Download className="mr-2 h-4 w-4" />
-            {loadingInvoices ? "Pobieranie..." : `Pobierz rejestr faktur - ${month}`}
+            {loadingInvoices ? "Pobieranie..." : `Pobierz faktury ZIP - ${month}`}
           </Button>
         </div>
       </div>
 
       <div className="rounded-[2.5rem] border border-amber-500/15 bg-amber-500/5 p-6">
         <p className="text-sm font-medium leading-relaxed text-amber-200">
-          Uwaga: eksporty korzystaja z aktualnych danych finansowych zapisanych w bazie i webhookach Stripe.
-          Jesli dane miesiaca wygladaja niepelnie, najpierw sprawdz przeplyw webhookow i wpisy w panelach finansowych.
+          Uwaga: eksporty korzystają z aktualnych danych finansowych zapisanych w bazie i webhookach Stripe.
+          Jeśli dane miesiąca wyglądają niepełnie, najpierw sprawdź przepływ webhooków i wpisy w panelach finansowych.
         </p>
       </div>
     </div>

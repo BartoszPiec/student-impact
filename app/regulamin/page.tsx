@@ -38,7 +38,7 @@ export default function RegulamiPage() {
                             <li><strong>Student</strong> — Użytkownik zarejestrowany jako osoba poszukująca zleceń</li>
                             <li><strong>Firma</strong> — Użytkownik zarejestrowany jako podmiot zlecający pracę</li>
                             <li><strong>Zlecenie</strong> — zadanie opublikowane przez Firmę dla Studentów</li>
-                            <li><strong>Depozyt (Escrow)</strong> — zabezpieczenie środków finansowych przez platformę do czasu akceptacji pracy</li>
+                            <li><strong>Depozyt zabezpieczający</strong> — środki wpłacone przez Firmę i rozliczane przez platformę po akceptacji pracy albo zgodnie z procedurą sporu</li>
                         </ul>
                     </section>
 
@@ -56,7 +56,7 @@ export default function RegulamiPage() {
                         <h2 className="text-xl font-semibold text-slate-800 mb-3">§4. Zasady realizacji zleceń</h2>
                         <ol className="list-decimal pl-6 space-y-2 text-slate-600">
                             <li>Zlecenia są realizowane zgodnie z warunkami uzgodnionymi między Firmą a Studentem.</li>
-                            <li>Wynagrodzenie jest zabezpieczane w systemie depozytowym (Escrow) przed rozpoczęciem pracy.</li>
+                            <li>Wynagrodzenie jest zabezpieczane w depozycie Student2Work przed rozpoczęciem pracy.</li>
                             <li>Środki są zwalniane na rzecz Studenta po akceptacji wykonanej pracy przez Firmę.</li>
                             <li>W przypadku sporu, platforma może pełnić rolę mediatora.</li>
                         </ol>

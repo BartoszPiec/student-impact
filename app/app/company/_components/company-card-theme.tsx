@@ -111,6 +111,10 @@ export function CompanyMetricTile({
   tone,
   emphasize = false,
   noWrapValue = false,
+  className,
+  valueFontSize,
+  valueLineHeight,
+  allowBreakValue = false,
 }: {
   label: string;
   value: ReactNode;
@@ -118,13 +122,19 @@ export function CompanyMetricTile({
   tone?: CompanyCardTone;
   emphasize?: boolean;
   noWrapValue?: boolean;
+  className?: string;
+  valueFontSize?: string;
+  valueLineHeight?: string | number;
+  allowBreakValue?: boolean;
 }) {
   const token = tone ? COMPANY_CARD_TOKENS[tone] : null;
 
   return (
     <div
+      className={className}
       style={{
         flex: 1,
+        minWidth: 0,
         padding: "12px 14px",
         borderRadius: 16,
         background: emphasize && token ? token.soft : "rgba(248,250,252,0.6)",
@@ -148,7 +158,10 @@ export function CompanyMetricTile({
         style={{
           color: emphasize && token ? token.text : "#0f2460",
           whiteSpace: noWrapValue ? "nowrap" : "normal",
-          fontSize: "clamp(18px, 1.6vw, 22px)",
+          overflowWrap: allowBreakValue ? "anywhere" : "normal",
+          hyphens: allowBreakValue ? "auto" : "manual",
+          fontSize: valueFontSize ?? "clamp(18px, 1.6vw, 22px)",
+          lineHeight: valueLineHeight ?? undefined,
         }}
       >
         {value}

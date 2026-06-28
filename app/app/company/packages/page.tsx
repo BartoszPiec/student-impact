@@ -10,6 +10,7 @@ import {
   ImageIcon,
   Megaphone,
   PenLine,
+  PlusCircle,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -21,6 +22,7 @@ import {
 import { CompanyLightHero, CompanyPanel, CompanyPill, CompanyStatCard } from "../_components/company-dashboard-ui";
 import { PageContainer } from "@/components/ui/page-container";
 import { getRequestContext } from "@/lib/auth/request-context";
+import { JOB_CATEGORY_GROUPS, getJobCategoryBySlug, inferJobCategoryFromText, normalizeCategoryKey, resolveJobCategoryLabel } from "@/lib/constants";
 import { isActiveSystemServicePackage } from "@/lib/services/system-services";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
@@ -51,6 +53,7 @@ type RankedServicePackage = ServicePackageRow & StudentMetrics;
 
 type SearchParams = {
   category?: string;
+  subcategory?: string;
   success?: string;
   type?: string;
   search?: string;
@@ -61,13 +64,7 @@ type SearchParams = {
 
 const categories = [
   { id: "all", label: "Wszystkie" },
-  { id: "grafika", label: "Grafika & Design" },
-  { id: "video", label: "Video & Multimedia" },
-  { id: "it", label: "IT & Programowanie" },
-  { id: "content", label: "Content & Copywriting" },
-  { id: "marketing", label: "Marketing & Social" },
-  { id: "analiza", label: "Analiza danych" },
-  { id: "tlumaczenia", label: "Tlumaczenia" },
+  ...JOB_CATEGORY_GROUPS.map((category) => ({ id: category.slug, label: category.label })),
 ];
 
 const serviceVisuals = [
@@ -124,17 +121,64 @@ function normalizeText(value: string | null | undefined) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function categoryMatches(pkg: ServicePackageRow, activeCategory: string) {
+function getPackageCategoryLabel(pkg: Pick<ServicePackageRow, "category" | "title" | "description">) {
+  return (
+    resolveJobCategoryLabel(pkg.category)
+    ?? inferJobCategoryFromText(`${pkg.category ?? ""} ${pkg.title} ${pkg.description ?? ""}`)
+    ?? pkg.category?.trim()
+    ?? "Inne"
+  );
+}
+
+function getPackageResolvedCategoryLabel(pkg: Pick<ServicePackageRow, "category" | "title" | "description">) {
+  return resolveJobCategoryLabel(pkg.category) ?? inferJobCategoryFromText(`${pkg.category ?? ""} ${pkg.title} ${pkg.description ?? ""}`);
+}
+
+function getSubcategoryId(subcategory: { readonly label: string; readonly url: string }) {
+  return subcategory.url.split("/").filter(Boolean).at(-1) ?? normalizeCategoryKey(subcategory.label).replace(/\s+/g, "-");
+}
+
+function subcategoryMatches(pkg: ServicePackageRow, subcategory: { readonly label: string; readonly url: string; readonly description: string }) {
+  const source = normalizeCategoryKey(`${pkg.title} ${pkg.description ?? ""}`);
+  const subcategorySearch = normalizeCategoryKey(`${subcategory.label} ${subcategory.url} ${subcategory.description}`);
+  const tokens = subcategorySearch.split(" ").filter((token) => token.length >= 4);
+
+  return tokens.some((token) => source.includes(token));
+}
+
+function categoryMatches(pkg: ServicePackageRow, activeCategory: string, activeSubcategory: string) {
   if (activeCategory === "all") return true;
 
-  const source = normalizeText(`${pkg.category ?? ""} ${pkg.title}`);
-  if (activeCategory === "grafika") return source.includes("graf") || source.includes("design");
-  if (activeCategory === "video") return source.includes("video") || source.includes("wideo") || source.includes("reels");
-  if (activeCategory === "it") return source.includes("it") || source.includes("program") || source.includes("web") || source.includes("code");
-  if (activeCategory === "content") return source.includes("copy") || source.includes("tekst") || source.includes("content");
-  if (activeCategory === "marketing") return source.includes("market") || source.includes("social") || source.includes("reklam");
-  if (activeCategory === "analiza") return source.includes("analiz") || source.includes("dane");
-  if (activeCategory === "tlumaczenia") return source.includes("tlumacz") || source.includes("jezyk");
+  const selectedCategory = getJobCategoryBySlug(activeCategory);
+  const resolvedCategory = getPackageResolvedCategoryLabel(pkg);
+
+  if (selectedCategory?.label === "Inne") {
+    return !resolvedCategory || resolvedCategory === "Inne";
+  }
+
+  const selectedSubcategory = selectedCategory?.subcategories.find((subcategory) => getSubcategoryId(subcategory) === activeSubcategory);
+  if (selectedCategory && resolvedCategory === selectedCategory.label) {
+    return selectedSubcategory ? subcategoryMatches(pkg, selectedSubcategory) : true;
+  }
+
+  const source = normalizeText(`${pkg.category ?? ""} ${pkg.title} ${pkg.description ?? ""}`);
+  if (selectedCategory) {
+    const categorySearch = normalizeText([
+      selectedCategory.label,
+      selectedCategory.slug,
+      ...selectedCategory.subcategories.map((subcategory) => subcategory.label),
+    ].join(" "));
+
+    const categoryMatch = categorySearch
+      .split(" ")
+      .filter((token) => token.length >= 4)
+      .some((token) => source.includes(token));
+
+    if (!categoryMatch) return false;
+    if (!selectedSubcategory) return true;
+
+    return subcategoryMatches(pkg, selectedSubcategory);
+  }
 
   return source.includes(activeCategory);
 }
@@ -190,7 +234,7 @@ function ServiceCard({
   const Icon = visual.icon;
   const description = stripMarkdown(pkg.description).slice(0, 126);
   const href = type === "platform" ? `/app/company/packages/${pkg.id}` : `/app/orders/create/${pkg.id}`;
-  const category = pkg.category || (type === "platform" ? "Systemowa" : "Student");
+  const category = getPackageCategoryLabel(pkg) || (type === "platform" ? "Systemowa" : "Student");
 
   return (
     <article className="group flex min-h-[260px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg">
@@ -323,6 +367,10 @@ export default async function CompanyPackagesPage({
 
   const activeType = params.type === "student" ? "student" : "platform";
   const activeCategory = params.category || "all";
+  const selectedCategory = getJobCategoryBySlug(activeCategory);
+  const activeSubcategory = selectedCategory?.subcategories.some((subcategory) => getSubcategoryId(subcategory) === params.subcategory)
+    ? params.subcategory ?? "all"
+    : "all";
   const searchQuery = normalizeText(params.search);
   const sortOrder = params.sort || "recommended";
   const minPrice = parsePrice(params.min);
@@ -332,7 +380,7 @@ export default async function CompanyPackagesPage({
     const searchable = normalizeText(`${pkg.title} ${pkg.description ?? ""}`);
     const price = Number(pkg.price ?? 0);
 
-    if (!categoryMatches(pkg, activeCategory)) return false;
+    if (!categoryMatches(pkg, activeCategory, activeSubcategory)) return false;
     if (searchQuery && !searchable.includes(searchQuery)) return false;
     if (minPrice != null && price < minPrice) return false;
     if (maxPrice != null && price > maxPrice) return false;
@@ -353,6 +401,7 @@ export default async function CompanyPackagesPage({
   const urlParams = new URLSearchParams();
   if (activeType !== "platform") urlParams.set("type", activeType);
   if (activeCategory !== "all") urlParams.set("category", activeCategory);
+  if (activeSubcategory !== "all") urlParams.set("subcategory", activeSubcategory);
   if (params.search) urlParams.set("search", params.search);
   if (sortOrder !== "recommended") urlParams.set("sort", sortOrder);
   if (params.min) urlParams.set("min", params.min);
@@ -365,9 +414,9 @@ export default async function CompanyPackagesPage({
         description="Gotowe pakiety w stalej cenie, realizowane przez zweryfikowanych studentow pod kontrola jakosci. Placisz dopiero po akceptacji efektu."
       >
         <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:max-w-xl">
-          <CompanyStatCard icon={Briefcase} value={allPlatformServices.length} label="uslug systemowych" tone="lime" />
-          <CompanyStatCard icon={Clock3} value="24 h" label="sredni start realizacji" tone="blue" />
-          <CompanyStatCard icon={ShieldCheck} value="15%" label="prowizja platformy" tone="emerald" />
+          <CompanyStatCard icon={Briefcase} value="Gotowe" label="pakiety i zakres" tone="lime" />
+          <CompanyStatCard icon={Clock3} value="Start" label="bez rekrutacji" tone="blue" />
+          <CompanyStatCard icon={ShieldCheck} value="Depozyt" label="platnosc po akceptacji" tone="emerald" />
         </div>
       </CompanyLightHero>
 
@@ -378,21 +427,47 @@ export default async function CompanyPackagesPage({
           </div>
         ) : null}
 
-        <CompanyPanel className="mb-5 overflow-hidden bg-lime-50/70 p-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-lime-200 bg-white text-[#10245f]">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-extrabold text-[#10245f]">Gwarancja Jakosci Student2Work</h2>
-                <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-extrabold uppercase text-amber-700">
-                  Standard Pro
-                </span>
+        <CompanyPanel className="mb-5 overflow-hidden bg-white p-0">
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="flex flex-col gap-3 bg-lime-50/80 p-4 md:flex-row md:items-center">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-lime-200 bg-white text-[#10245f]">
+                <ShieldCheck className="h-5 w-5" />
               </div>
-              <p className="mt-1 text-sm font-medium leading-5 text-slate-600">
-                Cena stala i nienegocjowalna, proces ustandaryzowany, wykonawcy zweryfikowani. Ty zamawiasz efekt, my dbamy o reszte.
-              </p>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-extrabold text-[#10245f]">Gwarancja Jakości Student2Work</h2>
+                  <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-extrabold uppercase text-amber-700">
+                    Standard Pro
+                  </span>
+                </div>
+                <p className="mt-1 text-sm font-medium leading-5 text-slate-600">
+                  Cena stała i nienegocjowalna, proces ustandaryzowany, wykonawcy zweryfikowani. Ty zamawiasz efekt, my dbamy o resztę.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 border-t border-lime-100 p-4 lg:min-w-[420px] lg:border-l lg:border-t-0">
+              <div>
+                <h3 className="text-sm font-extrabold text-[#10245f]">Nie widzisz tego, czego szukasz?</h3>
+                <p className="mt-1 text-sm font-medium leading-5 text-slate-600">
+                  Dodaj własne zlecenie albo zgłoś wyzwanie. Opisz zakres, budżet i termin, a studenci odpowiedzą ofertami.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/app/company/jobs/new"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#b6ff3b] px-4 py-2 text-sm font-extrabold text-[#06152f] shadow-sm transition hover:bg-[#a7f12f]"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  Dodaj zlecenie
+                </Link>
+                <Link
+                  href="/app/company/challenges/new"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-[#10245f] transition hover:bg-slate-50"
+                >
+                  <PenLine className="h-4 w-4" />
+                  Zgłoś wyzwanie
+                </Link>
+              </div>
             </div>
           </div>
         </CompanyPanel>
@@ -434,6 +509,8 @@ export default async function CompanyPackagesPage({
               </div>
               <form className="space-y-4" action="/app/company/packages">
                 <input type="hidden" name="type" value={activeType} />
+                {activeCategory !== "all" ? <input type="hidden" name="category" value={activeCategory} /> : null}
+                {activeSubcategory !== "all" ? <input type="hidden" name="subcategory" value={activeSubcategory} /> : null}
                 <div>
                   <label className="mb-1 block text-[10px] font-extrabold uppercase text-slate-500" htmlFor="service-search">
                     Szukaj uslugi
@@ -453,18 +530,67 @@ export default async function CompanyPackagesPage({
                 <div>
                   <div className="mb-2 text-[10px] font-extrabold uppercase text-slate-500">Kategoria</div>
                   <div className="space-y-1.5">
-                    {categories.map((category) => (
-                      <label key={category.id} className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-600">
-                        <input
-                          type="radio"
-                          name="category"
-                          value={category.id}
-                          defaultChecked={activeCategory === category.id}
-                          className="h-3.5 w-3.5 accent-[#10245f]"
-                        />
-                        {category.label}
-                      </label>
-                    ))}
+                    {categories.map((category) => {
+                      const categoryGroup = getJobCategoryBySlug(category.id);
+                      const isActiveCategory = activeCategory === category.id;
+
+                      return (
+                        <div key={category.id}>
+                          <Link
+                            href={buildHref(urlParams, { category: category.id, subcategory: null })}
+                            className={cn(
+                              "flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition",
+                              isActiveCategory
+                                ? "border-lime-300 bg-lime-100 text-[#10245f]"
+                                : "border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "h-3.5 w-3.5 rounded-full border",
+                                isActiveCategory ? "border-[#10245f] bg-[#10245f]" : "border-slate-300 bg-white",
+                              )}
+                            />
+                            <span className="flex-1">{category.label}</span>
+                            {isActiveCategory && categoryGroup && categoryGroup.subcategories.length > 0 ? (
+                              <ChevronRight className="h-3.5 w-3.5 rotate-90 text-[#10245f]" />
+                            ) : null}
+                          </Link>
+
+                          {isActiveCategory && categoryGroup && categoryGroup.subcategories.length > 0 ? (
+                            <div className="mt-1 space-y-1 pl-5">
+                              <Link
+                                href={buildHref(urlParams, { category: category.id, subcategory: null })}
+                                className={cn(
+                                  "block rounded-lg px-3 py-1.5 text-xs font-bold transition",
+                                  activeSubcategory === "all" ? "bg-slate-100 text-[#10245f]" : "text-slate-500 hover:bg-slate-50 hover:text-[#10245f]",
+                                )}
+                              >
+                                Wszystkie podkategorie
+                              </Link>
+                              {categoryGroup.subcategories.map((subcategory) => {
+                                const subcategoryId = getSubcategoryId(subcategory);
+
+                                return (
+                                  <Link
+                                    key={subcategory.url}
+                                    href={buildHref(urlParams, { category: category.id, subcategory: subcategoryId })}
+                                    className={cn(
+                                      "block rounded-lg px-3 py-1.5 text-xs font-bold leading-5 transition",
+                                      activeSubcategory === subcategoryId
+                                        ? "bg-[#10245f] text-white"
+                                        : "text-slate-500 hover:bg-slate-50 hover:text-[#10245f]",
+                                    )}
+                                  >
+                                    {subcategory.label}
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -554,26 +680,40 @@ export default async function CompanyPackagesPage({
               </CompanyPanel>
             )}
 
-            <CompanyPanel className="overflow-hidden bg-[#10245f] p-4 text-white">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-300 text-[#10245f]">
-                    <Sparkles className="h-5 w-5" />
+            <CompanyPanel className="overflow-hidden border-lime-300/30 bg-[#10245f] p-0 text-white">
+              <div className="grid gap-0 lg:grid-cols-[1fr_auto]">
+                <div className="flex items-start gap-4 p-5 sm:p-6">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-lime-300 text-[#10245f]">
+                    <Sparkles className="h-6 w-6" />
                   </div>
-                  <div>
-                    <h2 className="font-extrabold">Masz nietypowe zadanie?</h2>
-                    <p className="mt-1 text-sm font-semibold text-white/70">
-                      Opisz wyzwanie, dobierzemy wykonawce i przygotujemy wycene.
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-lime-200">
+                      Nie znalazłeś gotowego pakietu?
+                    </p>
+                    <h2 className="mt-2 text-xl font-black leading-tight sm:text-2xl">
+                      Dodaj własne zlecenie albo zgłoś wyzwanie
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-white/72">
+                      Opisz, czego potrzebujesz, a studenci odpowiedzą ofertami. Przy nietypowym zakresie pomożemy doprecyzować brief i przygotować wycenę.
                     </p>
                   </div>
                 </div>
-                <Link
-                  href="/app/company/challenges/new"
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-lime-300 px-4 text-sm font-extrabold text-[#10245f] transition hover:bg-lime-200"
-                >
-                  Zglos wyzwanie
-                  <ChevronRight className="h-4 w-4" />
-                </Link>
+                <div className="flex flex-col gap-2 border-t border-white/10 p-5 sm:flex-row lg:min-w-[260px] lg:flex-col lg:justify-center lg:border-l lg:border-t-0">
+                  <Link
+                    href="/app/company/jobs/new"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-lime-300 px-5 text-sm font-extrabold text-[#10245f] transition hover:bg-lime-200"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    Dodaj zlecenie
+                  </Link>
+                  <Link
+                    href="/app/company/challenges/new"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/15 bg-white/8 px-5 text-sm font-extrabold text-white transition hover:bg-white/12"
+                  >
+                    Zgłoś wyzwanie
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
+                </div>
               </div>
             </CompanyPanel>
           </section>

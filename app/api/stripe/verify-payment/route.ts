@@ -1,4 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { jsonError, noStoreJson } from "@/lib/security/api-response";
+import { isUuid, uuidSchema } from "@/lib/security/validation";
+import { NextRequest } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
@@ -6,9 +9,13 @@ import { resolveCommissionRate } from "@/lib/commission";
 import { trySendNotification } from "@/lib/notifications/server";
 import { rejectCompetingApplicationsForOffer } from "@/lib/services/application-chat-closure";
 import { rejectCrossSiteRequest } from "@/lib/security/request-origin";
+import { logCriticalError } from "@/lib/observability/error-log";
 import Stripe from "stripe";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const verifyPaymentRequestSchema = z.object({
+  session_id: z.string().trim().min(1).max(255),
+});
+const milestoneIdsSchema = z.array(uuidSchema).max(100);
 
 type PaymentSource = {
   applicationId: string | null;
@@ -83,6 +90,11 @@ function resolveFeePln(
 }
 
 export async function POST(req: NextRequest) {
+  let actorUserId: string | null = null;
+  let currentContractId: string | null = null;
+  let currentSessionId: string | null = null;
+  let criticalErrorLogged = false;
+
   try {
     const crossSiteResponse = rejectCrossSiteRequest(req);
     if (crossSiteResponse) return crossSiteResponse;
@@ -90,71 +102,89 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return jsonError("Musisz być zalogowany.", 401);
     }
 
-    const body = await req.json();
-    const { session_id } = body;
+    actorUserId = user.id;
 
-    if (!session_id) {
-      return NextResponse.json({ error: "Missing session_id" }, { status: 400 });
+    const rawBody = await req.json().catch(() => null);
+    const parsedBody = verifyPaymentRequestSchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return jsonError("Brak poprawnego identyfikatora sesji płatności.", 400);
     }
 
+    const { session_id } = parsedBody.data;
+    currentSessionId = session_id;
     const session = await getStripe().checkout.sessions.retrieve(session_id);
     if (!session) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+      return jsonError("Nie znaleziono sesji płatności.", 404);
     }
 
     const contractId = session.metadata?.contract_id;
+    currentContractId = contractId ?? null;
     let source: PaymentSource;
     try {
       source = resolvePaymentSource(session);
     } catch {
-      return NextResponse.json({ error: "Invalid session metadata" }, { status: 400 });
+      return jsonError("Nieprawidłowe dane sesji płatności.", 400);
     }
     const { applicationId, serviceOrderId, sourceType } = source;
     const milestoneIdsJson = session.metadata?.milestone_ids;
 
     if (!contractId) {
-      return NextResponse.json({ error: "Invalid session metadata" }, { status: 400 });
+      return jsonError("Nieprawidłowe dane sesji płatności.", 400);
     }
 
     if (
-      !UUID_RE.test(contractId)
-      || (applicationId && !UUID_RE.test(applicationId))
-      || (serviceOrderId && !UUID_RE.test(serviceOrderId))
+      !isUuid(contractId)
+      || (applicationId && !isUuid(applicationId))
+      || (serviceOrderId && !isUuid(serviceOrderId))
     ) {
-      return NextResponse.json({ error: "Nieprawidłowe ID w metadanych sesji." }, { status: 400 });
+      return jsonError("Nieprawidłowe ID w metadanych sesji.", 400);
     }
 
-    const { data: contract } = await supabase
+    const { data: contract, error: contractLookupError } = await supabase
       .from("contracts")
       .select("id, company_id, status, commission_rate, source_type, application_id, service_order_id")
       .eq("id", contractId)
       .single();
 
+    if (contractLookupError) {
+      criticalErrorLogged = true;
+      await logCriticalError({
+        source: "stripe.verify_payment.contract_lookup_failed",
+        error: contractLookupError,
+        errorCode: contractLookupError.code,
+        message: "Contract lookup failed while verifying Stripe Checkout payment.",
+        contractId,
+        stripeSessionId: session.id,
+        userId: user.id,
+      });
+      throw new Error("Nie udało się sprawdzić kontraktu płatności.");
+    }
+
     const typedContract = contract as PaymentContractRow | null;
 
     if (!typedContract || typedContract.company_id !== user.id) {
-      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+      return jsonError("Brak dostępu do tej płatności.", 403);
     }
 
     if (!sourceMatchesContract({ applicationId, serviceOrderId, sourceType }, typedContract)) {
-      return NextResponse.json({ error: "Nieprawidłowe powiązanie sesji z kontraktem." }, { status: 400 });
+      return jsonError("Nieprawidłowe powiązanie sesji z kontraktem.", 400);
     }
 
     if (typedContract.status === "active") {
-      return NextResponse.json({
+      return noStoreJson({
         status: "already_processed",
-        message: "Payment already processed",
+        message: "Płatność została już przetworzona.",
       });
     }
 
     if (session.payment_status !== "paid") {
-      return NextResponse.json({
+      return noStoreJson({
         status: "not_paid",
         payment_status: session.payment_status,
-        message: "Payment not yet completed",
+        message: "Płatność nie została jeszcze zakończona.",
       });
     }
 
@@ -168,7 +198,20 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (targetApplicationError || !targetApplicationData) {
-        throw new Error(targetApplicationError?.message ?? "Nie znaleziono aplikacji dla sesji płatności");
+        criticalErrorLogged = true;
+        await logCriticalError({
+          source: "stripe.verify_payment.application_lookup_failed",
+          error: targetApplicationError ?? new Error("Missing application for Stripe payment session."),
+          errorCode: targetApplicationError?.code,
+          message: "Application lookup failed while verifying Stripe Checkout payment.",
+          contractId,
+          stripeSessionId: session.id,
+          userId: user.id,
+          context: {
+            applicationId,
+          },
+        });
+        throw new Error("Nie udało się sprawdzić aplikacji dla sesji płatności.");
       }
 
       const targetApplication = targetApplicationData as TargetApplicationRow;
@@ -206,9 +249,20 @@ export async function POST(req: NextRequest) {
     let milestoneIds: string[] = [];
     if (milestoneIdsJson) {
       try {
-        milestoneIds = JSON.parse(milestoneIdsJson);
+        const parsedMilestoneIds = milestoneIdsSchema.safeParse(JSON.parse(milestoneIdsJson));
+        if (!parsedMilestoneIds.success) {
+          return noStoreJson(
+            { error: "Nieprawidłowe dane etapów w sesji płatności." },
+            { status: 400 },
+          );
+        }
+
+        milestoneIds = parsedMilestoneIds.data;
       } catch {
-        console.error("[verify-payment] Failed to parse milestone_ids:", milestoneIdsJson);
+        return noStoreJson(
+          { error: "Nieprawidłowe dane etapów w sesji płatności." },
+          { status: 400 },
+        );
       }
     }
 
@@ -225,8 +279,23 @@ export async function POST(req: NextRequest) {
     });
 
     if (rpcError) {
-      console.error("[verify-payment] RPC Error processing payment:", rpcError);
-      throw new Error(`Failed to process payment atomically: ${rpcError.message}`);
+      criticalErrorLogged = true;
+      await logCriticalError({
+        source: "stripe.verify_payment.rpc_failed",
+        error: rpcError,
+        errorCode: rpcError.code,
+        message: "process_stripe_payment_v4 failed while verifying Stripe Checkout payment.",
+        contractId,
+        stripeSessionId: session.id,
+        userId: user.id,
+        context: {
+          sourceType,
+          applicationId,
+          serviceOrderId,
+          amountMinor: session.amount_total ?? null,
+        },
+      });
+      throw new Error("Nie udało się przetworzyć płatności atomowo.");
     }
 
     if (serviceOrderId) {
@@ -244,7 +313,20 @@ export async function POST(req: NextRequest) {
         ]);
 
       if (serviceOrderSyncError) {
-        throw new Error(`Nie udało się zaktualizować statusu zamówienia: ${serviceOrderSyncError.message}`);
+        criticalErrorLogged = true;
+        await logCriticalError({
+          source: "stripe.verify_payment.service_order_sync_failed",
+          error: serviceOrderSyncError,
+          errorCode: serviceOrderSyncError.code,
+          message: "Service order status sync failed after payment processing.",
+          contractId,
+          stripeSessionId: session.id,
+          userId: user.id,
+          context: {
+            serviceOrderId,
+          },
+        });
+        throw new Error("Nie udało się zaktualizować statusu zamówienia po płatności.");
       }
     }
 
@@ -264,16 +346,33 @@ export async function POST(req: NextRequest) {
         });
       }
     } catch (error) {
-      console.error("[verify-payment] Failed to send notification:", error);
+      await logCriticalError({
+        source: "stripe.verify_payment.notification_failed",
+        level: "warning",
+        error,
+        message: "Contract funded notification failed after payment verification.",
+        contractId,
+        stripeSessionId: session.id,
+        userId: user.id,
+      });
     }
 
-    return NextResponse.json({
+    return noStoreJson({
       status: "success",
-      message: "Payment verified and contract activated",
+      message: "Płatność została potwierdzona, a kontrakt aktywowany.",
     });
   } catch (error: unknown) {
-    console.error("[verify-payment] Error:", error);
-    return NextResponse.json(
+    if (!criticalErrorLogged) {
+      await logCriticalError({
+        source: "stripe.verify_payment.unexpected",
+        error,
+        message: "Unexpected error while verifying Stripe Checkout payment.",
+        contractId: currentContractId,
+        stripeSessionId: currentSessionId,
+        userId: actorUserId,
+      });
+    }
+    return noStoreJson(
       { error: "Nie udało się zweryfikować płatności. Spróbuj ponownie za chwilę." },
       { status: 500 },
     );

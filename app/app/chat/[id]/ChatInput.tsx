@@ -1,14 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Input } from "@/components/ui/input";
+import { Paperclip, Plus, Send } from "lucide-react";
+
+import { sendFileMessage, sendTextMessage } from "@/app/app/chat/_actions";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { uploadPrivateFile } from "@/lib/security/client-upload";
-import { Paperclip, Send, Banknote, CalendarClock, Plus } from "lucide-react";
-import { sendTextMessage, sendFileMessage, sendEventMessage } from "@/app/app/chat/_actions";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
 
 export function ChatInput({
   conversationId,
@@ -24,12 +24,8 @@ export function ChatInput({
   const [message, setMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [attachment, setAttachment] = useState<{ ref: string; type: "image" | "file"; name: string } | null>(null);
-  const [rateOpen, setRateOpen] = useState(false);
-  const [deadlineOpen, setDeadlineOpen] = useState(false);
-  const [rateValue, setRateValue] = useState("");
-  const [deadlineValue, setDeadlineValue] = useState("");
-  const [eventError, setEventError] = useState<string | null>(null);
-  const [isSendingEvent, setIsSendingEvent] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [actionSheetOpen, setActionSheetOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleSend() {
@@ -73,41 +69,21 @@ export function ChatInput({
     }
   }
 
-  const submitRate = async () => {
-    if (locked || !rateValue) return;
-    const rate = parseFloat(rateValue);
-    if (Number.isNaN(rate)) {
-      alert("Proszę podać prawidłową kwotę.");
-      return;
-    }
-
-    setIsSendingEvent(true);
-    setEventError(null);
-    try {
-      await sendEventMessage(conversationId, "rate.proposed", { proposed_stawka: rate }, `Proponuję stawkę: ${rate} zł`);
-      setRateOpen(false);
-      setRateValue("");
-    } catch {
-      setEventError("Nie udało się wysłać propozycji stawki.");
-    } finally {
-      setIsSendingEvent(false);
-    }
+  const closeActionMenus = () => {
+    setActionsOpen(false);
+    setActionSheetOpen(false);
   };
 
-  const submitDeadline = async () => {
-    if (locked || !deadlineValue) return;
-    setIsSendingEvent(true);
-    setEventError(null);
-    try {
-      await sendEventMessage(conversationId, "deadline.proposed", { proposed_deadline: deadlineValue }, "");
-      setDeadlineOpen(false);
-      setDeadlineValue("");
-    } catch {
-      setEventError("Nie udało się wysłać propozycji terminu.");
-    } finally {
-      setIsSendingEvent(false);
-    }
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
+    closeActionMenus();
   };
+
+  const fileActionButton = (
+    <Button variant="ghost" className="w-full justify-start gap-2 text-sm" onClick={openFilePicker}>
+      <Paperclip className="h-4 w-4" /> Dodaj plik
+    </Button>
+  );
 
   return (
     <div className="relative flex w-full flex-col gap-2 px-0 sm:px-4">
@@ -119,15 +95,9 @@ export function ChatInput({
 
       {attachment ? (
         <div className="flex w-full max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 p-2 text-xs sm:w-fit">
-          {attachment.type === "image" ? (
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-lime-100 text-[#10245f]">
-              <Paperclip className="h-4 w-4" />
-            </div>
-          ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-lime-100 text-[#10245f]">
-              <Paperclip className="h-4 w-4" />
-            </div>
-          )}
+          <div className="flex h-8 w-8 items-center justify-center rounded bg-lime-100 text-[#10245f]">
+            <Paperclip className="h-4 w-4" />
+          </div>
 
           <span className="max-w-[220px] truncate sm:max-w-[150px]">{attachment.name}</span>
           <button
@@ -142,37 +112,47 @@ export function ChatInput({
       ) : null}
 
       <div className="relative flex items-end gap-2">
-        <Input
-          type="file"
-          ref={fileInputRef}
-          className="hidden"
-          onChange={handleFileSelect}
-        />
+        <Input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
 
-        <Popover>
+        <Popover open={actionsOpen} onOpenChange={setActionsOpen}>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
               size="icon"
-              aria-label="Dodaj załącznik lub propozycję"
-              className="h-10 w-10 shrink-0 rounded-full border-slate-200 text-slate-500"
+              aria-label="Dodaj plik"
+              className="hidden h-10 w-10 shrink-0 rounded-full border-slate-200 text-slate-500 sm:inline-flex"
               disabled={locked}
             >
               <Plus className="h-5 w-5" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-48 p-1" align="start">
-            <Button variant="ghost" className="w-full justify-start gap-2 text-sm" onClick={() => fileInputRef.current?.click()}>
-              <Paperclip className="h-4 w-4" /> Dodaj plik
-            </Button>
-            <Button variant="ghost" className="w-full justify-start gap-2 text-sm" onClick={() => setRateOpen(true)}>
-              <Banknote className="h-4 w-4" /> Zaproponuj stawkę
-            </Button>
-            <Button variant="ghost" className="w-full justify-start gap-2 text-sm" onClick={() => setDeadlineOpen(true)}>
-              <CalendarClock className="h-4 w-4" /> Zaproponuj termin
-            </Button>
+          <PopoverContent className="w-48 p-1" align="start" side="top" sideOffset={10}>
+            {fileActionButton}
           </PopoverContent>
         </Popover>
+
+        <Sheet open={actionSheetOpen} onOpenChange={setActionSheetOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Dodaj plik"
+              className="inline-flex h-10 w-10 shrink-0 rounded-full border-slate-200 bg-white text-slate-600 shadow-sm sm:hidden"
+              disabled={locked}
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="rounded-t-[2rem] border-none bg-white p-0">
+            <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-slate-200" />
+            <div className="p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+              <SheetHeader className="mb-4 text-left">
+                <SheetTitle>Akcje rozmowy</SheetTitle>
+              </SheetHeader>
+              <div className="grid gap-2">{fileActionButton}</div>
+            </div>
+          </SheetContent>
+        </Sheet>
 
         <div className="relative flex-1">
           <Input
@@ -201,59 +181,6 @@ export function ChatInput({
           </Button>
         </div>
       </div>
-
-      <Dialog open={rateOpen} onOpenChange={setRateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Zaproponuj stawkę</DialogTitle>
-            <DialogDescription>Podaj kwotę, którą chcesz zaproponować drugiej stronie.</DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Label>Kwota (PLN)</Label>
-            <Input
-              type="number"
-              value={rateValue}
-              onChange={(event) => setRateValue(event.target.value)}
-              placeholder="np. 1500"
-            />
-            {eventError ? <p className="mt-2 text-sm text-red-600">{eventError}</p> : null}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRateOpen(false)} className="rounded-xl border-slate-200">
-              Anuluj
-            </Button>
-            <Button disabled={isSendingEvent} onClick={() => void submitRate()} className="rounded-xl bg-[#10245f] text-white hover:bg-[#0b1b47]">
-              {isSendingEvent ? "Wysyłanie..." : "Wyślij propozycję"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={deadlineOpen} onOpenChange={setDeadlineOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Zaproponuj termin</DialogTitle>
-            <DialogDescription>Wybierz proponowany termin zakończenia prac.</DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Label>Termin (YYYY-MM-DD)</Label>
-            <Input
-              type="date"
-              value={deadlineValue}
-              onChange={(event) => setDeadlineValue(event.target.value)}
-            />
-            {eventError ? <p className="mt-2 text-sm text-red-600">{eventError}</p> : null}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeadlineOpen(false)} className="rounded-xl border-slate-200">
-              Anuluj
-            </Button>
-            <Button disabled={isSendingEvent} onClick={() => void submitDeadline()} className="rounded-xl bg-[#10245f] text-white hover:bg-[#0b1b47]">
-              {isSendingEvent ? "Wysyłanie..." : "Wyślij propozycję"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

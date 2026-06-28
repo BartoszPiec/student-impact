@@ -2,7 +2,7 @@
 import { Redis } from "@upstash/redis";
 import type { NextRequest } from "next/server";
 
-type LimiterName = "checkout" | "ceidg" | "apply" | "message" | "notifications" | "upload";
+type LimiterName = "checkout" | "ceidg" | "apply" | "message" | "notifications" | "upload" | "csp";
 type EdgeLimiterName = "auth" | "api";
 type AnyLimiterName = LimiterName | EdgeLimiterName;
 
@@ -60,6 +60,9 @@ const limiters: Record<AnyLimiterName, Ratelimit | null> = {
   upload: redis
     ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(20, "1 h"), analytics: true, prefix: "rl:upload" })
     : null,
+  csp: redis
+    ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(120, "1 m"), analytics: true, prefix: "rl:csp" })
+    : null,
 };
 
 export function getRequestIp(request: NextRequest): string {
@@ -89,7 +92,8 @@ export async function enforceRateLimit(
 ): Promise<RateLimitResult> {
   const limiter = limiters[limiterName];
   if (!limiter) {
-    if (shouldFailClosedWithoutRedis) {
+    const isRequestNavigationGuard = limiterName === "auth" || limiterName === "api";
+    if (shouldFailClosedWithoutRedis && !isRequestNavigationGuard) {
       return {
         ...productionFailClosedResult,
         reset: Date.now() + 60_000,

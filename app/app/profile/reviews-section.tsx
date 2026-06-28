@@ -75,15 +75,15 @@ export default async function ReviewsSection() {
 
   return (
     <section className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">Oceny i referencje</h2>
           <p className="text-sm text-slate-500 font-medium">Zweryfikowane opinie od pracodawców.</p>
         </div>
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full border border-slate-100 shadow-sm">
+        <div className="flex w-fit max-w-full items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-2 shadow-sm sm:rounded-full sm:px-4">
           <span className="text-lg font-bold text-slate-800">{avg.toFixed(1)}</span>
           <Stars rating={Math.round(avg)} />
-          <span className="text-xs text-slate-400 font-medium ml-1">({rows.length})</span>
+          <span className="ml-1 whitespace-nowrap text-xs font-medium text-slate-400">({rows.length})</span>
         </div>
       </div>
 

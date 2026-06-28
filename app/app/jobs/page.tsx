@@ -159,7 +159,7 @@ export default async function JobsPage({
 
   return (
     <main className="pb-10">
-      <div className="relative mb-7 overflow-hidden border-b border-[#243869] bg-[#10245f] py-10 text-white shadow-sm sm:mb-8 sm:py-14">
+      <div className="relative mb-7 overflow-hidden border-b border-[#243869] bg-[#10245f] pb-24 pt-8 text-white shadow-sm sm:mb-8 sm:py-14">
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(12,30,82,0.95),rgba(18,45,111,0.92))]" />
 
         <div className="relative z-10 mx-auto flex w-full max-w-[1380px] flex-col items-start justify-between gap-8 px-4 sm:px-6 md:flex-row md:items-center lg:px-8">
@@ -175,7 +175,7 @@ export default async function JobsPage({
             <h1 className="mb-5 text-4xl font-black leading-[0.98] tracking-normal text-white sm:text-5xl md:text-6xl">
               Kształtuj swoją <br className="hidden md:block" /> karierę już dziś.
             </h1>
-            <p className="max-w-xl text-sm font-semibold leading-6 text-indigo-100/80 sm:text-base">
+            <p className="max-w-[32rem] text-[13px] font-semibold leading-5 text-indigo-100/82 sm:text-base sm:leading-6">
               Odkrywaj mikrozlecenia, staże i projekty systemowe dopasowane do Twoich umiejętności.
               Zdobądź doświadczenie, którego szukają pracodawcy.
             </p>

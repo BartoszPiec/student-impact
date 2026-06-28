@@ -4,6 +4,7 @@ import { DownloadCloud, FileText, ShieldAlert } from "lucide-react";
 import { VaultTable } from "@/components/admin/vault-table";
 import { Button } from "@/components/ui/button";
 import { backfillMissingContractPdfs } from "./_actions";
+import { logCriticalError } from "@/lib/observability/error-log";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,27 @@ type VaultContractRow = {
     | null;
 };
 
+function readErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.trim().length > 0 ? code.trim() : null;
+}
+
+async function logVaultPageError(input: {
+  source: string;
+  error?: unknown;
+  level?: "error" | "warning" | "info";
+  context?: Record<string, unknown>;
+}) {
+  await logCriticalError({
+    source: input.source,
+    error: input.error,
+    errorCode: readErrorCode(input.error),
+    level: input.level ?? "error",
+    context: input.context,
+  });
+}
+
 export default async function LegalVaultPage({ searchParams }: LegalVaultPageProps) {
   const supabase = createAdminClient();
   const resolvedSearchParams = (await searchParams) || {};
@@ -77,11 +99,16 @@ export default async function LegalVaultPage({ searchParams }: LegalVaultPagePro
     .order("created_at", { ascending: false });
 
   if (error) {
+    await logVaultPageError({
+      source: "admin.vault.page.load_contracts",
+      error,
+    });
+
     return (
       <div className="flex min-h-[400px] flex-col items-center justify-center rounded-3xl border border-red-500/20 bg-red-500/5 p-8">
         <ShieldAlert className="mb-4 h-12 w-12 text-red-500" />
         <h2 className="text-xl font-black text-white">Błąd bazy danych</h2>
-        <p className="mt-2 text-slate-400">{error.message}</p>
+        <p className="mt-2 text-slate-400">Nie udało się pobrać danych Legal Vault.</p>
       </div>
     );
   }
@@ -97,7 +124,10 @@ export default async function LegalVaultPage({ searchParams }: LegalVaultPagePro
   >();
 
   if (contractIds.length > 0) {
-    const [{ data: documents }, { data: invoices }] = await Promise.all([
+    const [
+      { data: documents, error: documentsError },
+      { data: invoices, error: invoicesError },
+    ] = await Promise.all([
       supabase
         .from("contract_documents")
         .select("id, contract_id, document_type, file_name, storage_path")
@@ -107,6 +137,28 @@ export default async function LegalVaultPage({ searchParams }: LegalVaultPagePro
         .select("contract_id, status")
         .in("contract_id", contractIds),
     ]);
+
+    if (documentsError) {
+      await logVaultPageError({
+        source: "admin.vault.page.load_document_summary",
+        error: documentsError,
+        level: "warning",
+        context: {
+          contractCount: contractIds.length,
+        },
+      });
+    }
+
+    if (invoicesError) {
+      await logVaultPageError({
+        source: "admin.vault.page.load_invoice_summary",
+        error: invoicesError,
+        level: "warning",
+        context: {
+          contractCount: contractIds.length,
+        },
+      });
+    }
 
     const documentRows = (documents || []) as ContractDocumentRow[];
     documentCountByContract = documentRows.reduce((map, document) => {
@@ -122,9 +174,20 @@ export default async function LegalVaultPage({ searchParams }: LegalVaultPagePro
     const legalStoragePaths = legalDocumentRows
       .map((document) => document.storage_path)
       .filter((path): path is string => Boolean(path));
-    const { data: signedUrls } = legalStoragePaths.length > 0
+    const { data: signedUrls, error: signedUrlsError } = legalStoragePaths.length > 0
       ? await supabase.storage.from("deliverables").createSignedUrls(legalStoragePaths, 60 * 60)
-      : { data: [] };
+      : { data: [], error: null };
+
+    if (signedUrlsError) {
+      await logVaultPageError({
+        source: "admin.vault.page.create_signed_urls",
+        error: signedUrlsError,
+        level: "warning",
+        context: {
+          storagePathCount: legalStoragePaths.length,
+        },
+      });
+    }
     const signedUrlByPath = new Map(
       (signedUrls ?? []).map((signedUrl, index) => [legalStoragePaths[index], signedUrl.signedUrl ?? null]),
     );

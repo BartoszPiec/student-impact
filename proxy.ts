@@ -15,6 +15,18 @@ const SUPABASE_PROJECT_REF = (() => {
 })();
 const SUPABASE_ISSUER = `${SUPABASE_URL}/auth/v1`;
 const JWKS = createRemoteJWKSet(new URL(`${SUPABASE_ISSUER}/.well-known/jwks.json`));
+const OFFICIAL_VERCEL_HOST = "student-impact.vercel.app";
+const VERCEL_PROJECT_HOST_PREFIX = "student-impact";
+
+function shouldRedirectToOfficialHost(host: string) {
+  const normalizedHost = host.split(":")[0]?.toLowerCase() ?? "";
+
+  return (
+    normalizedHost !== OFFICIAL_VERCEL_HOST &&
+    normalizedHost.endsWith(".vercel.app") &&
+    normalizedHost.startsWith(VERCEL_PROJECT_HOST_PREFIX)
+  );
+}
 
 function getSupabaseOrigin() {
   try {
@@ -53,6 +65,30 @@ function buildContentSecurityPolicy() {
     "form-action 'self'",
     "frame-ancestors 'none'",
     ...(!isDev ? ["upgrade-insecure-requests"] : []),
+  ].join("; ");
+}
+
+function buildContentSecurityPolicyReportOnly() {
+  const isDev = process.env.NODE_ENV === "development";
+  if (isDev) return null;
+
+  const supabaseOrigin = getSupabaseOrigin();
+  const supabaseHost = getSupabaseHost();
+
+  return [
+    "default-src 'self'",
+    "script-src 'self' https://js.stripe.com https://browser.sentry-cdn.com https://challenges.cloudflare.com",
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob: ${supabaseOrigin} https://*.stripe.com`,
+    `connect-src 'self' ${supabaseOrigin} wss://${supabaseHost} https://api.stripe.com https://*.ingest.sentry.io https://challenges.cloudflare.com`,
+    "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "report-uri /api/security/csp-report",
+    "upgrade-insecure-requests",
   ].join("; ");
 }
 
@@ -229,6 +265,14 @@ async function verifyJwtLocal(token: string): Promise<AuthState> {
 }
 
 export async function proxy(request: NextRequest) {
+  const host = request.headers.get("host") ?? "";
+  if (shouldRedirectToOfficialHost(host)) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.protocol = "https:";
+    redirectUrl.host = OFFICIAL_VERCEL_HOST;
+    return NextResponse.redirect(redirectUrl, 308);
+  }
+
   const path = request.nextUrl.pathname;
   const isApp = path.startsWith("/app");
   const isAuth = path.startsWith("/auth");
@@ -267,6 +311,10 @@ export async function proxy(request: NextRequest) {
     },
   });
   response.headers.set("Content-Security-Policy", buildContentSecurityPolicy());
+  const reportOnlyCsp = buildContentSecurityPolicyReportOnly();
+  if (reportOnlyCsp) {
+    response.headers.set("Content-Security-Policy-Report-Only", reportOnlyCsp);
+  }
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {

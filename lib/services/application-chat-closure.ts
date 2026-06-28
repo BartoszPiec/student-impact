@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logCriticalError } from "@/lib/observability/error-log";
 import { ensureConversationIdForApplication } from "@/lib/services/service-order-conversations";
 
 type RejectedApplicationRow = {
@@ -18,6 +19,18 @@ type CloseConversationParams = {
 
 const DEFAULT_CLOSURE_MESSAGE = "Niestety tym razem firma wybrała kogoś innego.";
 
+async function logApplicationChatClosureError(
+  operation: string,
+  error: unknown,
+  context: Record<string, unknown>,
+) {
+  await logCriticalError({
+    source: `application-chat-closure.${operation}`,
+    error,
+    context,
+  });
+}
+
 export async function closeRejectedApplicationConversation(
   supabase: SupabaseClient,
   params: CloseConversationParams,
@@ -29,19 +42,37 @@ export async function closeRejectedApplicationConversation(
     studentId: params.studentId,
   });
 
-  await supabase
+  const { error: conversationUpdateError } = await supabase
     .from("conversations")
     .update({ status: "inactive" })
     .eq("id", conversationId);
 
-  const { count } = await supabase
+  if (conversationUpdateError) {
+    await logApplicationChatClosureError("closeRejectedApplicationConversation.updateConversation", conversationUpdateError, {
+      applicationId: params.applicationId,
+      offerId: params.offerId,
+      conversationId,
+    });
+    throw new Error("Nie udało się zamknąć rozmowy aplikacji.");
+  }
+
+  const { count, error: countError } = await supabase
     .from("messages")
     .select("id", { count: "exact", head: true })
     .eq("conversation_id", conversationId)
     .eq("event", "offer_closed");
 
+  if (countError) {
+    await logApplicationChatClosureError("closeRejectedApplicationConversation.countClosureMessages", countError, {
+      applicationId: params.applicationId,
+      offerId: params.offerId,
+      conversationId,
+    });
+    throw new Error("Nie udało się sprawdzić wiadomości zamykającej rozmowę.");
+  }
+
   if ((count ?? 0) === 0) {
-    await supabase.from("messages").insert({
+    const { error: messageInsertError } = await supabase.from("messages").insert({
       conversation_id: conversationId,
       sender_id: params.senderId,
       content: params.content ?? DEFAULT_CLOSURE_MESSAGE,
@@ -52,6 +83,15 @@ export async function closeRejectedApplicationConversation(
         offer_id: params.offerId,
       },
     });
+
+    if (messageInsertError) {
+      await logApplicationChatClosureError("closeRejectedApplicationConversation.insertClosureMessage", messageInsertError, {
+        applicationId: params.applicationId,
+        offerId: params.offerId,
+        conversationId,
+      });
+      throw new Error("Nie udało się zapisać wiadomości o zamknięciu rozmowy.");
+    }
   }
 
   return conversationId;
@@ -90,7 +130,12 @@ export async function rejectCompetingApplicationsForOffer(
     .in("status", statuses);
 
   if (error) {
-    throw new Error(error.message);
+    await logApplicationChatClosureError("rejectCompetingApplicationsForOffer.lookupApplications", error, {
+      offerId: params.offerId,
+      acceptedApplicationId: params.acceptedApplicationId,
+      statuses,
+    });
+    throw new Error("Nie udało się sprawdzić konkurencyjnych zgłoszeń.");
   }
 
   const rejectedRows = (others ?? []) as RejectedApplicationRow[];
@@ -104,7 +149,12 @@ export async function rejectCompetingApplicationsForOffer(
     .in("status", statuses);
 
   if (updateError) {
-    throw new Error(updateError.message);
+    await logApplicationChatClosureError("rejectCompetingApplicationsForOffer.updateApplications", updateError, {
+      offerId: params.offerId,
+      acceptedApplicationId: params.acceptedApplicationId,
+      statuses,
+    });
+    throw new Error("Nie udało się odrzucić pozostałych zgłoszeń.");
   }
 
   const contractIdsToCancel = params.cancelContracts
@@ -121,7 +171,12 @@ export async function rejectCompetingApplicationsForOffer(
       .in("status", ["draft", "awaiting_funding"]);
 
     if (contractCancelError) {
-      throw new Error(contractCancelError.message);
+      await logApplicationChatClosureError("rejectCompetingApplicationsForOffer.cancelContracts", contractCancelError, {
+        offerId: params.offerId,
+        acceptedApplicationId: params.acceptedApplicationId,
+        contractCount: contractIdsToCancel.length,
+      });
+      throw new Error("Nie udało się anulować powiązanych kontraktów.");
     }
   }
 

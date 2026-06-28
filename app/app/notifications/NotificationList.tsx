@@ -64,7 +64,7 @@ function NotificationIcon({ type }: { type: string }) {
                     <Briefcase className="w-5 h-5" />
                 </div>
             );
-        // Finansowanie escrow
+        // Finansowanie depozytu
         case "escrow_funded":
         case "contract_funded":
             return (

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonError } from "@/lib/security/api-response";
 
 function normalizeOrigin(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -47,25 +48,16 @@ export function rejectCrossSiteRequest(req: NextRequest): NextResponse | null {
   if (origin) {
     if (allowedOrigins.has(origin)) return null;
 
-    return NextResponse.json(
-      { error: "Nieprawidłowe pochodzenie zadania." },
-      { status: 403 },
-    );
+    return jsonError("Nieprawidłowe pochodzenie żądania.", 403);
   }
 
   const fetchSite = req.headers.get("sec-fetch-site");
   if (fetchSite && !["same-origin", "same-site", "none"].includes(fetchSite)) {
-    return NextResponse.json(
-      { error: "Nieprawidłowe pochodzenie zadania." },
-      { status: 403 },
-    );
+    return jsonError("Nieprawidłowe pochodzenie żądania.", 403);
   }
 
   if (process.env.NODE_ENV === "production") {
-    return NextResponse.json(
-      { error: "Brak naglowka Origin dla operacji wymagajacej ochrony." },
-      { status: 403 },
-    );
+    return jsonError("Brak nagłówka Origin dla operacji wymagającej ochrony.", 403);
   }
 
   return null;

@@ -13,6 +13,18 @@ function requireValue(name) {
   }
 }
 
+function requireNonPlaceholderValue(name, placeholders = []) {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    fail(`Missing required production env: ${name}`);
+    return;
+  }
+
+  if (placeholders.includes(value)) {
+    fail(`Production env ${name} still contains a placeholder value.`);
+  }
+}
+
 if (isVercelProduction) {
   requireValue("NEXT_PUBLIC_SUPABASE_URL");
   requireValue("NEXT_PUBLIC_SUPABASE_ANON_KEY");
@@ -21,8 +33,19 @@ if (isVercelProduction) {
   requireValue("STRIPE_WEBHOOK_SECRET");
   requireValue("CRON_SECRET");
   requireValue("NEXT_PUBLIC_APP_URL");
-  requireValue("UPSTASH_REDIS_REST_URL");
-  requireValue("UPSTASH_REDIS_REST_TOKEN");
+  requireValue("RESEND_API_KEY");
+  requireValue("RESEND_FROM_EMAIL");
+  requireNonPlaceholderValue("PLATFORM_LEGAL_NAME");
+  requireNonPlaceholderValue("PLATFORM_LEGAL_NIP", ["0000000000"]);
+  requireNonPlaceholderValue("PLATFORM_LEGAL_ADDRESS", ["ul. Przykładowa 1", "ul. Przykladowa 1"]);
+  requireNonPlaceholderValue("PLATFORM_LEGAL_CITY", ["00-000 Warszawa"]);
+  requireNonPlaceholderValue("PLATFORM_LEGAL_KRS", ["0000000000"]);
+  requireNonPlaceholderValue("PLATFORM_LEGAL_REPRESENTED_BY", ["Zarząd Spółki", "Zarzad Spolki"]);
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    console.warn(
+      "[deploy-env] UPSTASH Redis env is not configured. Production rate-limited actions will fail closed until Redis is configured.",
+    );
+  }
   if (!allowTestStripeInProduction) {
     requireValue("SENTRY_DSN");
   }
@@ -55,6 +78,10 @@ if (isVercelProduction) {
 
   if (process.env.STRIPE_PAYOUTS_ENABLED !== "true") {
     fail("Production deploy requires STRIPE_PAYOUTS_ENABLED=true.");
+  }
+
+  if (process.env.STRIPE_CONNECT_MODEL_APPROVED !== "true") {
+    fail("Production deploy requires STRIPE_CONNECT_MODEL_APPROVED=true after approving ADR_STRIPE_CONNECT_ACCOUNT_MODEL_2026-06-27.md.");
   }
 
   try {

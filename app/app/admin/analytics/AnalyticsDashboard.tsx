@@ -244,7 +244,7 @@ export function AnalyticsDashboard({
         <Card className="overflow-hidden rounded-[2rem] border border-white/5 bg-slate-950/40 shadow-xl shadow-black/20">
           <CardContent className="p-6">
             <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
-              Escrow liability
+              Depozyt / ledger liability
             </div>
             <div className="text-2xl font-black text-white">
               {formatMoneyPLN(financials.escrow_active_pln)}
@@ -327,7 +327,7 @@ export function AnalyticsDashboard({
               {formatMoneyPLN(financials.refunded_pln)}
             </div>
             <p className="mt-2 text-sm font-medium text-slate-400">
-              Kwota zwrocona z warstwy escrow na podstawie ledger entries.
+              Kwota zwrocona z warstwy depozytu na podstawie ledger entries.
             </p>
           </CardContent>
         </Card>

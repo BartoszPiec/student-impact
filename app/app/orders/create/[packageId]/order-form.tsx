@@ -20,7 +20,6 @@ type FormField = {
 
 interface OrderFormProps {
     packageId: string;
-    price: number;
     title: string;
     description: string;
     formSchema: FormField[] | null;
@@ -44,7 +43,6 @@ function SubmitOrderButton() {
 
 export default function OrderForm({
     packageId,
-    price,
     title,
     description,
     formSchema,
@@ -171,8 +169,6 @@ export default function OrderForm({
                     </div>
 
                     <input type="hidden" name="packageId" value={packageId} />
-                    <input type="hidden" name="price" value={price} />
-                    <input type="hidden" name="title" value={title} />
 
                     <div className="space-y-6">
                         <h3 className="font-bold text-xl text-slate-900 flex items-center gap-2">

@@ -108,7 +108,7 @@ function StatusBadge({ status }: { status: string | null }) {
 
 function ContractStatusBadge({ status }: { status: string | null }) {
   if (status === "awaiting_funding") {
-    return <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">oczekuje na escrow</Badge>;
+    return <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">oczekuje na depozyt</Badge>;
   }
   if (status === "active") {
     return <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">aktywny</Badge>;
@@ -384,7 +384,7 @@ export default async function CompanyApplicationsPage({
                 {contract?.status === "awaiting_funding" ? (
                   <Button asChild className="flex-1 bg-amber-600 text-white hover:bg-amber-700">
                     <Link href={`/app/deliverables/${row.id}`}>
-                      Zasil escrow
+                      Zasil depozyt
                       <ChevronRight className="ml-1 h-4 w-4" />
                     </Link>
                   </Button>

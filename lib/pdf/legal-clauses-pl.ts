@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * Polish legal text constants for contract templates.
  *
@@ -5,13 +7,35 @@
  * przed użyciem w produkcji.
  */
 
-export const PLATFORM_ENTITY = {
+export type PlatformEntity = {
+  name: string;
+  nip: string;
+  address: string;
+  city: string;
+  krs: string;
+  representedBy: string;
+};
+
+const DEFAULT_PLATFORM_ENTITY: PlatformEntity = {
   name: "Student Impact sp. z o.o.",
-  nip: "0000000000", // TODO: Uzupełnić prawdziwy NIP po rejestracji
+  nip: "0000000000",
   address: "ul. Przykładowa 1",
   city: "00-000 Warszawa",
-  krs: "0000000000", // TODO: Uzupełnić po rejestracji
+  krs: "0000000000",
   representedBy: "Zarząd Spółki",
+};
+
+function legalEnv(name: string, fallback: string): string {
+  return process.env[name]?.trim() || fallback;
+}
+
+export const PLATFORM_ENTITY: PlatformEntity = {
+  name: legalEnv("PLATFORM_LEGAL_NAME", DEFAULT_PLATFORM_ENTITY.name),
+  nip: legalEnv("PLATFORM_LEGAL_NIP", DEFAULT_PLATFORM_ENTITY.nip),
+  address: legalEnv("PLATFORM_LEGAL_ADDRESS", DEFAULT_PLATFORM_ENTITY.address),
+  city: legalEnv("PLATFORM_LEGAL_CITY", DEFAULT_PLATFORM_ENTITY.city),
+  krs: legalEnv("PLATFORM_LEGAL_KRS", DEFAULT_PLATFORM_ENTITY.krs),
+  representedBy: legalEnv("PLATFORM_LEGAL_REPRESENTED_BY", DEFAULT_PLATFORM_ENTITY.representedBy),
 };
 
 // ==========================================
@@ -43,7 +67,7 @@ export const CONTRACT_A_CLAUSES = {
 
 3.2. Wynagrodzenie obejmuje prowizję platformy Student Impact zgodną ze stawką przypisaną do danego rodzaju zlecenia i zaakceptowaną w platformie.
 
-3.3. Zleceniodawca zobowiązuje się do zasilenia depozytu zabezpieczającego (escrow) przed rozpoczęciem realizacji zlecenia. Środki są przechowywane na rachunku escrow do czasu akceptacji poszczególnych etapów.
+3.3. Zleceniodawca zobowiązuje się do zasilenia depozytu zabezpieczającego Student Impact przed rozpoczęciem realizacji zlecenia. Środki są rozliczane przez platformę i pozostają zabezpieczone do czasu akceptacji poszczególnych etapów albo rozstrzygnięcia sporu.
 
 3.4. Akceptacja etapu następuje poprzez zatwierdzenie przez Zleceniodawcę w systemie platformy lub automatycznie po upływie ${reviewDays} dni roboczych od dnia dostarczenia, w przypadku braku odpowiedzi Zleceniodawcy.`,
 
@@ -76,7 +100,7 @@ export const CONTRACT_A_CLAUSES = {
 
 7.1. Student Impact sp. z o.o. odpowiada za prawidłową realizację zlecenia i jakość dostarczonych prac.
 
-7.2. W przypadku niewykonania lub nienależytego wykonania zlecenia, Zleceniodawca może żądać poprawek lub zwrotu środków z depozytu escrow.`,
+7.2. W przypadku niewykonania lub nienależytego wykonania zlecenia, Zleceniodawca może żądać poprawek lub zwrotu środków z depozytu zabezpieczającego zgodnie z regulaminem platformy.`,
 
   final: `8. POSTANOWIENIA KOŃCOWE
 

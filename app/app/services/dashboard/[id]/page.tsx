@@ -134,7 +134,7 @@ export default async function ServiceOrderDetailPage(props: Props) {
         </Link>
 
         {/* HERO — status, tytuł, facts, akcje */}
-        <div className="relative overflow-hidden rounded-[2.5rem] border border-indigo-100/60 bg-gradient-to-br from-white via-white to-indigo-50/40 p-8 shadow-[0_30px_70px_-40px_rgba(71,85,105,0.3)] md:p-12">
+        <div className="relative overflow-hidden rounded-[1.5rem] border border-indigo-100/60 bg-gradient-to-br from-white via-white to-indigo-50/40 p-4 shadow-[0_30px_70px_-40px_rgba(71,85,105,0.3)] sm:rounded-[2rem] sm:p-6 md:p-12">
           <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-100/50 blur-3xl" />
 
           {/* Badges row */}
@@ -157,14 +157,14 @@ export default async function ServiceOrderDetailPage(props: Props) {
           </p>
 
           {/* Key facts strip */}
-          <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-normal text-slate-400 sm:tracking-[0.2em]">
                 {order.status === "countered" ? "Kontroferta firmy" : "Budżet / wycena"}
               </p>
               <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-indigo-500" />
-                <span className="text-xl font-black tabular-nums text-slate-900">
+                <Wallet className="h-4 w-4 shrink-0 text-indigo-500" />
+                <span className="min-w-0 text-lg font-black tabular-nums text-slate-900 sm:text-xl">
                   {displayAmount != null ? `${displayAmount} PLN` : "Do ustalenia"}
                 </span>
               </div>
@@ -174,16 +174,16 @@ export default async function ServiceOrderDetailPage(props: Props) {
             </div>
 
             {company && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Zleceniodawca</p>
+              <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-normal text-slate-400 sm:tracking-[0.2em]">Zleceniodawca</p>
                 <p className="truncate font-bold text-slate-800">{company.nazwa || "Nieznana firma"}</p>
                 {company.branza && <p className="mt-0.5 text-xs text-slate-500">{company.branza}</p>}
               </div>
             )}
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Wybrany pakiet</p>
-              <p className="truncate font-bold text-slate-800">
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-normal text-slate-400 sm:tracking-[0.2em]">Wybrany pakiet</p>
+              <p className="break-words font-bold leading-tight text-slate-800">
                 {(order.package as { title?: string } | null)?.title || "—"}
               </p>
               {(order.package as { price?: number } | null)?.price && (
@@ -209,7 +209,7 @@ export default async function ServiceOrderDetailPage(props: Props) {
 
           {/* Actions */}
           <div className="mt-8 border-t border-slate-100 pt-8">
-            <p className="mb-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Dostępne akcje</p>
+            <p className="mb-4 text-[10px] font-black uppercase tracking-normal text-slate-400 sm:tracking-[0.2em]">Dostępne akcje</p>
             <OrderDetailActions order={order} chatLink={chatLink} />
           </div>
         </div>

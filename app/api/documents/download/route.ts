@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonError } from "@/lib/security/api-response";
+import { isUuid } from "@/lib/security/validation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const COMPANY_DOCUMENT_TYPES = new Set(["contract_a", "invoice_company"]);
 const STUDENT_DOCUMENT_TYPES = new Set(["contract_b", "invoice_student"]);
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type DocumentAccessRow = {
   id: string;
@@ -32,10 +33,10 @@ function unwrapRelation<T>(value: T | T[] | null | undefined): T | null {
 export async function GET(request: NextRequest) {
   const documentId = request.nextUrl.searchParams.get("documentId");
   if (!documentId) {
-    return NextResponse.json({ error: "Brak documentId." }, { status: 400 });
+    return jsonError("Brak documentId.", 400);
   }
-  if (!UUID_RE.test(documentId)) {
-    return NextResponse.json({ error: "Nieprawidlowy documentId." }, { status: 400 });
+  if (!isUuid(documentId)) {
+    return jsonError("Nieprawidłowy documentId.", 400);
   }
 
   const supabase = await createClient();
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
 
   if (documentError || !document) {
-    return NextResponse.json({ error: "Nie znaleziono dokumentu." }, { status: 404 });
+    return jsonError("Nie znaleziono dokumentu.", 404);
   }
 
   const typedDocument = document as DocumentAccessRow;
@@ -80,7 +81,7 @@ export async function GET(request: NextRequest) {
     (isStudentOwner && STUDENT_DOCUMENT_TYPES.has(documentType));
 
   if (!hasRoleAccess || !typedDocument.storage_path) {
-    return NextResponse.json({ error: "Brak dostepu do dokumentu." }, { status: 403 });
+    return jsonError("Brak dostępu do dokumentu.", 403);
   }
 
   const { data: signedUrlData, error: signedUrlError } = await admin.storage
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
     });
 
   if (signedUrlError || !signedUrlData?.signedUrl) {
-    return NextResponse.json({ error: "Nie udało sie wygenerowac linku do pobrania." }, { status: 500 });
+    return jsonError("Nie udało się wygenerować linku do pobrania.", 500);
   }
 
   return NextResponse.redirect(signedUrlData.signedUrl);

@@ -1,33 +1,43 @@
-import { NextRequest, NextResponse } from "next/server";
+import { jsonError, noStoreJson } from "@/lib/security/api-response";
+import { NextRequest } from "next/server";
+import { z } from "zod";
 import { resolveServerAppUrl } from "@/lib/app-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildRateLimitKey, enforceRateLimit, getRequestIp } from "@/lib/rate-limit";
+import { uuidSchema } from "@/lib/security/validation";
+import { logCriticalError } from "@/lib/observability/error-log";
 
 const supabaseAdmin = createAdminClient();
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const WEBHOOK_SECRET = process.env.NOTIFICATIONS_WEBHOOK_SECRET;
 
-type NotificationPayload = {
-  cancelled_by?: string | null;
-  cancel_reason?: string | null;
-  milestone_title?: string | null;
-  offer_title?: string | null;
-  redirect_path?: string | null;
-  snippet?: string | null;
-};
+const notificationPayloadSchema = z.object({
+  cancelled_by: z.string().max(120).nullable().optional(),
+  cancel_reason: z.string().max(1000).nullable().optional(),
+  milestone_title: z.string().max(200).nullable().optional(),
+  offer_title: z.string().max(200).nullable().optional(),
+  redirect_path: z.string().max(300).nullable().optional(),
+  snippet: z.string().max(500).nullable().optional(),
+}).passthrough();
 
-type NotificationRecord = {
-  user_id: string;
-  typ: string;
-  payload?: NotificationPayload | null;
-};
+const notificationRecordSchema = z.object({
+  user_id: uuidSchema,
+  typ: z.string().min(1).max(80),
+  payload: notificationPayloadSchema.nullish(),
+}).passthrough();
 
-type NotificationWebhookBody = {
-  type?: string;
-  table?: string;
-  record?: NotificationRecord | null;
-};
+const notificationWebhookBodySchema = z.object({
+  type: z.string().optional(),
+  table: z.string().optional(),
+  record: notificationRecordSchema.nullish(),
+}).passthrough();
+
+type NotificationPayload = z.infer<typeof notificationPayloadSchema>;
+
+function jsonMessage(message: string, status = 200) {
+  return noStoreJson({ message }, { status });
+}
 
 function escapeHtml(value: string | null | undefined) {
   return String(value ?? "")
@@ -128,48 +138,76 @@ function getEmailContent(type: string, payload: NotificationPayload = {}) {
 export async function POST(req: NextRequest) {
   try {
     const ip = getRequestIp(req);
-    const authHeader = req.headers.get("x-webhook-secret");
-    if (authHeader !== WEBHOOK_SECRET) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!WEBHOOK_SECRET) {
+      await logCriticalError({
+        source: "notifications.webhook.missing_secret",
+        message: "NOTIFICATIONS_WEBHOOK_SECRET is not configured.",
+      });
+      return jsonError("Konfiguracja webhooka powiadomień jest niekompletna.", 500);
     }
 
-    const body = (await req.json()) as NotificationWebhookBody;
+    const authHeader = req.headers.get("x-webhook-secret");
+    if (authHeader !== WEBHOOK_SECRET) {
+      return jsonError("Brak autoryzacji webhooka.", 401);
+    }
+
+    const rawBody = await req.json().catch(() => null);
+    const parsedBody = notificationWebhookBodySchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return jsonError("Nieprawidłowe dane webhooka.", 400);
+    }
+
+    const body = parsedBody.data;
 
     if (body.type !== "INSERT" || body.table !== "notifications") {
-      return NextResponse.json({ message: "Ignored event" }, { status: 200 });
+      return jsonMessage("Zdarzenie pominięte.");
     }
 
     const record = body.record;
     if (!record?.user_id) {
-      return NextResponse.json({ error: "Missing record data" }, { status: 400 });
+      return jsonError("Brak danych powiadomienia.", 400);
     }
 
     const rateKey = buildRateLimitKey(["notifications_webhook", ip, record.user_id, record.typ]);
     const rateLimitResult = await enforceRateLimit("notifications", rateKey);
     if (!rateLimitResult.success) {
-      return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
+      return jsonError("Zbyt wiele prób wysyłki powiadomień. Spróbuj ponownie później.", 429);
     }
 
     const { data: userData, error: userErr } =
       await supabaseAdmin.auth.admin.getUserById(record.user_id);
     if (userErr || !userData.user?.email) {
-      console.error("Failed to fetch user email:", userErr);
-      return NextResponse.json(
-        { error: "User not found or missing email" },
-        { status: 404 },
-      );
+      await logCriticalError({
+        source: "notifications.webhook.user_email_missing",
+        level: "warning",
+        error: userErr,
+        errorCode: userErr?.code,
+        message: "Notification webhook could not resolve recipient email.",
+        userId: record.user_id,
+        context: {
+          notificationType: record.typ,
+        },
+      });
+      return jsonError("Nie znaleziono użytkownika lub adresu email.", 404);
     }
 
     const email = userData.user.email;
     const { subject, html } = getEmailContent(record.typ, record.payload ?? {});
 
     if (!RESEND_API_KEY) {
-      console.log(`[DRY RUN] Would send email to: ${email}`);
-      console.log(`[DRY RUN] Subject: ${subject}`);
-      return NextResponse.json(
-        { message: "Dry run - no RESEND_API_KEY" },
-        { status: 200 },
-      );
+      if (process.env.NODE_ENV === "production") {
+        await logCriticalError({
+          source: "notifications.webhook.missing_resend_key",
+          message: "RESEND_API_KEY is missing in production.",
+          userId: record.user_id,
+          context: {
+            notificationType: record.typ,
+          },
+        });
+        return jsonError("Konfiguracja wysyłki email jest niekompletna.", 500);
+      }
+
+      return jsonMessage("Tryb testowy - email nie został wysłany.");
     }
 
     const resendRes = await fetch("https://api.resend.com/emails", {
@@ -189,21 +227,26 @@ export async function POST(req: NextRequest) {
     });
 
     if (!resendRes.ok) {
-      const errBody = await resendRes.text();
-      console.error("Resend API Error:", resendRes.status, errBody);
-      return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+      await logCriticalError({
+        source: "notifications.webhook.resend_failed",
+        message: "Resend API returned a non-success response.",
+        userId: record.user_id,
+        context: {
+          notificationType: record.typ,
+          status: resendRes.status,
+        },
+      });
+      return jsonError("Nie udało się wysłać powiadomienia email.", 500);
     }
 
     const responseData = (await resendRes.json()) as { id?: string };
-    return NextResponse.json(
-      { success: true, id: responseData.id ?? null },
-      { status: 200 },
-    );
+    return noStoreJson({ success: true, id: responseData.id ?? null });
   } catch (err: unknown) {
-    console.error("Webhook Error:", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    await logCriticalError({
+      source: "notifications.webhook.unexpected",
+      error: err,
+      message: "Unexpected notification webhook failure.",
+    });
+    return jsonError("Wystąpił błąd obsługi webhooka powiadomień.", 500);
   }
 }

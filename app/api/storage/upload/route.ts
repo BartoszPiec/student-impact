@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { jsonError, noStoreJson } from "@/lib/security/api-response";
+import { isUuid } from "@/lib/security/validation";
+import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rejectCrossSiteRequest } from "@/lib/security/request-origin";
@@ -10,6 +12,7 @@ import {
   validateUploadFile,
   type UploadPurpose,
 } from "@/lib/security/upload-policy";
+import { logCriticalError } from "@/lib/observability/error-log";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +25,6 @@ const PURPOSES = new Set<UploadPurpose>([
   "deliverable_resource",
   "portfolio_image",
 ]);
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type RoleRow = {
   role: string | null;
@@ -43,50 +45,104 @@ type ServiceOrderRow = {
   student_id: string | null;
 };
 
-function jsonError(error: string, status: number) {
-  return NextResponse.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
+class UploadRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "UploadRequestError";
+  }
+}
+
+function readErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.trim().length > 0 ? code.trim() : null;
+}
+
+async function logUploadRouteError(input: {
+  source: string;
+  error?: unknown;
+  userId?: string | null;
+  level?: "error" | "warning" | "info";
+  context?: Record<string, unknown>;
+}) {
+  await logCriticalError({
+    source: input.source,
+    error: input.error,
+    errorCode: readErrorCode(input.error),
+    level: input.level ?? "error",
+    userId: input.userId ?? null,
+    context: input.context,
+  });
 }
 
 function unwrapRelation<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] ?? null : value ?? null;
 }
 
-function isUuid(value: string): boolean {
-  return UUID_RE.test(value);
-}
-
 async function getRole(userId: string): Promise<string | null> {
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("profiles")
     .select("role")
     .eq("user_id", userId)
     .maybeSingle();
+
+  if (error) {
+    await logUploadRouteError({
+      source: "storage.upload.role_lookup",
+      error,
+      userId,
+    });
+    throw new UploadRequestError("Nie udało się zweryfikować roli użytkownika.", 500);
+  }
 
   return (data as RoleRow | null)?.role ?? null;
 }
 
 async function assertConversationParticipant(userId: string, conversationId: string) {
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("conversations")
     .select("company_id, student_id")
     .eq("id", conversationId)
     .maybeSingle();
 
+  if (error) {
+    await logUploadRouteError({
+      source: "storage.upload.conversation_lookup",
+      error,
+      userId,
+      context: { conversationId },
+    });
+    throw new UploadRequestError("Nie udało się zweryfikować dostępu do rozmowy.", 500);
+  }
+
   const conversation = data as ConversationRow | null;
   if (conversation?.company_id !== userId && conversation?.student_id !== userId) {
-    throw new Error("Brak dostepu do tej rozmowy.");
+    throw new UploadRequestError("Brak dostępu do tej rozmowy.", 403);
   }
 }
 
 async function assertSourceParticipant(userId: string, sourceId: string, studentOnly: boolean) {
   const admin = createAdminClient();
-  const { data: applicationData } = await admin
+  const { data: applicationData, error: applicationError } = await admin
     .from("applications")
     .select("student_id, offers(company_id)")
     .eq("id", sourceId)
     .maybeSingle();
+
+  if (applicationError) {
+    await logUploadRouteError({
+      source: "storage.upload.application_lookup",
+      error: applicationError,
+      userId,
+      context: { sourceId, studentOnly },
+    });
+    throw new UploadRequestError("Nie udało się zweryfikować dostępu do zlecenia.", 500);
+  }
 
   const application = applicationData as ApplicationRow | null;
   const offer = unwrapRelation(application?.offers ?? null);
@@ -96,11 +152,21 @@ async function assertSourceParticipant(userId: string, sourceId: string, student
     if ((studentOnly && isStudent) || (!studentOnly && (isStudent || isCompany))) return;
   }
 
-  const { data: serviceOrderData } = await admin
+  const { data: serviceOrderData, error: serviceOrderError } = await admin
     .from("service_orders")
     .select("company_id, student_id")
     .eq("id", sourceId)
     .maybeSingle();
+
+  if (serviceOrderError) {
+    await logUploadRouteError({
+      source: "storage.upload.service_order_lookup",
+      error: serviceOrderError,
+      userId,
+      context: { sourceId, studentOnly },
+    });
+    throw new UploadRequestError("Nie udało się zweryfikować dostępu do zlecenia.", 500);
+  }
 
   const serviceOrder = serviceOrderData as ServiceOrderRow | null;
   if (serviceOrder) {
@@ -109,7 +175,7 @@ async function assertSourceParticipant(userId: string, sourceId: string, student
     if ((studentOnly && isStudent) || (!studentOnly && (isStudent || isCompany))) return;
   }
 
-  throw new Error("Brak dostepu do tego zlecenia.");
+  throw new UploadRequestError("Brak dostępu do tego zlecenia.", 403);
 }
 
 function requireString(formData: FormData, key: string): string {
@@ -145,25 +211,25 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return jsonError("Musisz byc zalogowany.", 401);
+    return jsonError("Musisz być zalogowany.", 401);
   }
 
   const limit = await enforceRateLimit("upload", buildRateLimitKey(["upload", user.id, getRequestIp(req)]));
   if (!limit.success) {
-    return jsonError("Zbyt wiele prób przesyłania plikow. Spróbuj ponownie za chwile.", 429);
+    return jsonError("Zbyt wiele prób przesyłania plików. Spróbuj ponownie za chwilę.", 429);
   }
 
   try {
     const formData = await req.formData();
     const purposeRaw = requireString(formData, "purpose");
     if (!PURPOSES.has(purposeRaw as UploadPurpose)) {
-      return jsonError("Nieprawidlowy typ uploadu.", 400);
+      return jsonError("Nieprawidłowy typ uploadu.", 400);
     }
 
     const purpose = purposeRaw as UploadPurpose;
     const file = formData.get("file");
     if (!(file instanceof File)) {
-      return jsonError("Brak pliku do przeslania.", 400);
+      return jsonError("Brak pliku do przesłania.", 400);
     }
 
     const validation = validateUploadFile(file, purpose);
@@ -176,10 +242,10 @@ export async function POST(req: NextRequest) {
       return jsonError("CV może przesłać tylko konto studenta.", 403);
     }
     if (purpose === "offer_attachment" && role !== "company") {
-      return jsonError("Zalacznik oferty może przesłać tylko konto firmy.", 403);
+      return jsonError("Załącznik oferty może przesłać tylko konto firmy.", 403);
     }
     if (purpose === "system_offer_attachment" && role !== "admin") {
-      return jsonError("Brak uprawnien administratora do tego uploadu.", 403);
+      return jsonError("Brak uprawnień administratora do tego uploadu.", 403);
     }
 
     const sourceId = requireString(formData, "sourceId");
@@ -187,13 +253,13 @@ export async function POST(req: NextRequest) {
 
     if (purpose === "chat_attachment") {
       if (!conversationId) return jsonError("Brak identyfikatora rozmowy.", 400);
-      if (!isUuid(conversationId)) return jsonError("Nieprawidlowy identyfikator rozmowy.", 400);
+      if (!isUuid(conversationId)) return jsonError("Nieprawidłowy identyfikator rozmowy.", 400);
       await assertConversationParticipant(user.id, conversationId);
     }
 
     if (purpose === "deliverable" || purpose === "deliverable_resource") {
       if (!sourceId) return jsonError("Brak identyfikatora zlecenia.", 400);
-      if (!isUuid(sourceId)) return jsonError("Nieprawidlowy identyfikator zlecenia.", 400);
+      if (!isUuid(sourceId)) return jsonError("Nieprawidłowy identyfikator zlecenia.", 400);
       await assertSourceParticipant(user.id, sourceId, purpose === "deliverable");
     }
 
@@ -201,7 +267,7 @@ export async function POST(req: NextRequest) {
     const fileId = crypto.randomUUID();
     const path = safeObjectPath(purpose, user.id, fileId, validation.extension, { sourceId, conversationId });
     if (!isSafeStoragePath(path)) {
-      return jsonError("Nieprawidłowa sciezka pliku.", 400);
+      return jsonError("Nieprawidłowa ścieżka pliku.", 400);
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -212,8 +278,19 @@ export async function POST(req: NextRequest) {
     });
 
     if (uploadError) {
-      console.error("[storage-upload] upload failed:", uploadError.message);
-      return jsonError("Nie udało sie zapisać pliku.", 500);
+      await logUploadRouteError({
+        source: "storage.upload.failed",
+        error: uploadError,
+        userId: user.id,
+        context: {
+          bucket: policy.bucket,
+          purpose,
+          contentType: file.type,
+          size: file.size,
+          storagePath: path,
+        },
+      });
+      return jsonError("Nie udało się zapisać pliku.", 500);
     }
 
     const bucket = policy.bucket;
@@ -221,7 +298,7 @@ export async function POST(req: NextRequest) {
       ? admin.storage.from("portfolio").getPublicUrl(path).data.publicUrl
       : buildStorageRef(bucket, path);
 
-    return NextResponse.json(
+    return noStoreJson(
       {
         bucket,
         path,
@@ -230,10 +307,17 @@ export async function POST(req: NextRequest) {
         size: file.size,
         contentType: file.type,
       },
-      { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Nie udało sie przesłać pliku.";
-    return jsonError(message, 400);
+    if (error instanceof UploadRequestError) {
+      return jsonError(error.message, error.status);
+    }
+
+    await logUploadRouteError({
+      source: "storage.upload.unhandled",
+      error,
+      userId: user.id,
+    });
+    return jsonError("Nie udało się przesłać pliku.", 500);
   }
 }

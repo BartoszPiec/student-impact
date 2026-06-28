@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { FileBadge2, FileText, RefreshCw, ShieldCheck } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileBadge2, FileText, RefreshCw, ShieldCheck } from "lucide-react";
 import { DocumentCard } from "@/components/documents/document-card";
 import { useStudentDocuments } from "@/hooks/use-student-documents";
 import { getContractStatusLabel } from "@/types/documents";
 
 type DocumentKindFilter = "all" | "contract" | "invoice";
+const DOCUMENT_GROUPS_PAGE_SIZE = 10;
 
 export default function StudentDocumentsPanel() {
   const { groups, isLoading, error, reload } = useStudentDocuments();
   const [kindFilter, setKindFilter] = useState<DocumentKindFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const visibleGroups = groups
     .map((group) => ({
@@ -32,6 +34,18 @@ export default function StudentDocumentsPanel() {
     (sum, group) => sum + group.documents.filter((document) => document.kind === "contract").length,
     0,
   );
+  const totalPages = Math.max(1, Math.ceil(visibleGroups.length / DOCUMENT_GROUPS_PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * DOCUMENT_GROUPS_PAGE_SIZE;
+  const pageEnd = pageStart + DOCUMENT_GROUPS_PAGE_SIZE;
+  const pagedGroups = visibleGroups.slice(pageStart, pageEnd);
+  const displayedStart = visibleGroups.length > 0 ? pageStart + 1 : 0;
+  const displayedEnd = Math.min(pageEnd, visibleGroups.length);
+
+  const handleKindFilterChange = (filter: DocumentKindFilter) => {
+    setKindFilter(filter);
+    setCurrentPage(1);
+  };
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
@@ -96,7 +110,7 @@ export default function StudentDocumentsPanel() {
             <button
               key={option.id}
               type="button"
-              onClick={() => setKindFilter(option.id)}
+              onClick={() => handleKindFilterChange(option.id)}
               className={
                 isActive
                   ? "shrink-0 rounded-full border border-lime-200 bg-lime-200 px-4 py-2 text-xs font-black uppercase tracking-normal text-[#0b1b47] shadow-sm"
@@ -135,7 +149,40 @@ export default function StudentDocumentsPanel() {
 
       {!isLoading && !error && visibleGroups.length > 0 ? (
         <div className="mt-8 space-y-6">
-          {visibleGroups.map((group) => (
+          <div className="flex flex-col gap-3 rounded-[1.5rem] border border-slate-100 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-bold text-slate-500">
+              Pokazano{" "}
+              <span className="text-slate-900">{displayedStart}-{displayedEnd}</span>{" "}
+              z <span className="text-slate-900">{visibleGroups.length}</span> grup dokumentów
+            </p>
+            {totalPages > 1 ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={safePage === 1}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 transition hover:border-lime-200 hover:text-[#10245f] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Poprzednie
+                </button>
+                <span className="min-w-16 text-center text-xs font-black uppercase tracking-wider text-slate-400">
+                  {safePage}/{totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={safePage === totalPages}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 transition hover:border-lime-200 hover:text-[#10245f] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Następne
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {pagedGroups.map((group) => (
             <div
               key={group.contractId}
               className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4 sm:rounded-[2rem] sm:p-5"
@@ -161,6 +208,33 @@ export default function StudentDocumentsPanel() {
               </div>
             </div>
           ))}
+
+          {totalPages > 1 ? (
+            <div className="flex flex-col items-center justify-between gap-3 rounded-[1.5rem] border border-slate-100 bg-white px-4 py-4 sm:flex-row">
+              <p className="text-sm font-semibold text-slate-500">
+                Strona <span className="font-black text-slate-900">{safePage}</span> z{" "}
+                <span className="font-black text-slate-900">{totalPages}</span>
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={safePage === 1}
+                  className="h-10 rounded-full border border-slate-200 px-4 text-xs font-black text-slate-600 transition hover:border-lime-200 hover:text-[#10245f] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Poprzednia
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={safePage === totalPages}
+                  className="h-10 rounded-full bg-[#10245f] px-4 text-xs font-black text-white transition hover:bg-[#0b1b47] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Następna
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>

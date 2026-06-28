@@ -10,6 +10,8 @@ import { buildRateLimitKey, enforceRateLimit } from "@/lib/rate-limit";
 import { ensureConversationForApplication } from "@/lib/services/service-order-conversations";
 import { rejectCompetingApplicationsForOffer } from "@/lib/services/application-chat-closure";
 import { assertCanAccessStorageRef, assertUploadedObjectExists } from "@/lib/security/storage";
+import { logCriticalError } from "@/lib/observability/error-log";
+import { uuidSchema } from "@/lib/security/validation";
 
 export type PaginatedChatMessage = {
   id: string;
@@ -24,33 +26,119 @@ export type PaginatedChatMessage = {
   payload: Record<string, unknown> | null;
 };
 
+function parseChatUuid(value: unknown, label: string) {
+  if (typeof value !== "string") {
+    throw new Error(`Nieprawidlowy identyfikator ${label}.`);
+  }
+  if (value !== value.trim()) {
+    throw new Error(`Nieprawidlowy identyfikator ${label}.`);
+  }
+
+  const parsed = uuidSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Nieprawidlowy identyfikator ${label}.`);
+  }
+
+  return parsed.data;
+}
+
+function parseMessageCursor(value: unknown) {
+  if (typeof value !== "string") {
+    throw new Error("Nieprawidlowy kursor paginacji wiadomosci.");
+  }
+  const trimmed = value.trim();
+  if (!trimmed || Number.isNaN(Date.parse(trimmed))) {
+    throw new Error("Nieprawidlowy kursor paginacji wiadomosci.");
+  }
+
+  return trimmed;
+}
+
+function clampPageSize(value: number) {
+  if (!Number.isFinite(value)) return 100;
+  return Math.min(Math.max(Math.trunc(value), 1), 100);
+}
+
+async function logChatActionError(input: {
+  source: string;
+  error?: unknown;
+  message?: string;
+  level?: "error" | "warning" | "info";
+  userId?: string | null;
+  conversationId?: string | null;
+  applicationId?: string | null;
+  offerId?: string | null;
+  packageId?: string | null;
+  serviceOrderId?: string | null;
+  contractId?: string | null;
+}) {
+  await logCriticalError({
+    source: input.source,
+    error: input.error,
+    message: input.message,
+    level: input.level ?? "error",
+    userId: input.userId ?? null,
+    orderId: input.serviceOrderId ?? null,
+    contractId: input.contractId ?? null,
+    context: {
+      conversationId: input.conversationId ?? null,
+      applicationId: input.applicationId ?? null,
+      offerId: input.offerId ?? null,
+      packageId: input.packageId ?? null,
+      serviceOrderId: input.serviceOrderId ?? null,
+      contractId: input.contractId ?? null,
+    },
+  });
+}
+
 export async function getOlderMessages(
   conversationId: string,
   beforeCreatedAt: string,
   pageSize = 100,
 ): Promise<PaginatedChatMessage[]> {
   const supabase = await createClient();
+  const safeConversationId = parseChatUuid(conversationId, "rozmowy");
+  const safeBeforeCreatedAt = parseMessageCursor(beforeCreatedAt);
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) throw new Error("Musisz być zalogowany, aby pobrać wiadomości.");
 
-  const { data: conversation } = await supabase
+  const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
     .select("id")
-    .eq("id", conversationId)
+    .eq("id", safeConversationId)
     .or(`student_id.eq.${user.id},company_id.eq.${user.id}`)
     .maybeSingle();
 
+  if (conversationError) {
+    await logChatActionError({
+      source: "chat.messages.pagination.conversation_lookup",
+      error: conversationError,
+      userId: user.id,
+      conversationId: safeConversationId,
+    });
+    throw new Error("Nie udalo sie sprawdzic dostepu do rozmowy.");
+  }
+
   if (!conversation) throw new Error("Nie masz dostępu do tej rozmowy.");
 
-  const safePageSize = Math.min(Math.max(pageSize, 1), 100);
+  const safePageSize = clampPageSize(pageSize);
   const { data, error } = await supabase
     .from("messages")
     .select("id, sender_id, content, created_at, read_at, flagged_by, attachment_url, attachment_type, event, payload")
-    .eq("conversation_id", conversationId)
-    .lt("created_at", beforeCreatedAt)
+    .eq("conversation_id", safeConversationId)
+    .lt("created_at", safeBeforeCreatedAt)
     .order("created_at", { ascending: false })
     .limit(safePageSize);
+
+  if (error) {
+    await logChatActionError({
+      source: "chat.messages.pagination.load",
+      error,
+      userId: user.id,
+      conversationId: safeConversationId,
+    });
+  }
 
   if (error) throw new Error("Nie udało się pobrać starszych wiadomości.");
   return ((data ?? []) as PaginatedChatMessage[]).reverse();
@@ -108,6 +196,7 @@ async function ensureApplicationInitialMessage(
 
 export async function openChatForApplication(applicationId: string) {
   const supabase = await createClient();
+  const safeApplicationId = parseChatUuid(applicationId, "aplikacji");
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
@@ -115,10 +204,19 @@ export async function openChatForApplication(applicationId: string) {
   const { data: appRow, error: appErr } = await supabase
     .from("applications")
     .select("id, student_id, offer_id, status, message_to_company, offers(company_id)")
-    .eq("id", applicationId)
-    .single();
+    .eq("id", safeApplicationId)
+    .maybeSingle();
 
-  if (appErr || !appRow) throw new Error(appErr?.message ?? "Brak aplikacji");
+  if (appErr) {
+    await logChatActionError({
+      source: "chat.open.application.lookup",
+      error: appErr,
+      userId: user.id,
+      applicationId: safeApplicationId,
+    });
+    throw new Error("Nie udalo sie pobrac aplikacji.");
+  }
+  if (!appRow) throw new Error("Brak aplikacji");
 
   const typedRow = appRow as ApplicationForChat;
   const offer = Array.isArray(typedRow.offers) ? typedRow.offers[0] : typedRow.offers;
@@ -139,7 +237,7 @@ export async function openChatForApplication(applicationId: string) {
   const { data: existing } = await supabase
     .from("conversations")
     .select("id")
-    .eq("application_id", applicationId)
+    .eq("application_id", safeApplicationId)
     .maybeSingle();
 
   if (existing?.id) {
@@ -147,14 +245,14 @@ export async function openChatForApplication(applicationId: string) {
       conversationId: existing.id,
       studentId,
       companyId,
-      applicationId,
+      applicationId: safeApplicationId,
       content: firstMessage,
     });
     redirect(`/app/chat/${existing.id}`);
   }
 
   const created = await ensureConversationForApplication(supabase, {
-    applicationId,
+    applicationId: safeApplicationId,
     companyId,
     studentId,
     offerId,
@@ -165,7 +263,7 @@ export async function openChatForApplication(applicationId: string) {
       conversationId: created.id,
       studentId,
       companyId,
-      applicationId,
+      applicationId: safeApplicationId,
       content: firstMessage,
     });
     redirect(`/app/chat/${created.id}`);
@@ -188,7 +286,7 @@ export async function openChatForApplication(applicationId: string) {
 
     await sendNotification(companyId, "message_new", {
       conversation_id: created.id,
-      application_id: applicationId,
+      application_id: safeApplicationId,
       snippet: first.slice(0, 80),
     });
   }
@@ -198,6 +296,7 @@ export async function openChatForApplication(applicationId: string) {
 
 export async function openChatForOfferInquiry(offerId: string) {
   const supabase = await createClient();
+  const safeOfferId = parseChatUuid(offerId, "oferty");
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
@@ -208,28 +307,57 @@ export async function openChatForOfferInquiry(offerId: string) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (profileError || profile?.role !== "student") {
+  if (profileError) {
+    await logChatActionError({
+      source: "chat.open.offer_inquiry.profile_lookup",
+      error: profileError,
+      userId: user.id,
+      offerId: safeOfferId,
+    });
+    throw new Error("Nie udalo sie sprawdzic profilu uzytkownika.");
+  }
+
+  if (profile?.role !== "student") {
     throw new Error("Tylko konto studenta może rozpoczac rozmowe o ofercie.");
   }
 
-  const { data: offer } = await supabase
+  const { data: offer, error: offerError } = await supabase
     .from("offers")
     .select("company_id")
-    .eq("id", offerId)
-    .single();
+    .eq("id", safeOfferId)
+    .maybeSingle();
 
+  if (offerError) {
+    await logChatActionError({
+      source: "chat.open.offer_inquiry.offer_lookup",
+      error: offerError,
+      userId: user.id,
+      offerId: safeOfferId,
+    });
+    throw new Error("Nie udalo sie pobrac oferty.");
+  }
   if (!offer) throw new Error("Oferta nie istnieje");
   if (offer.company_id === user.id) {
-    redirect(`/app/offers/${offerId}`);
+    redirect(`/app/offers/${safeOfferId}`);
   }
 
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("conversations")
     .select("id")
-    .eq("offer_id", offerId)
+    .eq("offer_id", safeOfferId)
     .eq("student_id", user.id)
     .eq("company_id", offer.company_id)
     .maybeSingle();
+
+  if (existingError) {
+    await logChatActionError({
+      source: "chat.open.offer_inquiry.conversation_lookup",
+      error: existingError,
+      userId: user.id,
+      offerId: safeOfferId,
+    });
+    throw new Error("Nie udalo sie sprawdzic istniejacej rozmowy.");
+  }
 
   if (existing?.id) {
     redirect(`/app/chat/${existing.id}`);
@@ -238,12 +366,21 @@ export async function openChatForOfferInquiry(offerId: string) {
   const { data: created, error } = await supabase
     .from("conversations")
     .insert({
-      offer_id: offerId,
+      offer_id: safeOfferId,
       student_id: user.id,
       company_id: offer.company_id,
     })
     .select("id")
     .single();
+
+  if (error || !created) {
+    await logChatActionError({
+      source: "chat.open.offer_inquiry.create_conversation",
+      error: error ?? new Error("Supabase insert returned no conversation id."),
+      userId: user.id,
+      offerId: safeOfferId,
+    });
+  }
 
   if (error || !created) throw new Error("Nie udało się utworzyć rozmowy.");
 
@@ -336,15 +473,25 @@ export async function toggleMessageFlag(conversationId: string, messageId: strin
 
 async function validateParticipant(conversationId: string) {
   const supabase = await createClient();
+  const safeConversationId = parseChatUuid(conversationId, "rozmowy");
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
+  if (!user) throw new Error("Musisz być zalogowany.");
 
-  const { data: conv } = await supabase
+  const { data: conv, error } = await supabase
     .from("conversations")
     .select("id, company_id, student_id, application_id, service_order_id, package_id, status")
-    .eq("id", conversationId)
-    .single();
+    .eq("id", safeConversationId)
+    .maybeSingle();
 
+  if (error) {
+    await logChatActionError({
+      source: "chat.validate_participant.conversation_lookup",
+      error,
+      userId: user.id,
+      conversationId: safeConversationId,
+    });
+    throw new Error("Nie udalo sie pobrac rozmowy.");
+  }
   if (!conv) throw new Error("Rozmowa nie istnieje");
 
   const isParticipant = user.id === conv.company_id || user.id === conv.student_id;
@@ -598,19 +745,50 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
         decided_at: new Date().toISOString()
       })
       .eq("id", conv.application_id);
-    if (error) throw new Error("Błąd aktualizacji stawki aplikacji");
+    if (error) {
+      await logChatActionError({
+        source: "chat.rate.accept.application_update",
+        error,
+        userId: user.id,
+        conversationId,
+        applicationId: conv.application_id,
+      });
+      throw new Error("Nie udało się zaktualizować stawki aplikacji.");
+    }
 
     // ✅ Create Contract (Mirror dashboard logic)
-    await supabase.rpc("ensure_contract_for_application", {
+    const { error: applicationContractError } = await supabase.rpc("ensure_contract_for_application", {
       p_application_id: conv.application_id,
     });
 
+    if (applicationContractError) {
+      await logChatActionError({
+        source: "chat.rate.accept.application_contract",
+        error: applicationContractError,
+        userId: user.id,
+        conversationId,
+        applicationId: conv.application_id,
+      });
+      throw new Error("Stawka została zaakceptowana, ale nie udało się przygotować kontraktu.");
+    }
+
     // ✅ Reject competing applications + update offer status (mirror acceptApplication logic)
-    const { data: appData } = await supabase
+    const { data: appData, error: appDataError } = await supabase
       .from("applications")
       .select("offer_id, offers!inner(id, tytul, company_id, is_platform_service, typ)")
       .eq("id", conv.application_id)
       .single();
+
+    if (appDataError) {
+      await logChatActionError({
+        source: "chat.rate.accept.application_reload",
+        error: appDataError,
+        userId: user.id,
+        conversationId,
+        applicationId: conv.application_id,
+      });
+      throw new Error("Nie udało się odświeżyć aplikacji po akceptacji stawki.");
+    }
 
     if (appData) {
       const offerRow = (Array.isArray(appData.offers) ? appData.offers[0] : appData.offers) as {
@@ -640,10 +818,22 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
         }
 
         // Update offer status to in_progress
-        await supabase
+        const { error: offerStatusError } = await supabase
           .from("offers")
           .update({ status: "in_progress" })
           .eq("id", appData.offer_id);
+
+        if (offerStatusError) {
+          await logChatActionError({
+            source: "chat.rate.accept.offer_status",
+            error: offerStatusError,
+            userId: user.id,
+            conversationId,
+            applicationId: conv.application_id,
+            offerId: appData.offer_id,
+          });
+          throw new Error("Stawka została zaakceptowana, ale nie udało się zaktualizować statusu oferty.");
+        }
       }
     }
   } else {
@@ -652,7 +842,7 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
 
     if (effectivePackageId) {
       // FIX: Find the SPECIFIC latest active order to avoid updating old ones or crashing on duplicates
-      const { data: targetOrder } = await supabase
+      const { data: targetOrder, error: targetOrderError } = await supabase
         .from("service_orders")
         .select("id")
         .eq("package_id", effectivePackageId)
@@ -664,9 +854,26 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
         .limit(1)
         .maybeSingle();
 
+      if (targetOrderError) {
+        await logChatActionError({
+          source: "chat.rate.accept.service_order_lookup",
+          error: targetOrderError,
+          userId: user.id,
+          conversationId,
+          packageId: effectivePackageId,
+        });
+        throw new Error("Nie udało się sprawdzić aktywnego zlecenia.");
+      }
+
       if (!targetOrder) {
-        console.warn("Nie znaleziono aktywnego zlecenia dla tej oferty/pakietu chat.");
-        // Fallback or throw? For now just throw to match user expectations of "Action Failed" if no context
+        await logChatActionError({
+          source: "chat.rate.accept.service_order_missing",
+          message: "Nie znaleziono aktywnego zlecenia dla rozmowy przy akceptacji stawki.",
+          level: "warning",
+          userId: user.id,
+          conversationId,
+          packageId: effectivePackageId,
+        });
         throw new Error("Nie znaleziono aktywnego zlecenia do aktualizacji.");
       }
 
@@ -677,22 +884,51 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
         .select("id")
         .single();
 
-      if (error) throw new Error("Błąd aktualizacji stawki zlecenia");
+      if (error) {
+        await logChatActionError({
+          source: "chat.rate.accept.service_order_update",
+          error,
+          userId: user.id,
+          conversationId,
+          packageId: effectivePackageId,
+          serviceOrderId: targetOrder.id,
+        });
+        throw new Error("Nie udało się zaktualizować stawki zlecenia.");
+      }
 
       if (updatedOrder) {
         // Initialize Realization (Contract)
-        await supabase.rpc("ensure_contract_for_service_order", {
+        const { error: serviceContractError } = await supabase.rpc("ensure_contract_for_service_order", {
           p_service_order_id: updatedOrder.id
         });
+
+        if (serviceContractError) {
+          await logChatActionError({
+            source: "chat.rate.accept.service_order_contract",
+            error: serviceContractError,
+            userId: user.id,
+            conversationId,
+            packageId: effectivePackageId,
+            serviceOrderId: updatedOrder.id,
+          });
+          throw new Error("Stawka została zaakceptowana, ale nie udało się przygotować kontraktu.");
+        }
       }
     } else {
-      console.warn("No application or package linked to negotiation.");
+      await logChatActionError({
+        source: "chat.rate.accept.no_source",
+        message: "Rozmowa nie ma powiązanej aplikacji ani pakietu przy akceptacji stawki.",
+        level: "warning",
+        userId: user.id,
+        conversationId,
+      });
+      throw new Error("Nie można zaakceptować stawki bez powiązanego zlecenia.");
     }
   }
 
 
   // 2. Send Acceptance Message
-  await supabase.from("messages").insert({
+  const { error: acceptanceMessageError } = await supabase.from("messages").insert({
     conversation_id: conversationId,
     sender_id: user.id,
     content: `Zaakceptowano stawkę: ${rate} zł`,
@@ -703,6 +939,19 @@ export async function acceptRate(conversationId: string, refMessageId: string, r
       agreed_rate_minor: toMinorUnits(rate)
     }
   });
+
+  if (acceptanceMessageError) {
+    await logChatActionError({
+      source: "chat.rate.accept.message_insert",
+      error: acceptanceMessageError,
+      userId: user.id,
+      conversationId,
+      applicationId: conv.application_id ?? null,
+      packageId: conv.package_id ?? null,
+      serviceOrderId: conv.service_order_id ?? null,
+    });
+    throw new Error("Stawka została zaakceptowana, ale nie udało się zapisać wiadomości w rozmowie.");
+  }
 
   revalidatePath(`/app/chat/${conversationId}`);
 }
@@ -810,17 +1059,26 @@ export async function reportProblem(conversationId: string, reasonRaw: string) {
 
   // 1. Ślad w rozmowie — obie strony widzą, że sprawa trafiła do administracji.
   //    Best-effort: zgłoszenie ma się powieść nawet jeśli zapis notatki zawiedzie.
-  try {
-    await supabase.from("messages").insert({
-      conversation_id: conversationId,
-      sender_id: user.id,
-      content:
-        "Zgłoszono problem do administracji platformy. Zespół wsparcia przeanalizuje sprawę i skontaktuje się ze stronami.",
-      event: "system.notice",
-      payload: { kind: "problem_reported", reason, reported_by: reportedBy },
+  const { error: problemMessageError } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: user.id,
+    content:
+      "Zgłoszono problem do administracji platformy. Zespół wsparcia przeanalizuje sprawę i skontaktuje się ze stronami.",
+    event: "system.notice",
+    payload: { kind: "problem_reported", reason, reported_by: reportedBy },
+  });
+
+  if (problemMessageError) {
+    await logChatActionError({
+      source: "chat.problem_report.message_insert",
+      error: problemMessageError,
+      level: "warning",
+      userId: user.id,
+      conversationId,
+      applicationId: conv.application_id ?? null,
+      packageId: conv.package_id ?? null,
+      serviceOrderId: conv.service_order_id ?? null,
     });
-  } catch (error) {
-    console.error("Nie udało się zapisać notatki o zgłoszeniu problemu:", error);
   }
 
   // 2. Eskalacja do administracji — service role (kontrakty/profile poza zasięgiem RLS użytkownika).
@@ -841,36 +1099,92 @@ export async function reportProblem(conversationId: string, reasonRaw: string) {
         ? contractQuery.eq("application_id", conv.application_id)
         : contractQuery.eq("service_order_id", conv.service_order_id);
 
-      const { data: contract } = await contractQuery.maybeSingle();
+      const { data: contract, error: contractLookupError } = await contractQuery.maybeSingle();
+
+      if (contractLookupError) {
+        await logChatActionError({
+          source: "chat.problem_report.contract_lookup",
+          error: contractLookupError,
+          level: "warning",
+          userId: user.id,
+          conversationId,
+          applicationId: conv.application_id ?? null,
+          serviceOrderId: conv.service_order_id ?? null,
+        });
+      }
 
       if (contract?.id) {
         contractId = contract.id;
         previousStatus = contract.status ?? null;
 
         if (contract.status !== "disputed" && contract.status !== "cancelled") {
-          await admin
+          const { error: contractUpdateError } = await admin
             .from("contracts")
             .update({ status: "disputed", updated_at: new Date().toISOString() })
             .eq("id", contract.id);
+
+          if (contractUpdateError) {
+            await logChatActionError({
+              source: "chat.problem_report.contract_update",
+              error: contractUpdateError,
+              level: "warning",
+              userId: user.id,
+              conversationId,
+              applicationId: conv.application_id ?? null,
+              serviceOrderId: conv.service_order_id ?? null,
+              contractId: contract.id,
+            });
+          }
         }
       }
     }
   } catch (error) {
-    console.error("Nie udało się oznaczyć kontraktu jako spornego:", error);
+    await logChatActionError({
+      source: "chat.problem_report.contract_unexpected",
+      error,
+      level: "warning",
+      userId: user.id,
+      conversationId,
+      applicationId: conv.application_id ?? null,
+      serviceOrderId: conv.service_order_id ?? null,
+      contractId,
+    });
   }
 
   // 2b. Powiadom wszystkich administratorów.
-  const { data: adminProfiles } = await admin
+  const { data: adminProfiles, error: adminProfilesError } = await admin
     .from("profiles")
     .select("user_id")
     .eq("role", "admin");
+
+  if (adminProfilesError) {
+    await logChatActionError({
+      source: "chat.problem_report.admin_lookup",
+      error: adminProfilesError,
+      level: "warning",
+      userId: user.id,
+      conversationId,
+      applicationId: conv.application_id ?? null,
+      serviceOrderId: conv.service_order_id ?? null,
+      contractId,
+    });
+  }
 
   const adminIds = (adminProfiles ?? [])
     .map((row) => row.user_id as string | null)
     .filter((id): id is string => Boolean(id));
 
   if (adminIds.length === 0) {
-    console.error("reportProblem: brak konta administratora do powiadomienia o sporze.");
+    await logChatActionError({
+      source: "chat.problem_report.no_admin_recipients",
+      message: "Brak konta administratora do powiadomienia o sporze.",
+      level: "warning",
+      userId: user.id,
+      conversationId,
+      applicationId: conv.application_id ?? null,
+      serviceOrderId: conv.service_order_id ?? null,
+      contractId,
+    });
   }
 
   const redirectPath = contractId

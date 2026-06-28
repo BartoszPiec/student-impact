@@ -40,10 +40,13 @@ export default async function CompanyOrdersPage() {
       requirements,
       request_snapshot,
       quote_snapshot,
+      student_selected_at,
       student_id,
       package:service_packages!service_orders_package_id_fkey(
         id,
-        title
+        title,
+        type,
+        is_system
       )
     `)
     .eq("company_id", user.id)

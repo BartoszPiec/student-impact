@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 import { checkPayoutAccountReadiness } from "@/lib/stripe/connect-readiness";
+import { logCriticalError } from "@/lib/observability/error-log";
 
 type CreatePayoutTransferInput = {
   payoutId: string;
@@ -52,12 +53,50 @@ type PayoutTransferResult =
   | { status: "marked_paid"; transferId: string; amountNetMinor: number }
   | { status: "transferred"; transferId: string; amountNetMinor: number };
 
+const PAYOUT_GENERIC_TRANSFER_ERROR = "Nie udało się wykonać transferu Stripe.";
+const PAYOUT_LEDGER_ERROR = "Nie udało się zatwierdzić wypłaty po transferze Stripe.";
+const PAYOUT_PAYMENT_CONFIRMATION_ERROR = "Nie udało się potwierdzić płatności kontraktu.";
+const PAYOUT_LOAD_ERROR = "Nie udało się pobrać wypłaty.";
+const PAYOUT_STUDENT_STRIPE_LOAD_ERROR = "Nie udało się pobrać konta Stripe studenta.";
+const PAYOUT_PROCESSING_UPDATE_ERROR = "Nie udało się oznaczyć wypłaty jako przetwarzanej.";
+const PAYOUT_TRANSFER_ID_SAVE_ERROR = "Transfer Stripe został utworzony, ale nie udało się zapisać jego identyfikatora.";
+const SAFE_PAYOUT_ERROR_PREFIXES = ["Nie ", "Wyplata ", "Wypłata ", "Kontrakt ", "Etap ", "Brak ", "Student "];
+
 function unwrapRelation<T>(value: T | T[] | null): T | null {
   if (Array.isArray(value)) {
     return value[0] ?? null;
   }
 
   return value ?? null;
+}
+
+function readErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.trim().length > 0 ? code.trim() : null;
+}
+
+async function logPayoutTransferError(input: {
+  source: string;
+  error?: unknown;
+  message: string;
+  payoutId?: string | null;
+  contractId?: string | null;
+  paymentId?: string | null;
+  context?: Record<string, unknown>;
+}) {
+  await logCriticalError({
+    source: input.source,
+    error: input.error,
+    errorCode: readErrorCode(input.error),
+    message: input.message,
+    contractId: input.contractId ?? null,
+    paymentId: input.paymentId ?? null,
+    context: {
+      payoutId: input.payoutId ?? null,
+      ...input.context,
+    },
+  });
 }
 
 function amountNetMinorFromPayout(payout: Pick<PayoutTransferRow, "amount_net" | "amount_net_minor">): number {
@@ -87,13 +126,23 @@ async function markPayoutPaidInLedger(
   });
 
   if (error) {
-    throw new Error("Nie udało się zatwierdzić wypłaty po transferze Stripe: " + error.message);
+    await logPayoutTransferError({
+      source: "stripe.payouts.ledger_mark_paid_failed",
+      error,
+      message: "process_payout_paid_v1 failed after Stripe transfer.",
+      payoutId,
+      context: {
+        amountNetMinor,
+        paidByAdminId,
+      },
+    });
+    throw new Error(PAYOUT_LEDGER_ERROR);
   }
 }
 
 async function recordPayoutTransferError(payoutId: string, message: string): Promise<void> {
   const admin = createAdminClient();
-  await admin
+  const { error } = await admin
     .from("payouts")
     .update({
       status: "pending",
@@ -102,6 +151,18 @@ async function recordPayoutTransferError(payoutId: string, message: string): Pro
     })
     .eq("id", payoutId)
     .neq("status", "paid");
+
+  if (error) {
+    await logPayoutTransferError({
+      source: "stripe.payouts.error_record_failed",
+      error,
+      message: "Failed to persist payout transfer error.",
+      payoutId,
+      context: {
+        payoutErrorMessage: message,
+      },
+    });
+  }
 }
 
 async function assertPayoutCanBeTransferred(payout: PayoutTransferRow): Promise<void> {
@@ -134,7 +195,14 @@ async function assertPayoutCanBeTransferred(payout: PayoutTransferRow): Promise<
     .maybeSingle();
 
   if (error) {
-    throw new Error("Nie udało się potwierdzić płatności kontraktu: " + error.message);
+    await logPayoutTransferError({
+      source: "stripe.payouts.payment_confirmation_failed",
+      error,
+      message: "Completed payment lookup failed before Stripe payout transfer.",
+      payoutId: payout.id,
+      contractId: payout.contract_id,
+    });
+    throw new Error(PAYOUT_PAYMENT_CONFIRMATION_ERROR);
   }
 
   if (!payment) {
@@ -143,7 +211,10 @@ async function assertPayoutCanBeTransferred(payout: PayoutTransferRow): Promise<
 }
 
 function resolvePayoutError(error: unknown): string {
-  return error instanceof Error ? error.message : "Nie udało się wykonać transferu Stripe.";
+  const message = error instanceof Error ? error.message.trim() : "";
+  return SAFE_PAYOUT_ERROR_PREFIXES.some((prefix) => message.startsWith(prefix))
+    ? message
+    : PAYOUT_GENERIC_TRANSFER_ERROR;
 }
 
 export async function createPayoutTransfer(input: CreatePayoutTransferInput) {
@@ -184,7 +255,13 @@ export async function transferPayoutViaStripe(
     .maybeSingle();
 
   if (error) {
-    const message = "Nie udało się pobrać wypłaty: " + error.message;
+    const message = PAYOUT_LOAD_ERROR;
+    await logPayoutTransferError({
+      source: "stripe.payouts.payout_lookup_failed",
+      error,
+      message: "Payout lookup failed before Stripe transfer.",
+      payoutId,
+    });
     if (options.throwOnError) throw new Error(message);
     return { status: "failed", message };
   }
@@ -241,7 +318,17 @@ export async function transferPayoutViaStripe(
     .maybeSingle();
 
   if (studentStripeError) {
-    const message = "Nie udało się pobrać konta Stripe studenta: " + studentStripeError.message;
+    const message = PAYOUT_STUDENT_STRIPE_LOAD_ERROR;
+    await logPayoutTransferError({
+      source: "stripe.payouts.student_stripe_lookup_failed",
+      error: studentStripeError,
+      message: "Student Stripe profile lookup failed before payout transfer.",
+      payoutId: payout.id,
+      contractId: payout.contract_id,
+      context: {
+        studentId,
+      },
+    });
     await recordPayoutTransferError(payout.id, message);
     if (options.throwOnError) throw new Error(message);
     return { status: "failed", message };
@@ -262,7 +349,7 @@ export async function transferPayoutViaStripe(
     return { status: "failed", message: accountReadiness.message };
   }
 
-  await admin
+  const { error: processingUpdateError } = await admin
     .from("payouts")
     .update({
       status: "processing",
@@ -271,6 +358,20 @@ export async function transferPayoutViaStripe(
     })
     .eq("id", payout.id)
     .in("status", ["pending", "processing"]);
+
+  if (processingUpdateError) {
+    const message = PAYOUT_PROCESSING_UPDATE_ERROR;
+    await logPayoutTransferError({
+      source: "stripe.payouts.processing_update_failed",
+      error: processingUpdateError,
+      message: "Failed to mark payout as processing before Stripe transfer.",
+      payoutId: payout.id,
+      contractId: payout.contract_id,
+    });
+    await recordPayoutTransferError(payout.id, message);
+    if (options.throwOnError) throw new Error(message);
+    return { status: "failed", message };
+  }
 
   try {
     const transfer = await createPayoutTransfer({
@@ -281,7 +382,7 @@ export async function transferPayoutViaStripe(
       destinationAccountId: stripeProfile.stripe_account_id,
     });
 
-    await admin
+    const { error: transferUpdateError } = await admin
       .from("payouts")
       .update({
         stripe_transfer_id: transfer.id,
@@ -291,11 +392,39 @@ export async function transferPayoutViaStripe(
       })
       .eq("id", payout.id);
 
+    if (transferUpdateError) {
+      const message = PAYOUT_TRANSFER_ID_SAVE_ERROR;
+      await logPayoutTransferError({
+        source: "stripe.payouts.transfer_id_update_failed",
+        error: transferUpdateError,
+        message: "Failed to persist Stripe transfer id after payout transfer.",
+        payoutId: payout.id,
+        contractId: payout.contract_id,
+        context: {
+          stripeTransferId: transfer.id,
+        },
+      });
+      await recordPayoutTransferError(payout.id, message);
+      if (options.throwOnError) throw new Error(message);
+      return { status: "failed", message };
+    }
+
     await markPayoutPaidInLedger(payout.id, amountNetMinor, options.paidByAdminId ?? null);
 
     return { status: "transferred", transferId: transfer.id, amountNetMinor };
   } catch (error) {
     const message = resolvePayoutError(error);
+    await logPayoutTransferError({
+      source: "stripe.payouts.transfer_failed",
+      error,
+      message: "Stripe transfer failed while processing payout.",
+      payoutId: payout.id,
+      contractId: payout.contract_id,
+      context: {
+        amountNetMinor,
+        destinationAccountId: stripeProfile.stripe_account_id,
+      },
+    });
     await recordPayoutTransferError(payout.id, message);
     if (options.throwOnError) throw new Error(message);
     return { status: "failed", message };
@@ -321,7 +450,15 @@ export async function transferLatestPayoutForMilestone(
     .maybeSingle();
 
   if (error) {
-    const message = "Nie udało się pobrać wypłaty dla etapu: " + error.message;
+    const message = "Nie udało się pobrać wypłaty dla etapu.";
+    await logPayoutTransferError({
+      source: "stripe.payouts.latest_for_milestone_lookup_failed",
+      error,
+      message: "Latest payout lookup for milestone failed.",
+      context: {
+        milestoneId,
+      },
+    });
     if (options.throwOnError) throw new Error(message);
     return { status: "failed", message };
   }

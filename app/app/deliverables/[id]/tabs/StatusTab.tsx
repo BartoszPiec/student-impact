@@ -13,7 +13,6 @@ import { ReviewForm } from "../ReviewForm";
 
 import {
     submitReview,
-    fundContractAction,
     submitMilestoneWorkAction,
     reviewMilestoneAction,
     getSignedStorageUrl,
@@ -30,6 +29,7 @@ import { uploadPrivateFile } from "@/lib/security/client-upload";
 import { SecureImageViewer } from "@/app/components/SecureImageViewer";
 import { ReviewBreakdown } from "@/components/reviews/ReviewBreakdown";
 import { parseDetailedReviewComment } from "@/lib/reviews";
+import { cn } from "@/lib/utils";
 
 type ReviewData = {
     reviewer_id: string;
@@ -111,6 +111,11 @@ type StatusTabProps = {
     contractDocuments?: ContractDocument[];
     isServiceOrder?: boolean;
     resources?: ResourceRow[];
+    projectTitle?: string | null;
+    companyName?: string | null;
+    companyHref?: string | null;
+    conversationHref?: string | null;
+    nextActionLabel?: string | null;
 };
 
 export function StatusTab({
@@ -129,6 +134,11 @@ export function StatusTab({
     contractDocuments = [],
     isServiceOrder = false,
     resources = [],
+    projectTitle = null,
+    companyName = null,
+    companyHref = null,
+    conversationHref = "/app/chat",
+    nextActionLabel = null,
 }: StatusTabProps) {
     // State for Payment Modal
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -165,30 +175,6 @@ export function StatusTab({
     // Calculate Total Budget strictly from milestones to avoid mismatches
     const contractBudget = milestones.reduce((sum, milestone) => sum + (Number(milestone.amount_minor ?? (milestone.amount * 100)) / 100), 0);
 
-    const handlePaymentConfirm = async () => {
-        try {
-            if (!contract) throw new Error("Brak kontraktu");
-
-            if (fundingMode === "full") {
-                await fundContractAction(contract.id, applicationId);
-                toast.success("Środki wpłacone! Odświeżam status...");
-                setIsPaymentModalOpen(false);
-                return;
-            }
-
-            if (!nextToFund) {
-                throw new Error("Brak etapu do zasilenia.");
-            }
-
-            await fundContractAction(contract.id, applicationId);
-            toast.success("Etap został zasilony! Odświeżam status...");
-            setIsPaymentModalOpen(false);
-        } catch (e) {
-            console.error("Payment failed", e);
-            throw e; // Propagate to PaymentModal to show error state
-        }
-    };
-
     // Global Progress Logic
     let currentStep = 1;
 
@@ -207,12 +193,13 @@ export function StatusTab({
 
     // Stepper Configuration
     const steps = [
-        { id: 1, label: "Etapy" },
-        { id: 2, label: "Umowy" },
-        { id: 3, label: "Escrow" },
+        { id: 1, label: "Start" },
+        { id: 2, label: "Projekt" },
+        { id: 3, label: "Rozliczenie" },
         { id: 4, label: "Realizacja" },
-        { id: 5, label: "Wypłata" }
+        { id: 5, label: "Odbiór" }
     ];
+    const stepperProgress = Math.max(0, Math.min(1, (currentStep - 1) / (steps.length - 1)));
 
     // MANDATORY REVIEW LOGIC
     // Company must review if status is 'delivered' (or 'completed' but missing review due to legacy/migration miss)
@@ -233,6 +220,43 @@ export function StatusTab({
     // Counter Logic
     const completedCount = milestones.filter((milestone) => ['released', 'accepted', 'completed'].includes(milestone.status)).length;
     const totalCount = milestones.length;
+    const progressPercent = Math.max(0, Math.min(100, Math.round(stepperProgress * 100)));
+    const displayBudget = contractBudget > 0 ? contractBudget : totalAmount;
+    const securedAmount = milestones.reduce((sum, milestone) => (
+        ['funded', 'in_progress', 'delivered', 'released', 'accepted', 'completed'].includes(milestone.status)
+            ? sum + Number(milestone.amount_minor ?? (milestone.amount * 100)) / 100
+            : sum
+    ), 0);
+    const releasedAmount = milestones.reduce((sum, milestone) => (
+        ['released', 'accepted', 'completed'].includes(milestone.status)
+            ? sum + Number(milestone.amount_minor ?? (milestone.amount * 100)) / 100
+            : sum
+    ), 0);
+    const pendingAmount = Math.max(0, displayBudget - releasedAmount);
+    const fundingAmount = fundingMode === "full"
+        ? (contractBudget > 0 ? contractBudget : totalAmount)
+        : Number((nextToFund?.amount_minor ? nextToFund.amount_minor / 100 : nextToFund?.amount) ?? 0);
+    const projectDisplayName = projectTitle ?? "Realizowane zlecenie";
+    const companyDisplayName = companyName ?? "Klient Student2Work";
+    const activeActionLabel = nextActionLabel ?? (isStudent ? "Prześlij efekt pracy" : "Sprawdź postęp");
+    const briefItems = [
+        "Zakres prac, harmonogram i kryteria odbioru są zebrane w jednym miejscu.",
+        "Pliki, briefy i materiały klienta pozostają dostępne w ramach etapu.",
+        "Akceptacja etapu aktualizuje postęp oraz rozliczenie projektu.",
+    ];
+    const timelineItems = [
+        { label: "Uzgodnienie etapów", done: currentStep > 1, active: currentStep === 1 },
+        { label: "Umowy i depozyt", done: currentStep > 3, active: currentStep === 2 || currentStep === 3 },
+        { label: "Realizacja pracy", done: currentStep > 4, active: currentStep === 4 },
+        { label: "Odbiór i wypłata", done: currentStep === 5, active: currentStep === 5 },
+    ];
+    const escrowLabel = isEscrowReady
+        ? "Środki zabezpieczone"
+        : fundingMode === "full"
+            ? "Wymagany depozyt"
+            : "Wymagany depozyt etapu";
+    const safeConversationHref = conversationHref ?? "/app/chat";
+    const showLegacyWorkspace = false;
 
     return (
         <div className="grid gap-6 animate-in slide-in-from-bottom-2 duration-500">
@@ -257,31 +281,318 @@ export function StatusTab({
                 <PaymentModal
                     isOpen={isPaymentModalOpen}
                     onClose={() => setIsPaymentModalOpen(false)}
-                    onConfirm={handlePaymentConfirm}
                     amount={fundingMode === "full" ? (contractBudget > 0 ? contractBudget : totalAmount) : Number((nextToFund?.amount_minor ? nextToFund.amount_minor / 100 : nextToFund?.amount) ?? 0)}
                     title={fundingMode === "full" ? `Zasilenie Depozytu (Cały Projekt)` : `Zasilenie Depozytu (Następny etap)`}
                     contractId={contract.id}
                     applicationId={isServiceOrder ? undefined : applicationId}
                     serviceOrderId={isServiceOrder ? applicationId : undefined}
-                    useStripe={true}
                 />
             )}
 
-            {/* HEADER CARD */}
-            <Card className="rounded-2xl overflow-hidden border border-slate-200 shadow-xl bg-white/80 backdrop-blur-xl">
-                <div className="p-6 md:p-8">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-3 duration-500">
+                <section className="rounded-[1.35rem] border border-slate-200/80 bg-white p-4 shadow-[0_18px_50px_-34px_rgba(15,23,42,0.35)] sm:p-5">
+                    <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Postęp realizacji</p>
+                            <h2 className="mt-1 text-lg font-black text-[#07142f] sm:text-xl">{projectDisplayName}</h2>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                                {progressPercent}% ukończone
+                            </Badge>
+                            <Badge variant="outline" className="rounded-full border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                {totalCount > 0 ? `${completedCount}/${totalCount}` : "0"} etapów
+                            </Badge>
+                        </div>
+                    </div>
+
+                    <div className="hidden sm:block">
+                        <div className="relative px-5 py-3">
+                            <div className="absolute left-10 right-10 top-8 h-1.5 rounded-full bg-slate-100" />
+                            <div
+                                className="absolute left-10 right-10 top-8 h-1.5 origin-left rounded-full bg-emerald-400 transition-transform duration-700 ease-out"
+                                style={{ transform: `scaleX(${stepperProgress})` }}
+                            />
+                            <div className="relative z-10 grid grid-cols-5 gap-3">
+                                {steps.map((step) => {
+                                    const isCompleted = currentStep > step.id;
+                                    const isActive = currentStep === step.id;
+
+                                    return (
+                                        <div key={step.id} className="flex min-w-0 flex-col items-center gap-2 text-center">
+                                            <div
+                                                className={cn(
+                                                    "flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white text-xs font-black transition-all",
+                                                    isCompleted && "border-emerald-400 bg-emerald-400 text-white",
+                                                    isActive && "border-[#07142f] bg-[#07142f] text-white shadow-[0_0_0_6px_rgba(7,20,47,0.08)]",
+                                                    !isCompleted && !isActive && "border-slate-200 text-slate-300",
+                                                )}
+                                            >
+                                                {isCompleted ? <CheckCircle2 className="h-4 w-4" /> : step.id}
+                                            </div>
+                                            <span
+                                                className={cn(
+                                                    "max-w-full text-[10px] font-black uppercase tracking-widest",
+                                                    isActive && "text-[#07142f]",
+                                                    isCompleted && "text-emerald-700",
+                                                    !isCompleted && !isActive && "text-slate-400",
+                                                )}
+                                            >
+                                                {step.label}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-2 sm:hidden">
+                        {steps.map((step) => {
+                            const isCompleted = currentStep > step.id;
+                            const isActive = currentStep === step.id;
+
+                            return (
+                                <div
+                                    key={step.id}
+                                    className={cn(
+                                        "grid grid-cols-[2.25rem,minmax(0,1fr)] gap-3 rounded-2xl border p-3",
+                                        isActive ? "border-[#07142f] bg-slate-50" : "border-slate-100 bg-white",
+                                    )}
+                                >
+                                    <div className="flex items-start justify-center">
+                                        <div
+                                            className={cn(
+                                                "flex h-9 w-9 items-center justify-center rounded-full border-2 bg-white text-xs font-black",
+                                                isCompleted && "border-emerald-400 bg-emerald-400 text-white",
+                                                isActive && "border-[#07142f] bg-[#07142f] text-white",
+                                                !isCompleted && !isActive && "border-slate-200 text-slate-300",
+                                            )}
+                                        >
+                                            {isCompleted ? <CheckCircle2 className="h-4 w-4" /> : step.id}
+                                        </div>
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className={cn("text-xs font-black uppercase tracking-normal", isActive ? "text-[#07142f]" : "text-slate-500")}>
+                                            {step.label}
+                                        </p>
+                                        {isActive ? <p className="mt-1 text-xs font-semibold text-slate-500">{activeActionLabel}</p> : null}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </section>
+
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                    <div className="space-y-4">
+                        <section className="rounded-[1.35rem] border border-slate-200/80 bg-white p-4 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.34)] sm:p-5">
+                            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Etapy i akceptacja</p>
+                                    <h2 className="mt-1 text-lg font-black text-[#07142f]">Plan pracy</h2>
+                                </div>
+                                <Badge className={cn(
+                                    "w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest",
+                                    isEscrowReady
+                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                        : "border-amber-200 bg-amber-50 text-amber-700",
+                                )}>
+                                    {escrowLabel}
+                                </Badge>
+                            </div>
+
+                            {enableNegotiation && contract?.terms_status !== 'agreed' && !isAnyFunded ? (
+                                <MilestoneNegotiation
+                                    applicationId={applicationId}
+                                    contract={contract}
+                                    isCompany={isCompany}
+                                    isStudent={isStudent}
+                                    totalAmount={totalAmount}
+                                />
+                            ) : null}
+
+                            {contract && contract?.terms_status === 'agreed' ? (
+                                <div className="mb-4">
+                                    <ContractDocumentsCard
+                                        contractId={contract.id}
+                                        applicationId={applicationId}
+                                        isCompany={isCompany}
+                                        isStudent={isStudent}
+                                        documents={contractDocuments}
+                                        documentsGeneratedAt={contract.documents_generated_at}
+                                        companyAcceptedAt={contract.company_contract_accepted_at}
+                                        studentAcceptedAt={contract.student_contract_accepted_at}
+                                        termsAgreed={contract.terms_status === 'agreed'}
+                                        canReopenTerms={canReopenTerms}
+                                    />
+                                </div>
+                            ) : null}
+
+                            {((contract?.terms_status === 'agreed') || isAnyFunded) && milestones.length > 0 ? (
+                                <div className="space-y-3">
+                                    {milestones.map((milestone, index) => (
+                                        <MilestoneItem
+                                            key={milestone.id}
+                                            milestone={milestone}
+                                            allMilestones={milestones}
+                                            index={index}
+                                            isStudent={isStudent}
+                                            isCompany={isCompany}
+                                            applicationId={applicationId}
+                                            deliverables={deliverables}
+                                            resources={resources}
+                                            onOpenSecureViewer={(url: string, name: string, fileType: "image" | "pdf") => setViewerState({ isOpen: true, url, fileName: name, fileType })}
+                                        />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-semibold text-slate-500">
+                                    Etapy pojawią się tutaj po uzgodnieniu zakresu projektu.
+                                </div>
+                            )}
+                        </section>
+
+                        <section className="rounded-[1.35rem] border border-slate-200/80 bg-white p-4 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.28)] sm:p-5">
+                            <div className="mb-4 flex items-center gap-2">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-lime-100 text-[#07142f]">
+                                    <Lock className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Brief i zakres</p>
+                                    <h2 className="text-lg font-black text-[#07142f]">Materiały do realizacji</h2>
+                                </div>
+                            </div>
+                            {isStudent && isPlatformService && studentInstructions ? (
+                                <pre className="whitespace-pre-wrap rounded-2xl border border-amber-200 bg-amber-50 p-4 font-sans text-sm font-semibold leading-relaxed text-amber-950">
+                                    {studentInstructions}
+                                </pre>
+                            ) : (
+                                <div className="grid gap-2">
+                                    {briefItems.map((item) => (
+                                        <div key={item} className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600">
+                                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                                            <span>{item}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+                    </div>
+
+                    <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+                        <section className="rounded-[1.35rem] border border-slate-200/80 bg-white p-4 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.34)]">
+                            {companyHref ? (
+                                <Link href={companyHref} className="group flex items-center gap-3 rounded-2xl transition-colors hover:bg-slate-50">
+                                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#102b66] text-sm font-black text-[#c5fb37]">
+                                        {companyDisplayName.slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h3 className="truncate text-sm font-black text-[#07142f] group-hover:text-[#102b66]">{companyDisplayName}</h3>
+                                        <p className="text-xs font-bold text-slate-400">Klient projektu</p>
+                                    </div>
+                                </Link>
+                            ) : (
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#102b66] text-sm font-black text-[#c5fb37]">
+                                        {companyDisplayName.slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h3 className="truncate text-sm font-black text-[#07142f]">{companyDisplayName}</h3>
+                                        <p className="text-xs font-bold text-slate-400">Klient projektu</p>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="mt-4 grid gap-2 rounded-2xl bg-slate-50 p-3">
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="font-bold text-slate-500">Budżet projektu</span>
+                                    <span className="font-black text-[#07142f]">{displayBudget.toFixed(2)} PLN</span>
+                                </div>
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="font-bold text-slate-500">W depozycie</span>
+                                    <span className="font-black text-emerald-600">{securedAmount.toFixed(2)} PLN</span>
+                                </div>
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="font-bold text-slate-500">Do rozliczenia</span>
+                                    <span className="font-black text-[#07142f]">{pendingAmount.toFixed(2)} PLN</span>
+                                </div>
+                            </div>
+
+                            {isCompany && !isEscrowReady && canEnterEscrow ? (
+                                <Button
+                                    size="lg"
+                                    onClick={() => setIsPaymentModalOpen(true)}
+                                    className="mt-4 h-12 w-full rounded-2xl bg-[#07142f] text-sm font-black text-white shadow-[0_18px_40px_-26px_rgba(7,20,47,0.8)] hover:bg-[#102b66]"
+                                >
+                                    <CircleDollarSign className="mr-2 h-4 w-4" />
+                                    Zasil depozyt {fundingAmount.toFixed(2)} PLN
+                                </Button>
+                            ) : (
+                                <Button asChild className="mt-4 h-12 w-full rounded-2xl bg-[#07142f] text-sm font-black text-white hover:bg-[#102b66]">
+                                    <Link href={safeConversationHref}>
+                                        <MessageSquare className="mr-2 h-4 w-4" />
+                                        Otwórz rozmowę
+                                    </Link>
+                                </Button>
+                            )}
+                        </section>
+
+                        <section className="rounded-[1.35rem] border border-slate-200/80 bg-white p-4 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.26)]">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Najbliższe</p>
+                            <div className="mt-4 space-y-3">
+                                {timelineItems.map((item) => (
+                                    <div key={item.label} className="grid grid-cols-[1rem,1fr] gap-3">
+                                        <span
+                                            className={cn(
+                                                "mt-1 h-3 w-3 rounded-full border-2 bg-white",
+                                                item.done && "border-emerald-400 bg-emerald-400",
+                                                item.active && "border-[#102b66] bg-[#102b66]",
+                                                !item.done && !item.active && "border-slate-200",
+                                            )}
+                                        />
+                                        <p className={cn("text-sm font-bold", item.active ? "text-[#07142f]" : "text-slate-500")}>
+                                            {item.label}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+
+                        <section className="rounded-[1.35rem] border border-amber-200 bg-amber-50 p-4">
+                            <div className="flex gap-3">
+                                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                                <div>
+                                    <h3 className="text-sm font-black text-amber-950">Czy potrzebujesz pomocy?</h3>
+                                    <p className="mt-1 text-xs font-semibold leading-relaxed text-amber-800">
+                                        W razie problemów możesz wrócić do rozmowy albo zgłosić sprawę do obsługi.
+                                    </p>
+                                    <Button asChild variant="outline" size="sm" className="mt-3 rounded-xl border-amber-300 bg-white text-amber-900 hover:bg-amber-100">
+                                        <Link href={safeConversationHref}>Otwórz rozmowę</Link>
+                                    </Button>
+                                </div>
+                            </div>
+                        </section>
+                    </aside>
+                </div>
+            </div>
+
+            {showLegacyWorkspace ? (
+                <>
+            {/* HEADER CARD */}
+            <Card className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_24px_70px_-44px_rgba(15,23,42,0.55)]">
+                <div className="p-5 sm:p-6 md:p-8">
+                    <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+                        <div>
+                            <h2 className="flex flex-wrap items-center gap-2 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
                                 Panel Realizacji
-                                <Badge variant="outline" className="ml-2 bg-slate-50 text-slate-500 border-slate-200 font-normal">
+                                <Badge variant="outline" className="rounded-full border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-normal text-slate-500">
                                     {contract?.status === 'completed' ? 'Zakończone' : 'W toku'}
                                 </Badge>
                             </h2>
                             {milestones.length > 0 && (
-                                <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
-                                    Postęp prac:
-                                    <span className="font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                                <p className="mt-2 flex flex-wrap items-center gap-2 text-sm font-medium text-slate-500">
+                                    Postęp prac
+                                    <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-xs font-black text-indigo-700">
                                         {completedCount} / {totalCount} etapów
                                     </span>
                                 </p>
@@ -289,50 +600,52 @@ export function StatusTab({
                             {/* Contract documents generation handled by ContractDocumentsCard below */}
                         </div>
 
-                        {/* Escrow Badge */}
+                        {/* Deposit status badge */}
                         {milestones.length > 0 && (
-                            <div className={`px-4 py-2 rounded-full border flex items-center gap-2 text-sm font-semibold shadow-sm transition-all duration-300
+                            <div className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-black shadow-sm transition-all duration-300
                                 ${isEscrowReady
-                                    ? 'bg-emerald-50/80 border-emerald-100 text-emerald-700 backdrop-blur-sm'
-                                    : 'bg-amber-50/80 border-amber-100 text-amber-700 backdrop-blur-sm animate-pulse-slow'
+                                    ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                                    : 'bg-amber-50 border-amber-100 text-amber-700'
                                 }`}>
                                 {isEscrowReady ? <ShieldCheck className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
-                                {isEscrowReady ? (fundingMode === "full" ? "Środki Zabezpieczone (Całość)" : "Środki Zabezpieczone (Bieżący etap)") : (fundingMode === "full" ? "Wymagane Zasilenie Escrow" : "Wymagane Zasilenie Następnego Etapu")}
+                                {isEscrowReady ? (fundingMode === "full" ? "Środki Zabezpieczone (Całość)" : "Środki Zabezpieczone (Bieżący etap)") : (fundingMode === "full" ? "Wymagane Zasilenie Depozytu" : "Wymagane Zasilenie Następnego Etapu")}
                             </div>
                         )}
                     </div>
 
                     {/* STEPPER */}
-                    <div className="relative mb-12 px-2 md:px-4 py-6">
-                        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1.5 bg-slate-100 -z-0 rounded-full" />
+                    <div className="relative mb-8 rounded-[1.75rem] border border-slate-100 bg-slate-50/70 px-3 py-5 sm:px-6">
+                        <div className="absolute left-7 right-7 top-[2.15rem] h-1.5 rounded-full bg-slate-200/80 sm:left-11 sm:right-11" />
                         <div
-                            className="absolute left-0 top-1/2 transform -translate-y-1/2 h-1.5 bg-gradient-to-r from-emerald-400 to-emerald-500 -z-0 transition-all duration-1000 ease-out rounded-full shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-                            style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}
+                            className="absolute left-7 right-7 top-[2.15rem] h-1.5 origin-left rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-emerald-400 shadow-[0_8px_24px_-16px_rgba(79,70,229,0.9)] transition-transform duration-700 ease-out sm:left-11 sm:right-11"
+                            style={{ transform: `scaleX(${stepperProgress})` }}
                         />
 
-                        <div className="flex justify-between relative z-10">
+                        <div className="relative z-10 grid grid-cols-5 gap-1 sm:gap-3">
                             {steps.map((step) => {
                                 const isCompleted = currentStep > step.id;
                                 const isActive = currentStep === step.id;
 
                                 return (
-                                    <div key={step.id} className="relative z-10 flex flex-col items-center group">
+                                    <div key={step.id} className="flex min-w-0 flex-col items-center gap-3 text-center">
                                         <div
-                                            className={`
-                                                w-9 h-9 md:w-12 md:h-12 rounded-full flex items-center justify-center border-[3px] transition-all duration-500 shadow-sm
-                                                ${isCompleted
-                                                    ? 'bg-emerald-500 border-emerald-500 text-white shadow-emerald-200'
-                                                    : isActive
-                                                        ? 'bg-white border-indigo-600 text-indigo-600 shadow-[0_0_0_4px_rgba(79,70,229,0.15)] scale-110'
-                                                        : 'bg-white border-slate-200 text-slate-300'}
-                                            `}
+                                            className={cn(
+                                                "flex h-9 w-9 items-center justify-center rounded-full border-[3px] text-xs font-black shadow-sm transition-all duration-500 sm:h-12 sm:w-12 sm:text-sm",
+                                                isCompleted && "border-emerald-500 bg-emerald-500 text-white shadow-emerald-200",
+                                                isActive && "scale-105 border-indigo-600 bg-white text-indigo-600 shadow-[0_0_0_5px_rgba(79,70,229,0.13)]",
+                                                !isCompleted && !isActive && "border-slate-200 bg-white text-slate-300",
+                                            )}
                                         >
-                                            {isCompleted ? <CheckCircle2 className="w-4 h-4 md:w-6 md:h-6" /> : <span className="text-xs md:text-sm font-extrabold">{step.id}</span>}
+                                            {isCompleted ? <CheckCircle2 className="h-4 w-4 sm:h-6 sm:w-6" /> : step.id}
                                         </div>
-                                        <span className={`
-                                            absolute -bottom-8 md:-bottom-10 text-[8px] md:text-xs font-bold uppercase tracking-wide md:tracking-wider transition-colors duration-300
-                                            ${isActive ? 'text-indigo-600 bg-indigo-50 px-1.5 md:px-2 py-0.5 md:py-1 rounded-full' : (isCompleted ? 'text-emerald-600' : 'text-slate-400')}
-                                        `}>
+                                        <span
+                                            className={cn(
+                                                "max-w-full whitespace-nowrap text-[9px] font-black uppercase tracking-normal [overflow-wrap:normal] sm:text-[11px]",
+                                                isActive && "rounded-full bg-indigo-50 px-2 py-1 text-indigo-700",
+                                                isCompleted && "text-emerald-700",
+                                                !isCompleted && !isActive && "text-slate-400",
+                                            )}
+                                        >
                                             {step.label}
                                         </span>
                                     </div>
@@ -342,17 +655,15 @@ export function StatusTab({
                     </div>
 
                     {/* Step Actions */}
-                    <div className="bg-gradient-to-r from-slate-50 to-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mt-8 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-
-                        <div className="text-center md:text-left relative z-10">
-                            <h3 className="text-lg font-bold text-slate-800 mb-2">
+                    <div className="relative mt-6 flex flex-col items-start justify-between gap-5 overflow-hidden rounded-[1.5rem] border border-slate-100 bg-gradient-to-br from-white via-slate-50 to-indigo-50/35 p-5 shadow-sm md:flex-row md:items-center md:p-6">
+                        <div className="relative z-10 text-left">
+                            <h3 className="mb-2 text-lg font-black tracking-tight text-slate-900">
                                 {currentStep === 1 && "Ustalanie etapów"}
                                 {currentStep === 2 && "Akceptacja umów"}
-                                {currentStep === 3 && "Escrow / płatność"}
+                                {currentStep === 3 && "Depozyt / płatność"}
                                 {currentStep >= 4 && "Realizacja etapów"}
                             </h3>
-                            <p className="text-slate-500 text-sm max-w-lg leading-relaxed">
+                            <p className="max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
                                 {currentStep === 1 && "Najpierw ustalcie zakres i harmonogram etapów."}
                                 {currentStep === 2 && "Po zatwierdzeniu etapów obie strony musza zaakceptować swoje umowy."}
                                 {currentStep === 3 && (fundingMode === "full" ? "Firma może teraz wplacic calosc budzetu do bezpiecznego depozytu." : "Firma może teraz zasilic depozyt dla nastepnego etapu.")}
@@ -436,6 +747,7 @@ export function StatusTab({
                         <MilestoneItem
                             key={milestone.id}
                             milestone={milestone}
+                            allMilestones={milestones}
                             index={index}
                             isStudent={isStudent}
                             isCompany={isCompany}
@@ -447,6 +759,9 @@ export function StatusTab({
                     ))}
                 </div>
             )}
+                </>
+            ) : null}
+
             {/* REVIEW SECTION (Completed Only) */}
             {isContractDone && (
                 <Card className="rounded-2xl border-slate-200 shadow-sm bg-gradient-to-br from-indigo-50/50 to-white overflow-hidden">
@@ -648,20 +963,20 @@ function MilestoneResources({ applicationId, resources, isCompany }: { applicati
     }
 
     return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h5 className="flex items-center gap-2 font-bold text-slate-800">
-                        <FileText className="h-4 w-4 text-indigo-600" />
+                    <h5 className="flex items-center gap-2 text-sm font-black text-[#07142f]">
+                        <FileText className="h-4 w-4 text-emerald-600" />
                         Materiały od firmy
                     </h5>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
                         Briefy, screeny, logotypy i dodatkowe wytyczne dostępne bez wychodzenia poza platformę.
                     </p>
                 </div>
 
                 {isCompany && (
-                    <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 text-sm font-bold text-indigo-700 transition-colors hover:bg-indigo-100">
+                    <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700 transition-colors hover:bg-emerald-100">
                         <UploadCloud className="h-4 w-4" />
                         {isUploading ? "Wysyłanie..." : "Dodaj materiał"}
                         <input
@@ -675,28 +990,28 @@ function MilestoneResources({ applicationId, resources, isCompany }: { applicati
             </div>
 
             {resources.length > 0 ? (
-                <div className="mt-4 grid gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                     {resources.map((resource) => (
                         <button
                             key={resource.id}
                             type="button"
                             onClick={() => openResource(resource)}
-                            className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-left transition-colors hover:border-indigo-200 hover:bg-indigo-50"
+                            className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50"
                         >
-                            <span className="min-w-0">
-                                <span className="block truncate text-sm font-semibold text-slate-700">
+                            <span className="min-w-0 max-w-[14rem]">
+                                <span className="block truncate text-xs font-black text-slate-700">
                                     {resource.file_name || "Materiał"}
                                 </span>
-                                <span className="text-xs text-slate-400">
+                                <span className="text-[10px] font-bold text-slate-400">
                                     {resource.created_at ? new Date(resource.created_at).toLocaleDateString("pl-PL") : "Dodano do zlecenia"}
                                 </span>
                             </span>
-                            <Download className="h-4 w-4 shrink-0 text-slate-400" />
+                            <Download className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                         </button>
                     ))}
                 </div>
             ) : (
-                <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+                <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-xs font-semibold text-slate-400">
                     Brak materiałów od firmy dla tego zlecenia.
                 </div>
             )}
@@ -706,6 +1021,7 @@ function MilestoneResources({ applicationId, resources, isCompany }: { applicati
 
 type MilestoneItemProps = {
     milestone: MilestoneRow;
+    allMilestones: MilestoneRow[];
     index: number;
     isStudent: boolean;
     isCompany: boolean;
@@ -715,7 +1031,7 @@ type MilestoneItemProps = {
     onOpenSecureViewer: (url: string, name: string, fileType: "image" | "pdf") => void;
 };
 
-function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, deliverables, resources, onOpenSecureViewer }: MilestoneItemProps) {
+function MilestoneItem({ milestone, allMilestones, index, isStudent, isCompany, applicationId, deliverables, resources, onOpenSecureViewer }: MilestoneItemProps) {
     async function openDeliverableFile(file: DeliverableFile, allowFullAccess = false) {
         try {
             let signed = "";
@@ -756,6 +1072,10 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
         isStudent ||
         ["accepted", "released", "completed"].includes(String(deliverable?.status)) ||
         ["accepted", "released", "completed"].includes(String(milestone.status));
+    const isFinalDeliveredMilestone = milestone.status === "delivered"
+        && allMilestones
+            .filter((candidate) => candidate.id !== milestone.id)
+            .every((candidate) => ["released", "accepted", "completed", "refunded"].includes(String(candidate.status)));
 
     const statusConfig = {
         'awaiting_funding': { label: 'Oczekuje', color: 'bg-slate-100 text-slate-500' },
@@ -767,44 +1087,61 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
     }[milestone.status as string] || { label: milestone.status, color: 'bg-gray-100' };
 
     return (
-        <Card className={`rounded-2xl border shadow-sm transition-all overflow-hidden ${milestone.status === 'completed' ? 'opacity-75 hover:opacity-100' : 'border-indigo-100 shadow-md'}`}>
+        <Card className={cn(
+            "overflow-hidden rounded-2xl border bg-white shadow-none transition-all",
+            milestone.status === 'completed'
+                ? 'border-emerald-100 bg-emerald-50/25'
+                : milestone.status === 'delivered'
+                    ? 'border-amber-200 bg-amber-50/20'
+                    : 'border-slate-200 hover:border-emerald-200',
+        )}>
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="p-6 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-white relative z-10">
-                    <div className="flex items-start gap-4 flex-1">
-                        <div className={`
-                            w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold border shadow-sm shrink-0 mt-0.5
-                            ${milestone.status === 'completed'
-                                ? 'bg-emerald-100 border-emerald-200 text-emerald-700'
-                                : 'bg-white border-slate-100 text-slate-700'}
-                        `}>
-                            {milestone.status === 'completed' ? <CheckCircle2 className="w-5 h-5" /> : index + 1}
+                <div className="relative z-10 flex flex-col gap-3 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <div className={cn(
+                            "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-black",
+                            milestone.status === 'completed'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : milestone.status === 'delivered'
+                                    ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                    : 'border-slate-200 bg-slate-50 text-[#07142f]',
+                        )}>
+                            {milestone.status === 'completed' ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
                         </div>
-                        <div>
-                            <h4 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                                {milestone.title}
+                        <div className="min-w-0">
+                            <h4 className="flex min-w-0 items-center gap-2 text-sm font-black leading-snug text-[#07142f] sm:text-base">
+                                <span className="truncate">{milestone.title}</span>
                                 {milestone.status === 'delivered' && (
-                                    <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                                    <span className="flex h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-500" />
                                 )}
                             </h4>
-                            <p className="text-slate-500 text-sm mt-1 leading-relaxed max-w-2xl">{milestone.acceptance_criteria}</p>
+                            {milestone.acceptance_criteria ? (
+                                <p className="mt-1 line-clamp-2 max-w-2xl text-xs font-semibold leading-relaxed text-slate-500">
+                                    {milestone.acceptance_criteria}
+                                </p>
+                            ) : null}
                         </div>
                     </div>
 
-                    <div className="flex flex-row md:flex-col items-center md:items-end gap-3 md:gap-1 min-w-[150px] w-full md:w-auto justify-between md:justify-start border-t md:border-t-0 pt-4 md:pt-0 mt-2 md:mt-0 border-slate-100">
-                        <div className="font-black text-slate-900 text-lg">{(milestone.amount_minor ? milestone.amount_minor / 100 : milestone.amount)} <span className="text-xs font-bold text-slate-400">PLN</span></div>
-                        <Badge variant="outline" className={`font-semibold border px-2.5 py-0.5 ${statusConfig.color}`}>
-                            {statusConfig.label}
-                        </Badge>
+                    <div className="flex w-full items-center justify-between gap-3 border-t border-slate-100 pt-3 sm:w-auto sm:min-w-[170px] sm:border-t-0 sm:pt-0">
+                        <div className="min-w-0 sm:text-right">
+                            <div className="text-base font-black text-[#07142f]">
+                                {(milestone.amount_minor ? milestone.amount_minor / 100 : milestone.amount)} <span className="text-[10px] font-black text-slate-400">PLN</span>
+                            </div>
+                            <Badge variant="outline" className={`mt-1 border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${statusConfig.color}`}>
+                                {statusConfig.label}
+                            </Badge>
+                        </div>
                         <CollapsibleTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 absolute md:static top-6 right-6 text-slate-400 hover:text-slate-600">
-                                {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                            <Button variant="ghost" size="sm" className="h-9 w-9 shrink-0 rounded-xl p-0 text-slate-400 hover:bg-slate-100 hover:text-[#07142f]">
+                                {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                             </Button>
                         </CollapsibleTrigger>
                     </div>
                 </div>
 
-                <CollapsibleContent className="border-t border-slate-100 bg-slate-50/50">
-                    <div className="p-6 space-y-8">
+                <CollapsibleContent className="border-t border-slate-100 bg-slate-50/70">
+                    <div className="space-y-4 p-4 sm:p-5">
                         <MilestoneResources
                             applicationId={applicationId}
                             resources={resources ?? []}
@@ -900,7 +1237,7 @@ function MilestoneItem({ milestone, index, isStudent, isCompany, applicationId, 
                                         const feedback = String(formData.get('feedback') ?? "");
                                         await reviewMilestoneAction(milestone.id, applicationId, decision, feedback);
                                     }}>
-                                        <ReviewControls label="Zatwierdź" />
+                                        <ReviewControls label={isFinalDeliveredMilestone ? "Akceptuję wykonanie i kończę zlecenie" : "Zatwierdź"} />
                                     </form>
                                 </div>
                             </div>

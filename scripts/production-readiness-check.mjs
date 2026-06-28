@@ -53,6 +53,52 @@ function requireEnv(env, checks, keys) {
   }
 }
 
+function hasNonPlaceholderValue(env, key, placeholders = []) {
+  const value = env[key]?.trim();
+  return Boolean(value && !placeholders.includes(value));
+}
+
+function assertEmailConfig(env, checks, target) {
+  if (target !== "production") return;
+
+  if (env.RESEND_API_KEY) {
+    pass(checks, "email:resend-api-key");
+  } else {
+    fail(checks, "email:resend-api-key", "Produkcja wymaga RESEND_API_KEY, bo webhook powiadomien dziala fail-closed.");
+  }
+
+  if (env.RESEND_FROM_EMAIL) {
+    pass(checks, "email:from");
+  } else {
+    fail(checks, "email:from", "Produkcja wymaga RESEND_FROM_EMAIL.");
+  }
+}
+
+function assertPlatformLegalEntity(env, checks, target) {
+  if (target !== "production") return;
+
+  const fields = [
+    ["PLATFORM_LEGAL_NAME", []],
+    ["PLATFORM_LEGAL_NIP", ["0000000000"]],
+    ["PLATFORM_LEGAL_ADDRESS", ["ul. Przykładowa 1", "ul. Przykladowa 1"]],
+    ["PLATFORM_LEGAL_CITY", ["00-000 Warszawa"]],
+    ["PLATFORM_LEGAL_KRS", ["0000000000"]],
+    ["PLATFORM_LEGAL_REPRESENTED_BY", ["Zarząd Spółki", "Zarzad Spolki"]],
+  ];
+
+  let ok = true;
+  for (const [key, placeholders] of fields) {
+    if (hasNonPlaceholderValue(env, key, placeholders)) {
+      pass(checks, `legal:${key}`);
+    } else {
+      ok = false;
+      fail(checks, `legal:${key}`, "Brak realnej wartosci lub nadal ustawiony placeholder.");
+    }
+  }
+
+  if (ok) pass(checks, "legal:platform-entity");
+}
+
 function assertKeyMode(env, checks, target) {
   const allowTestStripeInProduction =
     target === "production" && env.ALLOW_TEST_STRIPE_IN_PRODUCTION === "true";
@@ -94,6 +140,20 @@ function assertKeyMode(env, checks, target) {
     fail(checks, "stripe:payouts-enabled", "Produkcja wymaga STRIPE_PAYOUTS_ENABLED=true.");
   } else {
     pass(checks, "stripe:payouts-enabled", env.STRIPE_PAYOUTS_ENABLED || "");
+  }
+}
+
+function assertStripeConnectDecision(env, checks, target) {
+  if (target !== "production") return;
+
+  if (env.STRIPE_CONNECT_MODEL_APPROVED === "true") {
+    pass(checks, "stripe:connect-model-approved");
+  } else {
+    fail(
+      checks,
+      "stripe:connect-model-approved",
+      "Produkcja wymaga zatwierdzenia ADR Stripe Connect i STRIPE_CONNECT_MODEL_APPROVED=true.",
+    );
   }
 }
 
@@ -280,7 +340,10 @@ async function main() {
     requireEnv(env, checks, ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "SENTRY_DSN"]);
   }
 
+  assertEmailConfig(env, checks, target);
+  assertPlatformLegalEntity(env, checks, target);
   assertKeyMode(env, checks, target);
+  assertStripeConnectDecision(env, checks, target);
   assertAppUrl(env, checks, target);
   await checkProductionDns(env, checks, target);
   await checkStripe(env, checks);

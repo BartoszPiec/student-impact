@@ -8,9 +8,41 @@ import {
     parseCommissionRateInput,
     resolveCommissionRate,
 } from "@/lib/commission";
+import { isAllowedJobCategory, resolveJobCategoryLabel } from "@/lib/constants";
 import { assertCanAccessStorageRef, assertUploadedObjectExists } from "@/lib/security/storage";
+import { uuidSchema } from "@/lib/security/validation";
+import { z } from "zod";
 
 type JsonObject = Record<string, unknown>;
+
+const SYSTEM_SERVICE_INVALID_ID_MESSAGE = "Nieprawidłowy identyfikator usługi systemowej.";
+const SYSTEM_SERVICE_NOT_FOUND_MESSAGE = "Nie znaleziono usługi systemowej albo nie jest usługą platformową.";
+const SYSTEM_SERVICE_SAVE_ERROR_MESSAGE = "Nie udało się zapisać usługi systemowej.";
+const SYSTEM_SERVICE_DELETE_ERROR_MESSAGE = "Nie udało się usunąć usługi systemowej.";
+const SYSTEM_SERVICE_COMMISSION_ERROR_MESSAGE = "Nie udało się zapisać prowizji usługi systemowej.";
+const SYSTEM_SERVICE_STATUS_ERROR_MESSAGE = "Nie udało się zapisać statusu usługi systemowej.";
+const SYSTEM_SERVICE_INVALID_STATUS_MESSAGE = "Nieprawidłowy status usługi systemowej.";
+
+const systemServiceStatusSchema = z.enum(["active", "inactive"]);
+
+function parseSystemServiceId(serviceId: string) {
+    const parsed = uuidSchema.safeParse(serviceId);
+    if (!parsed.success) {
+        throw new Error(SYSTEM_SERVICE_INVALID_ID_MESSAGE);
+    }
+
+    return parsed.data;
+}
+
+function throwSystemServiceMutationError(label: string, error: unknown, userMessage: string): never {
+    console.error(label, error);
+    throw new Error(userMessage);
+}
+
+function returnSystemServiceMutationError(label: string, error: unknown, userMessage: string) {
+    console.error(label, error);
+    return { error: userMessage };
+}
 
 function parsePositiveNumber(value: FormDataEntryValue | null): number | null {
     if (value == null) return null;
@@ -136,7 +168,7 @@ export async function createSystemService(formData: FormData) {
 
     const title = String(formData.get("tytul") ?? "").trim();
     const description = String(formData.get("opis") ?? "").trim();
-    const category = String(formData.get("kategoria") ?? "Inne");
+    const category = resolveJobCategoryLabel(String(formData.get("kategoria") ?? "")) ?? "";
     const delivery_time_days = parseOptionalInt(formData.get("czas"));
     const priceInput = parsePositiveNumber(formData.get("stawka"));
     const variants = normalizeVariantsFromForm(formData);
@@ -151,26 +183,31 @@ export async function createSystemService(formData: FormData) {
     if (!title || !description) throw new Error("Tytul i opis są wymagane");
     if (title.length > 200) throw new Error("Tytul jest za dlugi (max 200 znakow)");
     if (description.length > 5000) throw new Error("Opis jest za dlugi (max 5000 znakow)");
+    if (!isAllowedJobCategory(category)) throw new Error("Wybierz poprawna kategorie uslugi systemowej.");
     if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidłowa cena");
     if (price === null) throw new Error("Podaj cene usługi lub ceny wariantów.");
     await validateLockedContentFiles(locked_content, user.id);
 
-    const { error } = await supabase.from("service_packages").insert({
-        title,
-        description,
-        category,
-        delivery_time_days,
-        price,
-        price_max,
-        variants,
-        commission_rate,
-        locked_content,
-        is_system: true,
-        type: "platform_service",
-        status: "active",
-    });
+    const { error } = await supabase
+        .from("service_packages")
+        .insert({
+            title,
+            description,
+            category,
+            delivery_time_days,
+            price,
+            price_max,
+            variants,
+            commission_rate,
+            locked_content,
+            is_system: true,
+            type: "platform_service",
+            status: "active",
+        });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+        throwSystemServiceMutationError("Create system service failed:", error, SYSTEM_SERVICE_SAVE_ERROR_MESSAGE);
+    }
 
     revalidatePath("/app/admin/system-services");
     revalidatePath("/app/company/packages");
@@ -179,10 +216,11 @@ export async function createSystemService(formData: FormData) {
 
 export async function updateSystemService(offerId: string, formData: FormData) {
     const { supabase, user } = await requireAdmin();
+    const safeServiceId = parseSystemServiceId(offerId);
 
     const title = String(formData.get("tytul") ?? "").trim();
     const description = String(formData.get("opis") ?? "").trim();
-    const category = String(formData.get("kategoria") ?? "Inne");
+    const category = resolveJobCategoryLabel(String(formData.get("kategoria") ?? "")) ?? "";
     const delivery_time_days = parseOptionalInt(formData.get("czas"));
     const priceInput = parsePositiveNumber(formData.get("stawka"));
     const variants = normalizeVariantsFromForm(formData);
@@ -193,6 +231,7 @@ export async function updateSystemService(offerId: string, formData: FormData) {
     if (!title || !description) throw new Error("Tytul i opis są wymagane");
     if (title.length > 200) throw new Error("Tytul jest za dlugi (max 200 znakow)");
     if (description.length > 5000) throw new Error("Opis jest za dlugi (max 5000 znakow)");
+    if (!isAllowedJobCategory(category)) throw new Error("Wybierz poprawna kategorie uslugi systemowej.");
     if (price !== null && (price <= 0 || price > 500000)) throw new Error("Nieprawidłowa cena");
     if (price === null) throw new Error("Podaj cene usługi lub ceny wariantów.");
     await validateLockedContentFiles(locked_content, user.id);
@@ -221,12 +260,21 @@ export async function updateSystemService(offerId: string, formData: FormData) {
         });
     }
 
-    const { error } = await supabase
+    const { data: updatedService, error } = await supabase
         .from("service_packages")
         .update(updatePayload)
-        .eq("id", offerId);
+        .eq("id", safeServiceId)
+        .eq("type", "platform_service")
+        .select("id")
+        .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+        throwSystemServiceMutationError("Update system service failed:", error, SYSTEM_SERVICE_SAVE_ERROR_MESSAGE);
+    }
+
+    if (!updatedService) {
+        throw new Error(SYSTEM_SERVICE_NOT_FOUND_MESSAGE);
+    }
 
     revalidatePath("/app/admin/system-services");
     revalidatePath("/app/company/packages");
@@ -235,13 +283,23 @@ export async function updateSystemService(offerId: string, formData: FormData) {
 
 export async function deleteSystemService(serviceId: string) {
     const { supabase } = await requireAdmin();
+    const safeServiceId = parseSystemServiceId(serviceId);
 
-    const { error } = await supabase
+    const { data: deletedService, error } = await supabase
         .from("service_packages")
         .delete()
-        .eq("id", serviceId);
+        .eq("id", safeServiceId)
+        .eq("type", "platform_service")
+        .select("id")
+        .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+        throwSystemServiceMutationError("Delete system service failed:", error, SYSTEM_SERVICE_DELETE_ERROR_MESSAGE);
+    }
+
+    if (!deletedService) {
+        throw new Error(SYSTEM_SERVICE_NOT_FOUND_MESSAGE);
+    }
 
     revalidatePath("/app/admin/system-services");
     revalidatePath("/app/company/packages");
@@ -249,26 +307,48 @@ export async function deleteSystemService(serviceId: string) {
 
 export async function updateSystemServiceCommission(serviceId: string, commissionRateInput: string) {
     const { supabase } = await requireAdmin();
+    let safeServiceId: string;
+
+    try {
+        safeServiceId = parseSystemServiceId(serviceId);
+    } catch (error) {
+        return returnSystemServiceMutationError(
+            "Update system service commission invalid id:",
+            error,
+            SYSTEM_SERVICE_INVALID_ID_MESSAGE,
+        );
+    }
+
     const commissionRate = parseCommissionRateInput(commissionRateInput);
 
     if (!isAllowedCommissionRate(commissionRate)) {
-        return { error: "Dozwolone stawki to auto, 10%, 15% lub 20%." };
+        return { error: "Dozwolone stawki to auto, 10%, 15%, 20% lub 25%." };
     }
 
-    const { error } = await supabase
+    const { data: updatedService, error } = await supabase
         .from("service_packages")
         .update({ commission_rate: commissionRate })
-        .eq("id", serviceId)
-        .eq("type", "platform_service");
+        .eq("id", safeServiceId)
+        .eq("type", "platform_service")
+        .select("id")
+        .maybeSingle();
 
     if (error) {
-        return { error: error.message };
+        return returnSystemServiceMutationError(
+            "Update system service commission failed:",
+            error,
+            SYSTEM_SERVICE_COMMISSION_ERROR_MESSAGE,
+        );
+    }
+
+    if (!updatedService) {
+        return { error: SYSTEM_SERVICE_NOT_FOUND_MESSAGE };
     }
 
     revalidatePath("/app/admin/system-services");
     revalidatePath("/app/company/packages");
 
-    return { success: true };
+    return { success: true, error: null };
 }
 
 export async function updateSystemServiceStatus(
@@ -276,19 +356,45 @@ export async function updateSystemServiceStatus(
     nextStatus: "active" | "inactive",
 ) {
     const { supabase } = await requireAdmin();
+    let safeServiceId: string;
 
-    const { error } = await supabase
+    try {
+        safeServiceId = parseSystemServiceId(serviceId);
+    } catch (error) {
+        return returnSystemServiceMutationError(
+            "Update system service status invalid id:",
+            error,
+            SYSTEM_SERVICE_INVALID_ID_MESSAGE,
+        );
+    }
+
+    const parsedStatus = systemServiceStatusSchema.safeParse(nextStatus);
+    if (!parsedStatus.success) {
+        return { error: SYSTEM_SERVICE_INVALID_STATUS_MESSAGE };
+    }
+
+    const { data: updatedService, error } = await supabase
         .from("service_packages")
-        .update({ status: nextStatus })
-        .eq("id", serviceId)
-        .eq("type", "platform_service");
+        .update({ status: parsedStatus.data })
+        .eq("id", safeServiceId)
+        .eq("type", "platform_service")
+        .select("id")
+        .maybeSingle();
 
     if (error) {
-        return { error: error.message };
+        return returnSystemServiceMutationError(
+            "Update system service status failed:",
+            error,
+            SYSTEM_SERVICE_STATUS_ERROR_MESSAGE,
+        );
+    }
+
+    if (!updatedService) {
+        return { error: SYSTEM_SERVICE_NOT_FOUND_MESSAGE };
     }
 
     revalidatePath("/app/admin/system-services");
     revalidatePath("/app/company/packages");
 
-    return { success: true };
+    return { success: true, error: null };
 }

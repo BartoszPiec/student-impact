@@ -138,14 +138,14 @@ export default async function ChatPage({
     appRow?.status === "cancelled";
 
   return (
-    <div className="mx-auto flex h-full w-full flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:flex-row">
+    <div className="mx-auto flex h-full w-full max-w-full flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:flex-row">
       <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
         {/* Decorative elements */}
         <div className="pointer-events-none absolute left-0 right-0 top-0 -z-10 h-24 bg-gradient-to-b from-slate-50/80 to-transparent" />
 
         {/* Header */}
-        <div className="sticky top-0 z-20 flex flex-none items-start justify-between gap-3 border-b border-slate-100 bg-white/90 px-4 py-3 backdrop-blur-md sm:items-center sm:gap-4 sm:px-5 sm:py-4">
+        <div className="sticky top-0 z-20 flex flex-none items-start justify-between gap-2 border-b border-slate-100 bg-white/90 px-3 py-3 backdrop-blur-md sm:items-center sm:gap-4 sm:px-5 sm:py-4">
           <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
             <div className="md:hidden">
               <ChatBackBtn />
@@ -171,7 +171,7 @@ export default async function ChatPage({
               )}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
             <ChatDetailsSheet
               conversation={conversation}
               application={appRow}
@@ -185,7 +185,7 @@ export default async function ChatPage({
         </div>
 
         {/* Chat List */}
-        <div className="flex-1 overflow-y-auto scroll-smooth bg-slate-50/30 px-2 sm:px-4 md:px-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth bg-slate-50/30 px-2 sm:px-4 md:px-6">
           <div className="mx-auto max-w-3xl py-3 sm:py-6">
             <ChatList
               messages={chatMessages}

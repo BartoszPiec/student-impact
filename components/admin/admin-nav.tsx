@@ -54,6 +54,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     items: [
       { href: "/app/admin/finance/ledger", label: "Ksiega", icon: BookOpenText },
       { href: "/app/admin/finance/invoices", label: "Faktury", icon: FileText },
+      { href: "/app/admin/ksef-sandbox", label: "KSeF Sandbox", icon: FileText },
       { href: "/app/admin/finance/periods", label: "Okresy", icon: CalendarRange },
       { href: "/app/admin/payouts", label: "Wyplaty", icon: Wallet },
       { href: "/app/admin/pit", label: "PIT", icon: FileText },

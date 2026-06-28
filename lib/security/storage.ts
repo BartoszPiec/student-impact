@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isUuid } from "@/lib/security/validation";
 
 export type PrivateStorageBucket = "cvs" | "offer_attachments" | "chat-attachments" | "deliverables";
 
@@ -46,11 +47,6 @@ const PRIVATE_BUCKETS = new Set<PrivateStorageBucket>([
 ]);
 
 const STORAGE_REF_RE = /^storage:\/\/([^/]+)\/(.+)$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function isUuid(value: string): boolean {
-  return UUID_RE.test(value);
-}
 
 export function buildStorageRef(bucket: PrivateStorageBucket, path: string): string {
   return `storage://${bucket}/${path.replace(/^\/+/, "")}`;
@@ -202,7 +198,7 @@ export async function assertCanAccessStorageRef(userId: string, value: string): 
           : await userCanAccessOfferAttachment(userId, ref);
 
   if (!allowed) {
-    throw new Error("Brak dostepu do pliku.");
+    throw new Error("Brak dostępu do pliku.");
   }
 
   return ref;
@@ -219,7 +215,7 @@ export async function assertUploadedObjectExists(ref: StorageReference): Promise
     .maybeSingle<{ id: string }>();
 
   if (error || !data) {
-    throw new Error("Nie znaleziono przeslanego pliku.");
+    throw new Error("Nie znaleziono przesłanego pliku.");
   }
 }
 
@@ -235,7 +231,7 @@ export async function createPrivateSignedUrl(
   );
 
   if (error || !data?.signedUrl) {
-    throw new Error("Nie udało sie wygenerowac linku do pliku.");
+    throw new Error("Nie udało się wygenerować linku do pliku.");
   }
 
   return data.signedUrl;

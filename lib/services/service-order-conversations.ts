@@ -83,7 +83,7 @@ async function findConversationByColumn(
   column: "application_id" | "service_order_id",
   value: string,
 ): Promise<ConversationMatch | null> {
-  const { data } = await conversations(supabase)
+  const { data, error } = await conversations(supabase)
     .select("id")
     .eq(column, value)
     .order("updated_at", { ascending: false })
@@ -91,6 +91,10 @@ async function findConversationByColumn(
     .order("id", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (error) {
+    throw new Error("Nie udalo sie pobrac rozmowy.");
+  }
 
   return data?.id ? data : null;
 }
@@ -121,7 +125,7 @@ export async function ensureConversationForApplication(
     if (racedExisting) return { ...racedExisting, created: false };
   }
 
-  throw new Error(error?.message ?? "Nie udało sie utworzyc rozmowy");
+  throw new Error("Nie udalo sie utworzyc rozmowy.");
 }
 
 export async function ensureConversationIdForApplication(
@@ -159,19 +163,23 @@ export async function ensureConversationForServiceOrder(
     if (racedExisting) return { ...racedExisting, created: false };
   }
 
-  throw new Error(error?.message ?? "Nie udało sie utworzyc rozmowy");
+  throw new Error("Nie udalo sie utworzyc rozmowy.");
 }
 
 export async function findConversationForServiceOrder(
   supabase: SupabaseLike,
   params: ConversationLookupParams,
 ): Promise<ConversationMatch | null> {
-  const { data: directMatch } = await conversations(supabase)
+  const { data: directMatch, error: directMatchError } = await conversations(supabase)
     .select("id")
     .eq("service_order_id", params.serviceOrderId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (directMatchError) {
+    throw new Error("Nie udalo sie pobrac rozmowy zlecenia.");
+  }
 
   if (directMatch?.id) {
     return directMatch;
@@ -187,10 +195,14 @@ export async function findConversationForServiceOrder(
     fallbackQuery = fallbackQuery.eq("package_id", params.packageId);
   }
 
-  const { data: fallbackMatch } = await fallbackQuery
+  const { data: fallbackMatch, error: fallbackMatchError } = await fallbackQuery
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (fallbackMatchError) {
+    throw new Error("Nie udalo sie pobrac rozmowy zapytania.");
+  }
 
   return fallbackMatch?.id ? fallbackMatch : null;
 }

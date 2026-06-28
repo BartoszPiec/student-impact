@@ -148,7 +148,7 @@ export function VariantPicker({ variants, baseDeliveryDays, gradient, packageId 
                         </div>
                         Bezpieczenstwo
                     </span>
-                    <span className="font-bold text-slate-900">Escrow</span>
+                    <span className="font-bold text-slate-900">Depozyt</span>
                 </div>
             </div>
 

@@ -1,21 +1,11 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Check, X, Banknote } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { acceptRate, rejectRate, sendEventMessage } from "@/app/app/chat/_actions";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Banknote, Check, X } from "lucide-react";
+
+import { acceptRate, rejectRate } from "@/app/app/chat/_actions";
+import { Button } from "@/components/ui/button";
 
 export function RateCard({
   rate,
@@ -36,8 +26,6 @@ export function RateCard({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [counterOpen, setCounterOpen] = useState(false);
-  const [counterValue, setCounterValue] = useState("");
 
   const handleAccept = () => {
     startTransition(async () => {
@@ -61,30 +49,6 @@ export function RateCard({
         router.refresh();
       }
     });
-  };
-
-  const handleCounter = async () => {
-    if (!counterValue || locked) return;
-    const parsedValue = parseFloat(counterValue);
-    if (Number.isNaN(parsedValue)) {
-      alert("Proszę podać prawidłową kwotę.");
-      return;
-    }
-
-    try {
-      await sendEventMessage(
-        conversationId,
-        "rate.proposed",
-        { proposed_stawka: parsedValue },
-        `Proponuję inną stawkę: ${counterValue} zł`,
-      );
-      setCounterOpen(false);
-      setCounterValue("");
-      router.refresh();
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Nie udało się wysłać propozycji.");
-      router.refresh();
-    }
   };
 
   const effectiveStatus = locked && status === "pending" ? "rejected" : status;
@@ -124,7 +88,7 @@ export function RateCard({
       ) : null}
 
       {isInteractive ? (
-        <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
+        <div className="mt-2 border-t border-slate-100 pt-2">
           <div className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"
@@ -144,41 +108,6 @@ export function RateCard({
               {pending ? "..." : "Akceptuj"}
             </Button>
           </div>
-
-          <Dialog open={counterOpen} onOpenChange={setCounterOpen}>
-            <DialogTrigger asChild>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="h-9 w-full bg-slate-100/80 text-slate-600 hover:bg-slate-200"
-              >
-                Zaproponuj inną
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Zaproponuj inną stawkę</DialogTitle>
-                <DialogDescription>Podaj nową kwotę do dalszej negocjacji.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2 py-4">
-                <Label>Twoja propozycja (PLN)</Label>
-                <Input
-                  type="number"
-                  value={counterValue}
-                  onChange={(event) => setCounterValue(event.target.value)}
-                  placeholder="np. 1400"
-                />
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setCounterOpen(false)} className="rounded-xl border-slate-200">
-                  Anuluj
-                </Button>
-                <Button onClick={() => void handleCounter()} className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
-                  Wyślij propozycję
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </div>
       ) : null}
 

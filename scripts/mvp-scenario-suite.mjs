@@ -237,12 +237,26 @@ async function checkSupabaseEvidence(checks, env) {
         .eq("contract_id", contractId)
     : { data: [], error: null };
   const companyInvoice = invoices?.find((invoice) => invoice.invoice_type === "company");
+  const { data: ksefInvoices, error: ksefInvoicesError } = contractId
+    ? await supabase
+        .from("ksef_invoices")
+        .select("id, invoice_status, invoice_type")
+        .eq("contract_id", contractId)
+    : { data: [], error: null };
+  const originalKsefInvoice = ksefInvoices?.find((invoice) => invoice.invoice_type === "ORIGINAL");
   checks.push({
     ok: !invoicesError
-      && Boolean(companyInvoice?.id && companyInvoice.storage_path)
-      && ["issued", "paid"].includes(companyInvoice?.status),
-    name: "db company invoice evidence",
-    details: invoicesError?.message || companyInvoice?.id || "missing",
+      && !ksefInvoicesError
+      && (
+        (Boolean(companyInvoice?.id && companyInvoice.storage_path) && ["issued", "paid"].includes(companyInvoice?.status))
+        || Boolean(originalKsefInvoice?.id && originalKsefInvoice.invoice_status)
+      ),
+    name: "db company final invoice evidence",
+    details: invoicesError?.message
+      || ksefInvoicesError?.message
+      || originalKsefInvoice?.id
+      || companyInvoice?.id
+      || "missing",
   });
 
   return {
@@ -275,6 +289,24 @@ async function main() {
   await assertHttp(checks, baseUrl, "/api/storage/upload", [401, 403], { method: "POST" });
   await assertHttp(checks, baseUrl, "/api/auth/verify-turnstile", [200, 400, 403, 500], { method: "POST" });
   await assertHttp(checks, baseUrl, "/api/webhooks/notifications", 401, { method: "POST" });
+  await assertHttp(checks, baseUrl, "/api/security/csp-report", 400, {
+    method: "POST",
+    headers: { "content-type": "application/csp-report" },
+    body: "{bad-json",
+  });
+  await assertHttp(checks, baseUrl, "/api/security/csp-report", 202, {
+    method: "POST",
+    headers: { "content-type": "application/csp-report" },
+    body: JSON.stringify({
+      "csp-report": {
+        "document-uri": `${baseUrl}/app?token=redacted`,
+        "violated-directive": "script-src",
+        "blocked-uri": "inline",
+        "source-file": `${baseUrl}/app?secret=redacted`,
+        "line-number": 1,
+      },
+    }),
+  });
   await assertHttp(checks, baseUrl, "/api/admin/export/invoices-zip", 401);
   await assertHttp(checks, baseUrl, "/api/admin/export/pit-csv", 401);
   await assertCronProtected(checks, baseUrl, "/api/cron/process-stripe-events");

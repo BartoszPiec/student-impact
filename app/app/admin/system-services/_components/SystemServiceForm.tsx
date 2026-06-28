@@ -12,6 +12,7 @@ import { ShieldAlert, Zap, Loader2, UploadCloud, CheckCircle2, DollarSign, Plus,
 import { uploadPrivateFile } from "@/lib/security/client-upload";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { SERVICE_CATEGORIES, resolveJobCategoryLabel } from "@/lib/constants";
 
 type SystemServiceInitialData = {
   id?: string;
@@ -106,7 +107,7 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
 
   const [formData, setFormData] = useState({
     tytul: initialData?.title || "",
-    kategoria: initialData?.category || "IT - Rozwoj oprogramowania",
+    kategoria: resolveJobCategoryLabel(initialData?.category) ?? SERVICE_CATEGORIES[0],
     opis: initialData?.description || "",
     stawka: initialData?.price ? String(initialData.price) : "",
     czas: initialData?.delivery_time_days ? String(initialData.delivery_time_days) : "",
@@ -320,11 +321,11 @@ export default function SystemServiceForm({ initialData, offerId }: SystemServic
                     value={formData.kategoria}
                     onChange={(event) => handleChange("kategoria", event.target.value)}
                   >
-                    <option value="IT - Rozwoj oprogramowania">IT - Rozwoj oprogramowania</option>
-                    <option value="Grafika & Design">Grafika & Design</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Copywriting">Copywriting</option>
-                    <option value="Inne">Inne</option>
+                    {SERVICE_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">

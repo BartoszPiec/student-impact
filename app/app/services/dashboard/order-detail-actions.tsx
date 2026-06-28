@@ -117,26 +117,26 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
   const isRealizationActive = ["accepted", "active", "in_progress", "delivered", "completed"].includes(order.status);
 
   return (
-    <div className="flex w-full flex-wrap gap-3 sm:w-auto">
+    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:gap-3">
       {isRealizationActive ? (
-        <Link href={`/app/deliverables/${order.id}`} className="flex-1 sm:flex-none">
-          <Button className="w-full bg-indigo-600 text-white shadow-sm hover:bg-indigo-700">Panel realizacji</Button>
+        <Link href={`/app/deliverables/${order.id}`} className="min-w-0 sm:flex-none">
+          <Button className="h-11 w-full rounded-xl bg-indigo-600 px-2 text-xs font-black text-white shadow-sm hover:bg-indigo-700 sm:px-4 sm:text-sm">Panel realizacji</Button>
         </Link>
       ) : null}
 
-      <Link href={chatLink} className="flex-1 sm:flex-none">
-        <Button variant="outline" className="w-full">
+      <Link href={chatLink} className="min-w-0 sm:flex-none">
+        <Button variant="outline" className="h-11 w-full rounded-xl px-2 text-xs font-black sm:px-4 sm:text-sm">
           <MessageSquare className="mr-2 h-4 w-4" />
-          Czat / wiadomosc
+          Czat
         </Button>
       </Link>
 
       {(order.status === "inquiry" || order.status === "pending") ? (
         <Dialog open={openProposal} onOpenChange={setOpenProposal}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="flex-1 border-indigo-600 text-indigo-600 hover:bg-indigo-50 sm:flex-none">
+            <Button variant="outline" className="h-11 w-full rounded-xl border-indigo-600 px-2 text-xs font-black text-indigo-600 hover:bg-indigo-50 sm:w-auto sm:px-4 sm:text-sm">
               <Banknote className="mr-2 h-4 w-4" />
-              Zloz oferte
+              Złóż ofertę
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -175,20 +175,20 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
       ) : null}
 
       {order.status === "pending_student_confirmation" || order.status === "pending_confirmation" ? (
-        <Button onClick={handleConfirmSelection} disabled={confirmLoading} className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700 sm:flex-none">
+        <Button onClick={handleConfirmSelection} disabled={confirmLoading} className="h-11 w-full rounded-xl bg-emerald-600 px-2 text-xs font-black text-white hover:bg-emerald-700 sm:w-auto sm:px-4 sm:text-sm">
           {confirmLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
           Potwierdz realizacje
         </Button>
       ) : null}
 
       {order.status === "proposal_sent" ? (
-        <Button disabled variant="secondary" className="cursor-not-allowed opacity-80">
+        <Button disabled variant="secondary" className="col-span-2 h-11 cursor-not-allowed rounded-xl opacity-80 sm:col-span-1">
           Czekasz na decyzje firmy
         </Button>
       ) : null}
 
       {order.status === "countered" ? (
-        <div className="flex flex-1 flex-col gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-3 sm:min-w-[340px] sm:flex-none">
+        <div className="col-span-2 flex flex-col gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-3 sm:min-w-[340px] sm:flex-none">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-sm font-medium text-orange-700">
               <RefreshCw className="h-3.5 w-3.5" />
@@ -206,9 +206,9 @@ export default function OrderDetailActions({ order, chatLink }: OrderDetailActio
         </div>
       ) : null}
 
-      <Button variant="destructive" onClick={handleReject} disabled={rejectLoading} className="flex-1 sm:flex-none">
+      <Button variant="destructive" onClick={handleReject} disabled={rejectLoading} className="h-11 w-full rounded-xl bg-red-600 px-2 text-xs font-black text-white hover:bg-red-700 sm:w-auto sm:px-4 sm:text-sm">
         {rejectLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-        Odrzuc
+        Odrzuć
       </Button>
     </div>
   );

@@ -28,6 +28,7 @@ import {
     FileText,
     Briefcase,
     Globe,
+    TrendingUp,
     ShieldAlert,
     Package,
     Lightbulb
@@ -52,6 +53,7 @@ import {
     resolvePackageVariantsWithFallback,
 } from "@/lib/services/package-customization";
 import { LOGO_PACKAGE_ID } from "@/lib/services/logo-student-selection";
+import { resolveJobCategorySlug } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +64,60 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // Category config
 
 const categoryConfig: Record<string, { icon: React.ReactNode; gradient: string; lightBg: string; darkText: string }> = {
+    "marketing-i-social-media": {
+        icon: <Megaphone className="w-8 h-8" />,
+        gradient: "from-blue-500 to-indigo-600",
+        lightBg: "bg-blue-50",
+        darkText: "text-blue-600"
+    },
+    "e-commerce-i-marketplace": {
+        icon: <TrendingUp className="w-8 h-8" />,
+        gradient: "from-yellow-500 to-amber-600",
+        lightBg: "bg-yellow-50",
+        darkText: "text-yellow-600"
+    },
+    "strony-internetowe-i-cms": {
+        icon: <Globe className="w-8 h-8" />,
+        gradient: "from-teal-500 to-cyan-600",
+        lightBg: "bg-teal-50",
+        darkText: "text-teal-600"
+    },
+    "seo-i-tresci": {
+        icon: <PenTool className="w-8 h-8" />,
+        gradient: "from-emerald-500 to-teal-600",
+        lightBg: "bg-emerald-50",
+        darkText: "text-emerald-600"
+    },
+    "grafika-i-materialy-sprzedazowe": {
+        icon: <Palette className="w-8 h-8" />,
+        gradient: "from-violet-500 to-purple-600",
+        lightBg: "bg-violet-50",
+        darkText: "text-violet-600"
+    },
+    "wideo-i-ugc": {
+        icon: <Clapperboard className="w-8 h-8" />,
+        gradient: "from-rose-500 to-orange-500",
+        lightBg: "bg-rose-50",
+        darkText: "text-rose-600"
+    },
+    "dane-research-analizy": {
+        icon: <BarChart3 className="w-8 h-8" />,
+        gradient: "from-amber-500 to-orange-600",
+        lightBg: "bg-amber-50",
+        darkText: "text-amber-600"
+    },
+    "automatyzacje-ai-narzedzia": {
+        icon: <Cpu className="w-8 h-8" />,
+        gradient: "from-purple-600 to-pink-600",
+        lightBg: "bg-purple-50",
+        darkText: "text-purple-600"
+    },
+    "administracja-i-operacje": {
+        icon: <Briefcase className="w-8 h-8" />,
+        gradient: "from-stone-500 to-stone-700",
+        lightBg: "bg-stone-50",
+        darkText: "text-stone-600"
+    },
     "multimedia": {
         icon: <Clapperboard className="w-8 h-8" />,
         gradient: "from-rose-500 to-orange-500",
@@ -152,7 +208,7 @@ function normalizeSearchText(value: string): string {
 
 function getCategoryConfig(category: string | null) {
     if (!category) return categoryConfig.default;
-    const key = normalizeSearchText(category);
+    const key = resolveJobCategorySlug(category) ?? normalizeSearchText(category);
     return categoryConfig[key] || categoryConfig.default;
 }
 
@@ -361,7 +417,7 @@ const LOGO_FAQ_FALLBACK: Array<{ question: string; answer: string }> = [
     {
         question: "Jak zabezpieczona jest płatność?",
         answer:
-            "Platnosc jest realizowana przez Escrow. Srodki są uwalniane po Twojej akceptacji dostarczonej pracy.",
+            "Platnosc jest realizowana przez Stripe i depozyt Student2Work. Srodki sa przekazywane po Twojej akceptacji dostarczonej pracy.",
     },
 ];
 
@@ -394,7 +450,7 @@ const LOGO_PROCESS_FALLBACK_STEPS = [
         num: 5,
         title: "Pliki koncowe i zamkniecie",
         description:
-            "Otrzymujesz komplet plikow, masz czas na finalny feedback, a po akceptacji Escrow uwalnia srodki.",
+            "Otrzymujesz komplet plikow, masz czas na finalny feedback, a po akceptacji depozyt jest rozliczany na rzecz studenta.",
     },
 ];
 
@@ -706,7 +762,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                     <div className="mb-5 flex items-center justify-between">
                                         <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Snapshot pakietu</p>
                                         <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
-                                            Escrow aktywne
+                                            Depozyt aktywny
                                         </span>
                                     </div>
                                     <div className="space-y-4">
@@ -770,7 +826,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                         <Shield className="h-4 w-4" />
                                         <span className="text-xs font-bold uppercase tracking-[0.2em]">Platnosc</span>
                                     </div>
-                                    <p className="text-2xl font-extrabold text-slate-900">Escrow</p>
+                                    <p className="text-2xl font-extrabold text-slate-900">Depozyt</p>
                                 </div>
                                 <div className="p-5 md:p-6">
                                     <div className="mb-2 flex items-center gap-2 text-slate-500">
@@ -1082,7 +1138,7 @@ export default async function PackageDetailsPage(props: { params: Promise<{ id: 
                                                 </div>
                                                 Bezpieczenstwo
                                             </span>
-                                            <span className="font-bold text-slate-900 text-lg">System Escrow</span>
+                                            <span className="font-bold text-slate-900 text-lg">Depozyt Student2Work</span>
                                         </div>
                                     </div>
 

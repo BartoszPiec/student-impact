@@ -65,3 +65,4 @@ codex-dev.*
 supabase/.temp/
 
 .vercel
+.env*

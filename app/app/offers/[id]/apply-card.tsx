@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,6 +21,34 @@ type CompanyMilestoneTemplate = {
   acceptance_criteria: string;
 };
 
+type ApplySheetOfferInput = {
+  offerId: string;
+  offerTitle?: string;
+  offerTyp?: string;
+  obligations?: string;
+  offerDescription?: string;
+};
+
+function normalizeOfferType(value: string | undefined) {
+  return (value ?? "")
+    .toLocaleLowerCase("pl-PL")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function toApplySheetOffer(input: ApplySheetOfferInput): JobOffer {
+  return {
+    id: input.offerId,
+    tytul: input.offerTitle || "Zlecenie",
+    typ: input.offerTyp || "Mikrozlecenie",
+    company_id: "",
+    created_at: new Date().toISOString(),
+    obligations: input.obligations,
+    opis: input.offerDescription,
+    is_platform_service: true,
+  };
+}
+
 export default function ApplyCard({
   offerId,
   offerStawka,
@@ -38,7 +66,7 @@ export default function ApplyCard({
   offerStawka?: number | null;
   offerTyp?: string;
   formattedSalary?: string;
-  className?: string; // Added className
+  className?: string;
   isPlatformService?: boolean;
   offerTitle?: string;
   obligations?: string;
@@ -46,25 +74,19 @@ export default function ApplyCard({
   realizationMode?: "student_defined" | "company_defined" | null;
   companyMilestones?: CompanyMilestoneTemplate[];
 }) {
-  const [message, setMessage] = useState("");
-  const [negotiating, setNegotiating] = useState(
-    (offerTyp?.toLocaleLowerCase("pl-PL") ?? "").includes("challenge") ||
-      (offerTyp?.toLocaleLowerCase("pl-PL") ?? "").includes("wyzwan"),
-  );
-  const [cvFile, setCvFile] = useState<File | null>(null);
-
-  // Logic: Disable negotiation if it's a standard Job or Internship
-  const normalizedOfferType = offerTyp?.toLocaleLowerCase("pl-PL") ?? "";
+  const normalizedOfferType = normalizeOfferType(offerTyp);
   const isChallenge =
     normalizedOfferType.includes("challenge") || normalizedOfferType.includes("wyzwan");
-  const isJobOrInternship = offerTyp && (offerTyp.toLowerCase().includes("job") || offerTyp.toLowerCase().includes("praca") || offerTyp.toLowerCase().includes("staż"));
+  const isJobOrInternship =
+    normalizedOfferType.includes("job")
+    || normalizedOfferType.includes("praca")
+    || normalizedOfferType.includes("staz");
   const canNegotiate = !isJobOrInternship && !isPlatformService;
 
-  const initialRate = useMemo(
-    () => (offerStawka != null ? String(offerStawka) : ""),
-    [offerStawka]
-  );
-  const [rate, setRate] = useState(initialRate);
+  const [message, setMessage] = useState("");
+  const [negotiating, setNegotiating] = useState(isChallenge);
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [rate, setRate] = useState(() => (offerStawka != null ? String(offerStawka) : ""));
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -72,19 +94,14 @@ export default function ApplyCard({
   const hasCompanyDefinedMilestones =
     realizationMode === "company_defined" && (companyMilestones?.length ?? 0) > 0;
 
-  // Platform Service Logic
   if (isPlatformService) {
-    // Mock JobOffer object for ApplySheet
-    const mockOffer: JobOffer = {
-      id: offerId,
-      tytul: offerTitle || "Zlecenie",
-      typ: offerTyp || "Mikrozlecenie",
-      company_id: "", // Not needed for sheet
-      created_at: new Date().toISOString(),
-      obligations: obligations,
-      opis: offerDescription,
-      is_platform_service: true
-    };
+    const applySheetOffer = toApplySheetOffer({
+      offerId,
+      offerTitle,
+      offerTyp,
+      obligations,
+      offerDescription,
+    });
 
     return (
       <Card className={cn(
@@ -126,7 +143,7 @@ export default function ApplyCard({
           </div>
         </CardContent>
         <CardFooter className="border-t border-slate-100 bg-slate-50/60 p-8">
-          <ApplySheet offer={mockOffer}>
+          <ApplySheet offer={applySheetOffer}>
             <Button
               className="h-14 w-full rounded-2xl bg-amber-600 text-base font-black text-white shadow-xl shadow-amber-600/20 transition-all hover:bg-amber-700 hover:scale-[1.01]"
             >
@@ -204,7 +221,7 @@ export default function ApplyCard({
           return;
         }
 
-        setOk("Twoja aplikacja została wysłana! 🚀");
+        setOk("Twoja aplikacja została wysłana.");
         setMessage("");
         setCvFile(null);
       } catch (e: unknown) {
@@ -224,8 +241,12 @@ export default function ApplyCard({
             <h3 className="font-semibold text-green-900 text-lg">Aplikacja wysłana!</h3>
             <p className="text-green-700">Firma otrzymała Twoje zgłoszenie. Powodzenia!</p>
           </div>
-          <Button variant="outline" className="border-green-200 text-green-700 hover:bg-green-100" onClick={() => setOk(null)}>
-            Wyślij kolejne zgłoszenie (test)
+          <Button
+            variant="outline"
+            className="border-green-200 text-green-700 hover:bg-green-100"
+            onClick={() => router.push("/app/applications")}
+          >
+            Zobacz moje zgłoszenia
           </Button>
         </CardContent>
       </Card>

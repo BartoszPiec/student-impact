@@ -15,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { resolveJobCategoryLabel } from "@/lib/constants";
 
 export interface JobOffer {
   id: string;
@@ -84,7 +85,8 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer; isApplied?: boo
   const offerType = normalizeLabel(offer.typ);
   const isChallenge = offerType.includes("challenge") || offerType.includes("wyzwan");
   const isJob = offerType.includes("job") || offerType.includes("praca") || offerType.includes("staz");
-  const isMicro = !isJob;
+  const isMicro = !isJob && !isChallenge;
+  const categoryLabel = resolveJobCategoryLabel(offer.category) ?? offer.category;
   const budgetLabel = isChallenge ? "Budzet orientacyjny" : isJob ? "Wynagrodzenie m-c" : "Budzet zlecenia";
 
   return (
@@ -165,9 +167,9 @@ export function JobCard({ offer, isApplied }: { offer: JobOffer; isApplied?: boo
                   Praca
                 </Badge>
               ) : null}
-              {offer.category ? (
+              {categoryLabel ? (
                 <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 sm:text-[10px]">
-                  {offer.category}
+                  {categoryLabel}
                 </span>
               ) : null}
             </div>
