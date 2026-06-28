@@ -4,6 +4,7 @@ import { getRequestContext } from "@/lib/auth/request-context";
 import { EnsureOnboarding } from "./EnsureOnboarding";
 import { AppNavbar } from "./app-navbar";
 import { AppTourProvider } from "@/components/app-tour/app-tour-provider";
+import { cn } from "@/lib/utils";
 
 type OnboardingDetails = {
   kierunek?: string | null;
@@ -56,7 +57,14 @@ export default async function AppLayout({
       <div className="min-h-screen max-w-full overflow-x-hidden bg-[#f3f6fb]">
         {needsOnboarding ? <EnsureOnboarding /> : null}
         <AppNavbar user={user} role={role} unread={unread} unreadChat={unreadChat} />
-        <main className="min-h-screen max-w-full overflow-x-hidden bg-[linear-gradient(180deg,#10245f_0,#10245f_6rem,#f3f6fb_6rem,#f3f6fb_100%)] pb-24 pt-20 sm:pt-24 lg:pb-0">
+        <main
+          className={cn(
+            "min-h-screen max-w-full overflow-x-hidden pb-24 lg:pb-0",
+            role === "admin"
+              ? "bg-[linear-gradient(180deg,#10245f_0,#10245f_8rem,#f3f6fb_8rem,#f3f6fb_100%)] pt-28 sm:pt-32"
+              : "bg-[linear-gradient(180deg,#10245f_0,#10245f_6rem,#f3f6fb_6rem,#f3f6fb_100%)] pt-20 sm:pt-24",
+          )}
+        >
           {children}
         </main>
       </div>

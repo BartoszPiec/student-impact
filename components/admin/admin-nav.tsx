@@ -22,6 +22,7 @@ type AdminNavProps = {
   pathname: string | null;
   mobile?: boolean;
   onNavigate?: () => void;
+  wrap?: boolean;
 };
 
 type AdminNavItem = {
@@ -83,12 +84,14 @@ function AdminNavLink({
   icon: Icon,
   onClick,
   pathname,
+  compact = false,
 }: {
   href: string;
   children: ReactNode;
   icon?: LucideIcon;
   onClick?: () => void;
   pathname: string | null;
+  compact?: boolean;
 }) {
   const active = isPathActive(pathname, href);
 
@@ -97,7 +100,10 @@ function AdminNavLink({
       href={href}
       onClick={onClick}
       className={cn(
-        "relative flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-[13px] font-bold leading-none transition-all duration-200",
+        "relative flex shrink-0 items-center whitespace-nowrap rounded-xl font-bold leading-none transition-all duration-200",
+        compact
+          ? "gap-1.5 px-2.5 py-2 text-[12px]"
+          : "gap-2 px-3 py-2.5 text-[13px]",
         active
           ? "border border-white/10 bg-white/16 text-white shadow-sm shadow-black/20"
           : "border border-transparent text-white/75 hover:border-white/8 hover:bg-white/10 hover:text-white",
@@ -119,7 +125,7 @@ function AdminNavLink({
   );
 }
 
-export function AdminNav({ pathname, mobile = false, onNavigate }: AdminNavProps) {
+export function AdminNav({ pathname, mobile = false, onNavigate, wrap = false }: AdminNavProps) {
   if (mobile) {
     return (
       <>
@@ -151,7 +157,14 @@ export function AdminNav({ pathname, mobile = false, onNavigate }: AdminNavProps
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-1 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div
+      className={cn(
+        "flex min-w-0 items-center gap-1 pr-1",
+        wrap
+          ? "flex-wrap overflow-visible"
+          : "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+      )}
+    >
       {ADMIN_NAV_SECTIONS.flatMap((section) => section.items).map((item) => (
         <AdminNavLink
           key={item.href}
@@ -159,6 +172,7 @@ export function AdminNav({ pathname, mobile = false, onNavigate }: AdminNavProps
           icon={item.icon}
           pathname={pathname}
           onClick={onNavigate}
+          compact={wrap}
         >
           {item.label}
         </AdminNavLink>
