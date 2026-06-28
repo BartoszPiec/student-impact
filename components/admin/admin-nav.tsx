@@ -9,6 +9,7 @@ import {
   CalendarRange,
   FileText,
   LayoutGrid,
+  MoreHorizontal,
   ShieldCheck,
   Users,
   Wallet,
@@ -17,6 +18,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type AdminNavProps = {
   pathname: string | null;
@@ -74,6 +81,17 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   },
 ];
 
+const DESKTOP_PRIMARY_HREFS = new Set([
+  "/app/admin/analytics",
+  "/app/admin/offers",
+  "/app/admin/users",
+  "/app/admin/contracts",
+  "/app/admin/disputes",
+  "/app/admin/finance/invoices",
+  "/app/admin/ksef-sandbox",
+  "/app/admin/payouts",
+]);
+
 function isPathActive(pathname: string | null, path: string) {
   return pathname === path || pathname?.startsWith(`${path}/`);
 }
@@ -125,6 +143,84 @@ function AdminNavLink({
   );
 }
 
+function AdminNavMore({
+  items,
+  pathname,
+  onNavigate,
+  compact = false,
+}: {
+  items: AdminNavItem[];
+  pathname: string | null;
+  onNavigate?: () => void;
+  compact?: boolean;
+}) {
+  if (items.length === 0) return null;
+
+  const active = items.some((item) => isPathActive(pathname, item.href));
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "relative flex shrink-0 items-center whitespace-nowrap rounded-xl border font-bold leading-none transition-all duration-200",
+            compact
+              ? "gap-1.5 px-2.5 py-2 text-[12px]"
+              : "gap-2 px-3 py-2.5 text-[13px]",
+            active
+              ? "border border-white/10 bg-white/16 text-white shadow-sm shadow-black/20"
+              : "border-transparent text-white/75 hover:border-white/8 hover:bg-white/10 hover:text-white",
+          )}
+          aria-label="Pozostale sekcje panelu admina"
+        >
+          <MoreHorizontal
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 transition-colors",
+              active ? "text-white" : "text-white/55",
+            )}
+          />
+          <span>Wiecej</span>
+          {active ? (
+            <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-indigo-400" />
+          ) : null}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        sideOffset={8}
+        className="z-[80] w-60 rounded-xl border border-white/10 bg-[#07142f] p-1.5 text-white shadow-[0_22px_60px_-30px_rgba(0,0,0,0.7)]"
+      >
+        {items.map((item) => {
+          const Icon = item.icon;
+          const itemActive = isPathActive(pathname, item.href);
+
+          return (
+            <DropdownMenuItem
+              key={item.href}
+              asChild
+              className={cn(
+                "cursor-pointer rounded-lg px-3 py-2.5 text-xs font-bold text-white/75 focus:bg-white/10 focus:text-white",
+                itemActive && "bg-white/12 text-white",
+              )}
+            >
+              <Link href={item.href} onClick={onNavigate}>
+                <Icon
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0",
+                    itemActive ? "text-white" : "text-white/55",
+                  )}
+                />
+                <span>{item.label}</span>
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function AdminNav({ pathname, mobile = false, onNavigate, wrap = false }: AdminNavProps) {
   if (mobile) {
     return (
@@ -156,6 +252,10 @@ export function AdminNav({ pathname, mobile = false, onNavigate, wrap = false }:
     );
   }
 
+  const desktopItems = ADMIN_NAV_SECTIONS.flatMap((section) => section.items);
+  const primaryItems = desktopItems.filter((item) => DESKTOP_PRIMARY_HREFS.has(item.href));
+  const overflowItems = desktopItems.filter((item) => !DESKTOP_PRIMARY_HREFS.has(item.href));
+
   return (
     <div
       className={cn(
@@ -165,7 +265,7 @@ export function AdminNav({ pathname, mobile = false, onNavigate, wrap = false }:
           : "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
       )}
     >
-      {ADMIN_NAV_SECTIONS.flatMap((section) => section.items).map((item) => (
+      {primaryItems.map((item) => (
         <AdminNavLink
           key={item.href}
           href={item.href}
@@ -177,6 +277,12 @@ export function AdminNav({ pathname, mobile = false, onNavigate, wrap = false }:
           {item.label}
         </AdminNavLink>
       ))}
+      <AdminNavMore
+        items={overflowItems}
+        pathname={pathname}
+        onNavigate={onNavigate}
+        compact={wrap}
+      />
     </div>
   );
 }
