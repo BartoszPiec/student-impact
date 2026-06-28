@@ -161,7 +161,7 @@ export function AdminNav({ pathname, mobile = false, onNavigate, wrap = false }:
       className={cn(
         "flex min-w-0 items-center gap-1 pr-1",
         wrap
-          ? "flex-wrap overflow-visible"
+          ? "w-full flex-wrap overflow-visible"
           : "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
       )}
     >

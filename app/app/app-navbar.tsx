@@ -596,7 +596,6 @@ export function AppNavbar({
   const initials = getInitials(displayName, role);
   const homeHref = getHomeHref(role);
   const MobileActionIcon = mobile.action.icon;
-
   return (
     <>
       <header
@@ -608,7 +607,7 @@ export function AppNavbar({
         <div
           className={cn(
             "mx-auto flex min-h-14 items-center gap-2 rounded-2xl border border-white/10 bg-[#07142f]/96 px-3 py-2 shadow-[0_18px_52px_-34px_rgba(7,20,47,0.9)] backdrop-blur-xl transition-all duration-200 sm:min-h-16 sm:px-4 lg:gap-3 lg:px-5",
-            role === "admin" ? "max-w-[1880px]" : "max-w-[1480px]",
+            role === "admin" ? "max-w-[1880px] flex-wrap items-start" : "max-w-[1480px]",
             scrolled && "bg-[#07142f]/90 shadow-[0_22px_60px_-30px_rgba(7,20,47,0.95)]",
           )}
         >
@@ -616,7 +615,7 @@ export function AppNavbar({
 
           <nav className={cn(
             "hidden min-w-0 flex-1 items-center gap-1 px-2 lg:flex 2xl:px-5",
-            role === "admin" ? "justify-start" : "justify-center",
+            role === "admin" ? "order-last w-full flex-none basis-full justify-start px-0 2xl:px-0" : "justify-center",
           )}>
             {role === "admin" ? (
               <AdminNav pathname={pathname} wrap />
