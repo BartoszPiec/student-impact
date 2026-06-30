@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { openChatForOfferInquiry } from "../chat/_actions";
 import { resolveCommissionRate } from "@/lib/commission";
-import { SERVICE_CATEGORIES } from "@/lib/constants";
+import { JOB_CATEGORY_GROUPS, SERVICE_CATEGORIES } from "@/lib/constants";
 import { sendNotification } from "@/lib/notifications/server";
 import { UUID_RE } from "@/lib/security/validation";
 import { logCriticalError } from "@/lib/observability/error-log";
@@ -61,7 +61,10 @@ const SERVICE_ORDER_CONFIRMATION_STATUSES = [
     "inquiry",
 ] as const;
 const MAX_SERVICE_AMOUNT_PLN = 100_000;
-const SERVICE_CATEGORY_SET = new Set<string>(SERVICE_CATEGORIES);
+const SERVICE_CATEGORY_SET = new Set<string>([
+    ...SERVICE_CATEGORIES,
+    ...JOB_CATEGORY_GROUPS.flatMap((category) => category.subcategories.map((subcategory) => subcategory.label)),
+]);
 
 const uuidInputSchema = z.string().trim().regex(UUID_RE, "Nieprawidłowy identyfikator.");
 const optionalTextSchema = (max: number, message: string) =>
@@ -139,7 +142,7 @@ const servicePackageMutationSchema = z
         gallery_urls: z.array(storageOrHttpsRefSchema).max(12, "Możesz dodać maksymalnie 12 plików portfolio.").default([]),
         categories: z
             .array(z.string().trim().min(1).max(80))
-            .max(6, "Możesz wybrać maksymalnie 6 kategorii.")
+            .max(12, "Możesz wybrać maksymalnie 12 kategorii i podkategorii.")
             .transform((categories) => Array.from(new Set(categories)))
             .refine((categories) => categories.length > 0, "Wybierz przynajmniej jedną kategorię.")
             .refine(

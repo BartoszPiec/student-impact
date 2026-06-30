@@ -1076,6 +1076,13 @@ function MilestoneItem({ milestone, allMilestones, index, isStudent, isCompany, 
         && allMilestones
             .filter((candidate) => candidate.id !== milestone.id)
             .every((candidate) => ["released", "accepted", "completed", "refunded"].includes(String(candidate.status)));
+    const previousMilestone = index > 0 ? allMilestones[index - 1] : null;
+    const acceptedMilestoneStatuses = ["released", "accepted", "completed", "refunded"];
+    const canSubmitMilestone = ["funded", "in_progress", "rejected"].includes(String(milestone.status));
+    const isSequenceBlocked = isStudent
+        && canSubmitMilestone
+        && previousMilestone != null
+        && !acceptedMilestoneStatuses.includes(String(previousMilestone.status));
 
     const statusConfig = {
         'awaiting_funding': { label: 'Oczekuje', color: 'bg-slate-100 text-slate-500' },
@@ -1085,11 +1092,16 @@ function MilestoneItem({ milestone, allMilestones, index, isStudent, isCompany, 
         'completed': { label: 'Zakończone', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
         'released': { label: 'Zaakceptowany', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' }
     }[milestone.status as string] || { label: milestone.status, color: 'bg-gray-100' };
+    const displayStatusConfig = isSequenceBlocked
+        ? { label: "Zablokowany", color: "bg-slate-100 text-slate-500 border-slate-200" }
+        : statusConfig;
 
     return (
         <Card className={cn(
             "overflow-hidden rounded-2xl border bg-white shadow-none transition-all",
-            milestone.status === 'completed'
+            isSequenceBlocked
+                ? "border-slate-200 bg-slate-50/70"
+                : milestone.status === 'completed'
                 ? 'border-emerald-100 bg-emerald-50/25'
                 : milestone.status === 'delivered'
                     ? 'border-amber-200 bg-amber-50/20'
@@ -1100,13 +1112,15 @@ function MilestoneItem({ milestone, allMilestones, index, isStudent, isCompany, 
                     <div className="flex min-w-0 flex-1 items-start gap-3">
                         <div className={cn(
                             "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-black",
-                            milestone.status === 'completed'
+                            isSequenceBlocked
+                                ? 'border-slate-200 bg-slate-100 text-slate-400'
+                                : milestone.status === 'completed'
                                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                 : milestone.status === 'delivered'
                                     ? 'border-amber-200 bg-amber-50 text-amber-700'
                                     : 'border-slate-200 bg-slate-50 text-[#07142f]',
                         )}>
-                            {milestone.status === 'completed' ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
+                            {isSequenceBlocked ? <Lock className="h-4 w-4" /> : milestone.status === 'completed' ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
                         </div>
                         <div className="min-w-0">
                             <h4 className="flex min-w-0 items-center gap-2 text-sm font-black leading-snug text-[#07142f] sm:text-base">
@@ -1128,8 +1142,8 @@ function MilestoneItem({ milestone, allMilestones, index, isStudent, isCompany, 
                             <div className="text-base font-black text-[#07142f]">
                                 {(milestone.amount_minor ? milestone.amount_minor / 100 : milestone.amount)} <span className="text-[10px] font-black text-slate-400">PLN</span>
                             </div>
-                            <Badge variant="outline" className={`mt-1 border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${statusConfig.color}`}>
-                                {statusConfig.label}
+                            <Badge variant="outline" className={`mt-1 border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${displayStatusConfig.color}`}>
+                                {displayStatusConfig.label}
                             </Badge>
                         </div>
                         <CollapsibleTrigger asChild>
@@ -1149,7 +1163,23 @@ function MilestoneItem({ milestone, allMilestones, index, isStudent, isCompany, 
                         />
 
                         {/* STUDENT ACTIONS */}
-                        {isStudent && ['funded', 'in_progress', 'rejected'].includes(milestone.status) && (
+                        {isSequenceBlocked ? (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm font-semibold text-slate-600 shadow-sm">
+                                <div className="flex items-start gap-3">
+                                    <div className="rounded-xl bg-slate-100 p-2 text-slate-500">
+                                        <Lock className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                        <p className="font-black text-slate-800">Ten etap jest jeszcze zablokowany.</p>
+                                        <p className="mt-1 leading-relaxed">
+                                            Ten etap będzie dostępny po akceptacji poprzedniego etapu przez firmę.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {isStudent && canSubmitMilestone && !isSequenceBlocked && (
                             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                                 <h5 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
                                     <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg">
@@ -1322,7 +1352,7 @@ function MilestoneItem({ milestone, allMilestones, index, isStudent, isCompany, 
                             </div>
                         )}
 
-                        {milestoneDeliverables.length === 0 && !(['funded', 'in_progress'].includes(milestone.status) && isStudent) && (
+                        {milestoneDeliverables.length === 0 && !((canSubmitMilestone || isSequenceBlocked) && isStudent) && (
                             <div className="text-center py-8">
                                 <div className="inline-flex items-center justify-center p-3 bg-slate-50 rounded-full mb-3">
                                     <Clock className="w-6 h-6 text-slate-300" />

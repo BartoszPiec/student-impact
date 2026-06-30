@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Bell, Info, AlertCircle, CheckCircle, MessageSquare } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { pl } from "date-fns/locale";
@@ -17,14 +18,18 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
 } from "@/app/app/notifications/_actions";
-import { getNotificationTitle } from "@/app/app/notifications/utils";
+import {
+  getNotificationHref,
+  getNotificationTitle,
+  type NotificationRoutePayload,
+} from "@/app/app/notifications/utils";
 
 interface Notification {
   id: string;
   typ: string;
   read_at: string | null;
   created_at: string;
-  payload?: Record<string, unknown>;
+  payload?: NotificationRoutePayload | null;
 }
 
 type NotificationsBellProps = {
@@ -38,6 +43,7 @@ export default function NotificationsBell({
   triggerClassName,
   badgeClassName,
 }: NotificationsBellProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -84,6 +90,17 @@ export default function NotificationsBell({
           : notification
       )
     );
+  };
+
+  const handleNotificationClick = async (notification: Notification) => {
+    const href = getNotificationHref(notification);
+
+    try {
+      await handleMarkRead(notification.id, notification.read_at);
+    } finally {
+      setOpen(false);
+      router.push(href);
+    }
   };
 
   const getIcon = (type: string) => {
@@ -160,15 +177,16 @@ export default function NotificationsBell({
             </div>
           ) : (
             notifications.map((notification) => (
-              <div
+              <button
                 key={notification.id}
+                type="button"
                 className={cn(
-                  "cursor-pointer border-b border-slate-50 px-4 py-3 transition-colors last:border-0 hover:bg-slate-50",
+                  "w-full cursor-pointer border-b border-slate-50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-slate-50",
                   !notification.read_at && "bg-[#f0ffbd]/70"
                 )}
-                onClick={() =>
-                  handleMarkRead(notification.id, notification.read_at)
-                }
+                onClick={() => {
+                  void handleNotificationClick(notification);
+                }}
               >
                 <div className="flex items-start gap-3">
                   <div
@@ -200,7 +218,7 @@ export default function NotificationsBell({
                     <div className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#c5fb37]" />
                   )}
                 </div>
-              </div>
+              </button>
             ))
           )}
         </div>

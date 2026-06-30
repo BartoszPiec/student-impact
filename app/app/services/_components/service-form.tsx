@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import ImageUpload from "@/components/image-upload";
-import { SERVICE_CATEGORIES } from "@/lib/constants";
+import { JOB_CATEGORY_GROUPS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 type ServiceQuestionDraft = {
@@ -57,10 +57,38 @@ export default function ServiceForm({ initialData, isEditing = false }: ServiceF
     "rounded-2xl border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-semibold leading-6 text-slate-900 shadow-inner shadow-slate-200/40 placeholder:text-slate-400 focus-visible:ring-lime-200";
   const labelClass = "text-xs font-black uppercase tracking-normal text-slate-500";
 
-  const toggleCategory = (cat: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(cat) ? prev.filter((item) => item !== cat) : [...prev, cat],
-    );
+  const getSubcategoryLabels = (categoryLabel: string): string[] =>
+    JOB_CATEGORY_GROUPS.find((category) => category.label === categoryLabel)?.subcategories.map(
+      (subcategory) => subcategory.label,
+    ) ?? [];
+
+  const isCategorySelected = (categoryLabel: string) => selectedCategories.includes(categoryLabel);
+  const isSubcategorySelected = (subcategoryLabel: string) => selectedCategories.includes(subcategoryLabel);
+
+  const toggleCategory = (categoryLabel: string) => {
+    const subcategoryLabels = getSubcategoryLabels(categoryLabel);
+
+    setSelectedCategories((prev) => {
+      if (prev.includes(categoryLabel)) {
+        return prev.filter(
+          (item) => item !== categoryLabel && !subcategoryLabels.includes(item),
+        );
+      }
+
+      return Array.from(new Set([...prev, categoryLabel]));
+    });
+  };
+
+  const toggleSubcategory = (categoryLabel: string, subcategoryLabel: string) => {
+    setSelectedCategories((prev) => {
+      const base = prev.includes(categoryLabel) ? prev : [...prev, categoryLabel];
+
+      if (prev.includes(subcategoryLabel)) {
+        return base.filter((item) => item !== subcategoryLabel);
+      }
+
+      return Array.from(new Set([...base, subcategoryLabel]));
+    });
   };
 
   const addQuestion = () => {
@@ -148,22 +176,69 @@ export default function ServiceForm({ initialData, isEditing = false }: ServiceF
 
       <div className="space-y-2">
         <Label className={labelClass}>Kategorie</Label>
-        <div className="flex flex-wrap gap-2 pt-2">
-          {SERVICE_CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              className={cn(
-                "max-w-full select-none rounded-full border px-3.5 py-2 text-xs font-black transition-all",
-                selectedCategories.includes(cat)
-                  ? "border-lime-300 bg-lime-200 text-[#0b1b47] shadow-sm"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-lime-200 hover:bg-lime-50 hover:text-[#10245f]",
-              )}
-              onClick={() => toggleCategory(cat)}
-            >
-              {cat}
-            </button>
-          ))}
+        <div className="space-y-3 pt-2">
+          {JOB_CATEGORY_GROUPS.map((category) => {
+            const subcategories = getSubcategoryLabels(category.label);
+            const selected = isCategorySelected(category.label);
+
+            return (
+              <div
+                key={category.slug}
+                className={cn(
+                  "rounded-2xl border transition-colors",
+                  selected ? "border-lime-300 bg-lime-50" : "border-slate-200 bg-white",
+                )}
+              >
+                <button
+                  type="button"
+                  className={cn(
+                    "flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition-colors",
+                    selected
+                      ? "text-[#0b1b47]"
+                      : "text-slate-700 hover:bg-lime-50 hover:text-[#10245f]",
+                  )}
+                  onClick={() => toggleCategory(category.label)}
+                  aria-pressed={selected}
+                >
+                  <span className="break-words">{category.label}</span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full border px-2 py-1 text-[10px] uppercase tracking-normal",
+                      selected ? "border-lime-300 bg-lime-200 text-[#0b1b47]" : "border-slate-200 text-slate-400",
+                    )}
+                  >
+                    {selected ? "Wybrano" : "Wybierz"}
+                  </span>
+                </button>
+
+                {selected && subcategories.length > 0 && (
+                  <div className="space-y-2 border-t border-lime-100 px-4 pb-4 pt-2">
+                    <p className="text-xs font-semibold text-slate-500">
+                      Doprecyzuj podkategorię, jeśli pasuje do usługi.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {subcategories.map((subcategory) => (
+                        <button
+                          key={subcategory}
+                          type="button"
+                          className={cn(
+                            "max-w-full select-none rounded-full border px-3 py-2 text-xs font-bold transition-all",
+                            isSubcategorySelected(subcategory)
+                              ? "border-[#10245f] bg-[#10245f] text-white"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-lime-200 hover:bg-lime-100 hover:text-[#10245f]",
+                          )}
+                          onClick={() => toggleSubcategory(category.label, subcategory)}
+                          aria-pressed={isSubcategorySelected(subcategory)}
+                        >
+                          {subcategory}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
         {selectedCategories.length === 0 && (
           <p className="pt-1 text-xs font-semibold text-amber-600">

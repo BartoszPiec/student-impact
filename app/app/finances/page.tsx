@@ -10,6 +10,7 @@ import {
 import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 import { PageContainer } from "@/components/ui/page-container";
 import { parseDetailedReviewComment } from "@/lib/reviews";
+import { resolveCommissionRate } from "@/lib/commission";
 import StudentDocumentsPanel from "./student-documents-panel";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +18,30 @@ export const dynamic = "force-dynamic";
 type TitleRelation = { tytul?: string | null; title?: string | null };
 type ApplicationTitleRow = { contract_id: string | null; offers: TitleRelation | TitleRelation[] | null };
 type OrderTitleRow = { contract_id: string | null; packages: TitleRelation | TitleRelation[] | null };
-type MilestoneRow = { id: string; title: string; amount: number | string; status: string; due_at: string | null };
-type ContractRow = { id: string; status: string; created_at: string; milestones: MilestoneRow[] | null };
+type MilestoneRow = {
+    id: string;
+    title: string;
+    amount: number | string;
+    amount_minor?: number | string | null;
+    status: string;
+    due_at: string | null;
+};
+type ContractRow = {
+    id: string;
+    status: string;
+    created_at: string;
+    commission_rate?: number | string | null;
+    milestones: MilestoneRow[] | null;
+};
+type PayoutRow = {
+    id: string;
+    contract_id: string | null;
+    milestone_id: string | null;
+    amount_net: number | string | null;
+    amount_net_minor?: number | string | null;
+    status: string | null;
+    created_at: string | null;
+};
 type LegacyApplicationRow = {
     id: string;
     created_at: string;
@@ -40,6 +63,64 @@ function formatMoneyPLN(value: number | string | null | undefined) {
         maximumFractionDigits: rounded % 1 === 0 ? 0 : 2,
         minimumFractionDigits: 0,
     }).format(rounded)} PLN`;
+}
+
+function toFiniteNumberOrNull(value: number | string | null | undefined) {
+    if (value == null || value === "") {
+        return null;
+    }
+
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+}
+
+function roundMoney(value: number) {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function amountFromMinorOrMajor(
+    minor: number | string | null | undefined,
+    major: number | string | null | undefined,
+) {
+    const minorValue = toFiniteNumberOrNull(minor);
+    if (minorValue != null) {
+        return roundMoney(minorValue / 100);
+    }
+
+    return roundMoney(toFiniteNumberOrNull(major) ?? 0);
+}
+
+function estimateNetAmountFromGross(grossAmount: number, commissionRate: number) {
+    return roundMoney(Math.max(0, grossAmount * (1 - commissionRate)));
+}
+
+function getPayoutNetAmount(payout: PayoutRow | null | undefined) {
+    if (!payout) {
+        return null;
+    }
+
+    return amountFromMinorOrMajor(payout.amount_net_minor, payout.amount_net);
+}
+
+function getStudentNetAmount(
+    milestone: MilestoneRow,
+    contract: ContractRow,
+    payout: PayoutRow | null | undefined,
+) {
+    const payoutNetAmount = getPayoutNetAmount(payout);
+    if (payoutNetAmount != null) {
+        return payoutNetAmount;
+    }
+
+    const commissionRate = resolveCommissionRate({
+        explicitRate: toFiniteNumberOrNull(contract.commission_rate),
+        sourceType: "application",
+    });
+
+    return estimateNetAmountFromGross(
+        amountFromMinorOrMajor(milestone.amount_minor, milestone.amount),
+        commissionRate,
+    );
 }
 
 export default async function FinancesPage() {
@@ -76,12 +157,27 @@ export default async function FinancesPage() {
     // This allows picking up contracts that might have missing application/service_order links
     const { data: contractsData } = await supabase
         .from("contracts")
-        .select("id, status, created_at, milestones(id, title, amount, status, due_at)")
+        .select("id, status, created_at, commission_rate, milestones(id, title, amount, amount_minor, status, due_at)")
         .eq("student_id", user.id)
         .order("created_at", { ascending: false });
 
     // contractIds are still useful for other lookups if needed, but we use the direct data
     const contracts = (contractsData || []) as unknown as ContractRow[];
+    const contractIds = contracts.map((contract) => contract.id);
+    const { data: payoutsData } = contractIds.length > 0
+        ? await supabase
+            .from("payouts")
+            .select("id, contract_id, milestone_id, amount_net, amount_net_minor, status, created_at")
+            .in("contract_id", contractIds)
+            .order("created_at", { ascending: false })
+        : { data: [] };
+    const payoutByMilestoneId = new Map<string, PayoutRow>();
+
+    ((payoutsData ?? []) as unknown as PayoutRow[]).forEach((payout) => {
+        if (payout.milestone_id && !payoutByMilestoneId.has(payout.milestone_id)) {
+            payoutByMilestoneId.set(payout.milestone_id, payout);
+        }
+    });
 
     // 3. Fetch High Ratings (Successes)
     const { data: reviews } = await supabase
@@ -127,7 +223,11 @@ export default async function FinancesPage() {
 
     // Process Legacy Apps first
     ((legacyApps ?? []) as unknown as LegacyApplicationRow[]).forEach((app) => {
-        const amount = Number(app.offers?.budget || app.offers?.price_min || 0);
+        const rawAmount = Number(app.offers?.budget || app.offers?.price_min || 0);
+        const amount = estimateNetAmountFromGross(
+            Number.isFinite(rawAmount) ? rawAmount : 0,
+            resolveCommissionRate({ explicitRate: null, sourceType: "application" }),
+        );
         if (amount > 0) {
             totalEarnings += amount;
             completedProjects++;
@@ -152,11 +252,11 @@ export default async function FinancesPage() {
         if (isCompletedContract) completedProjects++;
 
         (c.milestones ?? []).forEach((m) => {
-            const amount = Number(m.amount || 0);
+            const amount = getStudentNetAmount(m, c, payoutByMilestoneId.get(m.id));
             const isPaid = m.status === 'released' || m.status === 'completed' || m.status === 'paid' || m.status === 'accepted';
-            const isPending = m.status === 'funded' || m.status === 'delivered';
+            const isPending = m.status === 'funded' || m.status === 'in_progress' || m.status === 'delivered';
 
-            if (isPaid) {
+            if (isPaid && amount > 0) {
                 totalEarnings += amount;
                 const dateRaw = m.due_at || c.created_at;
                 addEarnings(dateRaw, amount, 'paid');
@@ -168,7 +268,7 @@ export default async function FinancesPage() {
                     date: dateRaw,
                     status: 'paid'
                 });
-            } else if (isPending) {
+            } else if (isPending && amount > 0) {
                 pendingEarnings += amount;
                 const dateRaw = m.due_at || c.created_at;
                 addEarnings(dateRaw, amount, 'pending');
@@ -366,13 +466,13 @@ export default async function FinancesPage() {
                             <div className="flex gap-4 items-start group">
                                 <div className="w-2 h-2 rounded-full bg-lime-300 mt-2 flex-shrink-0 group-hover:scale-150 transition-transform" />
                                 <p className="text-sm font-medium text-slate-600 leading-relaxed">
-                                    Realizuj zlecenia <span className="font-bold text-[#10245f]">przed terminem</span>, aby zwiększyć szansę na napiwki i dobre opinie.
+                                    Realizuj zlecenia <span className="font-bold text-[#10245f]">przed terminem</span>, aby zwiększyć szansę na dobre opinie i kolejne zlecenia.
                                 </p>
                             </div>
                             <div className="flex gap-4 items-start group">
                                 <div className="w-2 h-2 rounded-full bg-lime-300 mt-2 flex-shrink-0 group-hover:scale-150 transition-transform" />
                                 <p className="text-sm font-medium text-slate-600 leading-relaxed">
-                                    Uzupełnij profil o <span className="font-bold text-[#10245f]">portfolio</span> - klienci chętniej wybierają zweryfikowanych studentów.
+                                    Uzupełnij profil o <span className="font-bold text-[#10245f]">portfolio</span> - firmy chętniej wybierają profile z konkretnymi przykładami prac.
                                 </p>
                             </div>
                         </CardContent>

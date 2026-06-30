@@ -7,17 +7,8 @@ import { formatDistanceToNow } from "date-fns";
 import { pl } from "date-fns/locale";
 import { Bell, MessageSquare, Briefcase, FileText, Sparkles, Filter, CircleDollarSign, CheckCircle2, XCircle, Star, Ban, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getNotificationTitle } from "./utils";
+import { getNotificationHref, getNotificationTitle, type NotificationRoutePayload } from "./utils";
 import { markNotificationRead } from "./_actions";
-
-type NotificationPayload = {
-    redirect_path?: string;
-    conversation_id?: string;
-    application_id?: string;
-    contract_id?: string;
-    snippet?: string;
-    [key: string]: unknown;
-};
 
 type NotificationItem = {
     id: string;
@@ -25,7 +16,7 @@ type NotificationItem = {
     read_at: string | null;
     created_at: string;
     content?: string | null;
-    payload?: NotificationPayload | null;
+    payload?: NotificationRoutePayload | null;
 };
 
 interface NotificationListProps {
@@ -267,13 +258,10 @@ export default function NotificationList({ notifications }: NotificationListProp
                     {filteredList.map((notification) => {
                         const isRead = !!notification.read_at;
                         const created = new Date(notification.created_at);
-
-                        // Link logic:
-                        let href = "/app/notifications"; // Fallback
-                        if (notification.payload?.redirect_path) href = notification.payload.redirect_path;
-                        else if (notification.payload?.conversation_id) href = `/app/chat/${notification.payload.conversation_id}`;
-                        else if (notification.payload?.application_id) href = `/app/deliverables/${notification.payload.application_id}`;
-                        else if (notification.payload?.contract_id) href = `/app/deliverables/${notification.payload.contract_id}`;
+                        const href = getNotificationHref(notification);
+                        const snippet = typeof notification.payload?.snippet === "string"
+                            ? notification.payload.snippet
+                            : "Kliknij, aby zobaczyć szczegóły powiadomienia.";
 
                         return (
                             <Link
@@ -307,7 +295,7 @@ export default function NotificationList({ notifications }: NotificationListProp
                                             </div>
                                         </div>
                                         <p className={`text-sm mt-1.5 line-clamp-2 leading-relaxed ${!isRead ? "text-slate-600 font-medium" : "text-slate-500"}`}>
-                                            {notification.payload?.snippet || "Kliknij, aby zobaczyć szczegóły powiadomienia."}
+                                            {snippet}
                                         </p>
                                     </div>
                                 </div>

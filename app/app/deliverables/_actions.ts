@@ -210,6 +210,13 @@ type MilestoneSourceRow = {
   }>;
 };
 
+type MilestoneSequenceRow = {
+  id: string;
+  contract_id: string | null;
+  idx: number | null;
+  status: string | null;
+};
+
 type ResourceOwnerRow = {
   uploader_id: string | null;
   application_id: string | null;
@@ -406,6 +413,49 @@ async function assertMilestoneMatchesSource(
 
   if (params.actor === "company" && contract.company_id !== params.userId) {
     throw new Error("Tylko firma przypisana do zlecenia może wykonać tę operację.");
+  }
+}
+
+async function assertMilestoneCanBeSubmittedInSequence(milestoneId: string) {
+  const admin = createAdminClient();
+  const submittableStatuses = new Set(["funded", "in_progress", "rejected"]);
+  const acceptedStatuses = new Set(["released", "accepted", "completed", "refunded"]);
+
+  const { data: currentData, error: currentError } = await admin
+    .from("milestones")
+    .select("id, contract_id, idx, status")
+    .eq("id", milestoneId)
+    .maybeSingle();
+
+  const current = currentData as MilestoneSequenceRow | null;
+  if (currentError || !current?.contract_id) {
+    throw new Error("Nie udało się sprawdzić kolejności etapów.");
+  }
+
+  if (!submittableStatuses.has(String(current.status))) {
+    throw new Error("Ten etap nie jest aktualnie dostępny do wysyłki.");
+  }
+
+  const { data: milestonesData, error: milestonesError } = await admin
+    .from("milestones")
+    .select("id, contract_id, idx, status")
+    .eq("contract_id", current.contract_id);
+
+  if (milestonesError) {
+    throw new Error("Nie udało się sprawdzić poprzedniego etapu.");
+  }
+
+  const milestones = ((milestonesData || []) as MilestoneSequenceRow[]).sort((a, b) => {
+    const aIdx = a.idx ?? Number.MAX_SAFE_INTEGER;
+    const bIdx = b.idx ?? Number.MAX_SAFE_INTEGER;
+    if (aIdx !== bIdx) return aIdx - bIdx;
+    return a.id.localeCompare(b.id);
+  });
+  const currentIndex = milestones.findIndex((milestone) => milestone.id === milestoneId);
+  const previousMilestone = currentIndex > 0 ? milestones[currentIndex - 1] : null;
+
+  if (previousMilestone && !acceptedStatuses.has(String(previousMilestone.status))) {
+    throw new Error("Ten etap będzie dostępny po akceptacji poprzedniego etapu.");
   }
 }
 
@@ -1122,6 +1172,7 @@ export async function submitMilestoneWorkAction(
     userId: user.user.id,
     actor: "student",
   });
+  await assertMilestoneCanBeSubmittedInSequence(parsedMilestoneId);
 
   const formInput = parseOrThrow(deliverableFormSchema.safeParse({
     description: formData.get("description") ?? "",

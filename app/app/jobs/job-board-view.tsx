@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, Filter, X, CheckCircle2, Briefcase, Zap, SearchCheck, ChevronRight } from "lucide-react";
 import { JobCard, JobOffer } from "./job-card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,7 +15,6 @@ import { Label } from "@/components/ui/label";
 import { JOB_CATEGORIES, JOB_CATEGORY_GROUPS, inferJobCategoryFromText, normalizeCategoryKey, resolveJobCategoryLabel } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-const POPULAR_CITIES = ["Warszawa", "Kraków", "Wrocław", "Poznań", "Gdańsk", "Łódź", "Katowice", "Lublin", "Bydgoszcz", "Szczecin"];
 const POPULAR_CONTRACTS = ["Umowa o pracę", "B2B", "Umowa zlecenie", "Umowa o dzieło", "Praktyki"];
 const JOBS_PAGE_SIZE = 24;
 type BoardMode = "micro" | "challenge" | "job";
@@ -111,7 +109,6 @@ export function JobBoardView({
     const [search, setSearch] = useState("");
     const deferredSearch = useDeferredValue(search);
 
-    const [locationFilter, setLocationFilter] = useState("");
     const [techFilters, setTechFilters] = useState<string[]>([]);
     const [contractFilters, setContractFilters] = useState<string[]>([]);
     const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
@@ -144,7 +141,6 @@ export function JobBoardView({
         && currentPage * JOBS_PAGE_SIZE < totalOffersCount;
     const activeFilterCount =
         Number(search.trim().length > 0) +
-        Number(Boolean(locationFilter)) +
         categoryFilter.length +
         subcategoryFilter.length +
         contractFilters.length +
@@ -156,8 +152,7 @@ export function JobBoardView({
         Number(showApplied) +
         Number(mode === "micro" && subFilter !== "all");
 
-    const { locations, contracts, categories } = useMemo(() => {
-        const locs = new Set<string>(POPULAR_CITIES);
+    const { contracts, categories } = useMemo(() => {
         const conts = new Set<string>(POPULAR_CONTRACTS);
         const cats = new Set<string>(JOB_CATEGORIES);
         const unknownCats = new Set<string>();
@@ -171,8 +166,6 @@ export function JobBoardView({
                         !isJob && !isChallenge;
 
             if (matchesMode) {
-                if (o.location) locs.add(o.location);
-                if (o.is_remote) locs.add("Remote");
                 if (o.contract_type) conts.add(o.contract_type);
                 const category = getOfferCategory(o);
                 if (category && !cats.has(category)) unknownCats.add(category);
@@ -180,7 +173,6 @@ export function JobBoardView({
         });
 
         return {
-            locations: Array.from(locs).sort(),
             contracts: Array.from(conts).sort(),
             categories: [...JOB_CATEGORIES, ...Array.from(unknownCats).sort()]
         };
@@ -192,7 +184,7 @@ export function JobBoardView({
         return offers.filter(o => {
             if (companyIdFilter && o.company_id !== companyIdFilter) return false;
 
-            if (!showApplied && appliedOfferIds?.has(o.id)) return false;
+            if (showApplied && !appliedOfferIds?.has(o.id)) return false;
 
             const isJob = isJobOffer(o);
             const isChallenge = isChallengeOffer(o);
@@ -232,13 +224,6 @@ export function JobBoardView({
             }
 
             if (mode === "job") {
-                if (locationFilter) {
-                    if (locationFilter === "Remote") {
-                        if (!o.is_remote) return false;
-                    } else if (o.location !== locationFilter && !normalizeSearchText(o.location).includes(normalizeSearchText(locationFilter))) {
-                        return false;
-                    }
-                }
                 if (categoryFilter.length > 0) {
                     const matchesCategory = categoryFilter.some((category) => {
                         if (category === "Inne") return !resolvedOfferCategory || resolvedOfferCategory === "Inne";
@@ -266,13 +251,6 @@ export function JobBoardView({
                     if (oMsgMin > Number(salaryMax)) return false;
                 }
             } else {
-                if (locationFilter) {
-                    if (locationFilter === "Remote") {
-                        if (!o.is_remote) return false;
-                    } else if (o.location !== locationFilter && !normalizeSearchText(o.location).includes(normalizeSearchText(locationFilter))) {
-                        return false;
-                    }
-                }
                 if (categoryFilter.length > 0) {
                     const matchesCategory = categoryFilter.some((category) => {
                         if (category === "Inne") return !resolvedOfferCategory || resolvedOfferCategory === "Inne";
@@ -290,7 +268,7 @@ export function JobBoardView({
 
             return true;
         });
-    }, [offers, mode, deferredSearch, locationFilter, techFilters, contractFilters, categoryFilter, subcategoryFilter, salaryMin, salaryMax, budgetMin, budgetMax, subFilter, companyIdFilter, showApplied, appliedOfferIds]);
+    }, [offers, mode, deferredSearch, techFilters, contractFilters, categoryFilter, subcategoryFilter, salaryMin, salaryMax, budgetMin, budgetMax, subFilter, companyIdFilter, showApplied, appliedOfferIds]);
 
     const toggleContract = (c: string) => setContractFilters(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
     const toggleCategory = (c: string) => {
@@ -309,7 +287,6 @@ export function JobBoardView({
 
     const clearFilters = () => {
         setSearch("");
-        setLocationFilter("");
         setTechFilters([]);
         setContractFilters([]);
         setCategoryFilter([]);
@@ -319,10 +296,7 @@ export function JobBoardView({
         setBudgetMin("");
         setBudgetMax("");
         setSubFilter("all");
-    };
-
-    const handleLocationChange = (value: string) => {
-        setLocationFilter(value === "all_locations" ? "" : value);
+        setShowApplied(false);
     };
 
     const handleAssignmentTypeChange = (value: AssignmentType) => {
@@ -430,17 +404,6 @@ export function JobBoardView({
                                     />
                                 </div>
 
-                                <div className="space-y-3">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Lokalizacja</label>
-                                    <Select value={locationFilter || "all_locations"} onValueChange={handleLocationChange}>
-                                        <SelectTrigger className="h-12 bg-slate-50 border-slate-200 rounded-xl"><SelectValue placeholder="Wybierz" /></SelectTrigger>
-                                        <SelectContent className="bg-white z-50 rounded-xl border-slate-100 shadow-2xl">
-                                            <SelectItem value="all_locations">Cała Polska</SelectItem>
-                                            {locations.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
                                 {mode !== "job" && (
                                     <div className="space-y-3">
                                         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Rodzaj zlecenia</label>
@@ -483,7 +446,7 @@ export function JobBoardView({
                                             </div>
                                         </div>
                                         <div className="space-y-4">
-                                            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Płaca (min-max)</label>
+                                            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Wynagrodzenie (min-max)</label>
                                             <div className="flex gap-3">
                                                 <Input type="number" placeholder="Min" value={salaryMin} onChange={e => setSalaryMin(e.target.value ? Number(e.target.value) : "")} className="h-12 bg-slate-50 border-slate-200 rounded-xl" />
                                                 <Input type="number" placeholder="Max" value={salaryMax} onChange={e => setSalaryMax(e.target.value ? Number(e.target.value) : "")} className="h-12 bg-slate-50 border-slate-200 rounded-xl" />
@@ -492,7 +455,7 @@ export function JobBoardView({
                                     </>
                                 ) : (
                                     <div className="space-y-4">
-                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Budżet (min-max)</label>
+                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Wynagrodzenie (min-max)</label>
                                         <div className="flex gap-3">
                                             <Input type="number" placeholder="Min" value={budgetMin} onChange={e => setBudgetMin(e.target.value ? Number(e.target.value) : "")} className="h-12 bg-slate-50 border-slate-200 rounded-xl" />
                                             <Input type="number" placeholder="Max" value={budgetMax} onChange={e => setBudgetMax(e.target.value ? Number(e.target.value) : "")} className="h-12 bg-slate-50 border-slate-200 rounded-xl" />
@@ -670,22 +633,6 @@ export function JobBoardView({
                             </div>
                         </div>
 
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                                <label className="text-xs font-bold uppercase tracking-normal text-slate-400">Lokalizacja</label>
-                                {locationFilter && <span className="text-[10px] font-bold text-red-500 cursor-pointer hover:underline" onClick={() => setLocationFilter("")}>WYCZYŚĆ</span>}
-                            </div>
-                            <Select value={locationFilter || "all_locations"} onValueChange={handleLocationChange}>
-                                <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-slate-50 transition-all">
-                                    <SelectValue placeholder="Wybierz miasto" />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-2xl border-slate-100 shadow-2xl">
-                                    <SelectItem value="all_locations">Cała Polska</SelectItem>
-                                    {locations.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
                         {mode !== "job" && (
                             <div className="space-y-3 animate-in zoom-in-95 duration-300">
                                 <label className="text-xs font-bold uppercase tracking-normal text-slate-400">Rodzaj zlecenia</label>
@@ -771,7 +718,7 @@ export function JobBoardView({
                         )}
 
                         <div className="space-y-4">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Budżet / Płaca</label>
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Wynagrodzenie</label>
                             <div className="flex items-center gap-3">
                                 <Input
                                     type="number"
@@ -813,7 +760,7 @@ export function JobBoardView({
                                     className="rounded-md"
                                 />
                                 <Label htmlFor="show-applied-desktop" className="cursor-pointer text-xs font-bold uppercase tracking-normal text-slate-500 transition-colors group-hover:text-indigo-600">
-                                    Pokaż aplikowane
+                                    Tylko aplikowane
                                 </Label>
                             </div>
 
@@ -865,7 +812,7 @@ export function JobBoardView({
                                 Spróbuj zmienić parametry wyszukiwania lub zresetuj wszystkie filtry, aby zobaczyć całą listę.
                             </p>
                             <Button onClick={clearFilters} className="gradient-primary text-white font-bold px-8 h-12 rounded-2xl shadow-lg">
-                                Resetuj filtre
+                                Resetuj filtry
                             </Button>
                         </div>
                     ) : (
