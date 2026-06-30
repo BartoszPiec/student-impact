@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
+import { ArrowLeft, ClipboardList, Edit2, Eye } from "lucide-react";
+
+import CompanyApplicationsPage from "@/app/app/company/applications/applications-view";
+import { CompanyStatePill } from "@/app/app/company/_components/company-card-theme";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Edit2, ExternalLink, Eye, LayoutTemplate } from "lucide-react";
-import CompanyApplicationsPage from "@/app/app/company/applications/page"; // Import the Applications Page as a component
+import { PageContainer } from "@/components/ui/page-container";
+import { PremiumPageHeader } from "@/components/ui/premium-page-header";
 
 export default async function CompanyOfferDashboard({
   params,
@@ -12,11 +16,12 @@ export default async function CompanyOfferDashboard({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (!user) redirect("/auth");
 
-  // Fetch Offer Details for Header
   const { data: offer } = await supabase
     .from("offers")
     .select("id, tytul, status, typ, created_at, company_id")
@@ -25,51 +30,57 @@ export default async function CompanyOfferDashboard({
 
   if (!offer) notFound();
 
-  // Security Check
   if (offer.company_id !== user.id) {
     redirect(`/app/offers/${id}`);
   }
 
   return (
-    <div className="w-full max-w-[2000px] mx-auto pb-10 px-4 md:px-8 space-y-8">
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 py-6 border-b border-slate-100">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Link href="/app/company/offers" className="text-slate-400 hover:text-indigo-600 transition-colors flex items-center text-sm font-medium">
-              <ArrowLeft className="h-4 w-4 mr-1" /> Moje Oferty
-            </Link>
-            <span className="text-slate-300">/</span>
-            <span className="text-slate-500 text-sm font-medium">Szczegóły</span>
+    <main className="min-h-screen bg-slate-50/60 pb-12">
+      <PremiumPageHeader
+        badge="Moje oferty"
+        title={offer.tytul ?? "Szczegoly oferty"}
+        description="Jedno miejsce do przegladu kandydatow, negocjacji i dalszych decyzji dla tego ogloszenia."
+        icon={<ClipboardList className="h-10 w-10 text-indigo-300 drop-shadow-[0_0_8px_rgba(165,180,252,0.5)]" />}
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            <Button asChild variant="outline" className="h-12 rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white">
+              <Link href="/app/company/offers">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Wroc do listy
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-12 rounded-2xl border-white/20 bg-white/10 px-6 font-bold text-white hover:bg-white/20 hover:text-white">
+              <Link href={`/app/offers/${offer.id}`} target="_blank">
+                <Eye className="mr-2 h-4 w-4" />
+                Podglad oferty
+              </Link>
+            </Button>
+            <Button asChild className="h-12 rounded-2xl bg-white px-6 font-bold text-slate-950 hover:bg-indigo-50">
+              <Link href={`/app/company/offers/${offer.id}/edit`}>
+                <Edit2 className="mr-2 h-4 w-4" />
+                Edytuj oferte
+              </Link>
+            </Button>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 leading-tight">{offer.tytul}</h1>
-          <div className="flex gap-3 text-sm text-slate-500 mt-2 font-medium">
-            <span className="uppercase tracking-wider text-xs font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600">{offer.typ}</span>
-            <span>Status: {offer.status}</span>
+        }
+      />
+
+      <PageContainer className="py-8">
+        <div className="mb-6 rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 px-6 py-5 text-white shadow-xl">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-indigo-300">Kontekst ogloszenia</p>
+          <h2 className="mt-2 text-2xl font-black tracking-tight">Aplikacje i decyzje dla tej oferty</h2>
+          <p className="mt-2 max-w-3xl text-sm font-medium text-indigo-100/75">
+            Ten widok korzysta z tego samego systemu sygnalow co lista ogloszen: indigo dla nowych zgloszen,
+            bursztyn dla negocjacji i spokojniejsze stany dla realizacji oraz archiwum.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <CompanyStatePill tone="slate">{offer.typ ?? "Oferta"}</CompanyStatePill>
+            <CompanyStatePill tone="indigo">{offer.status ?? "Aktywna"}</CompanyStatePill>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Button asChild variant="outline" className="border-slate-200">
-            <Link href={`/app/offers/${offer.id}`} target="_blank">
-              <Eye className="mr-2 h-4 w-4 text-slate-500" />
-              Podgląd Oarty
-            </Link>
-          </Button>
-
-          <Button asChild className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-200">
-            <Link href={`/app/company/offers/${offer.id}/edit`}>
-              <Edit2 className="mr-2 h-4 w-4" />
-              Edytuj Ofertę
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      {/* APPLICATIONS SECTION */}
-      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6 md:p-8">
-        <CompanyApplicationsPage searchParams={Promise.resolve({ offerId: id })} />
-      </div>
-    </div>
+        <CompanyApplicationsPage searchParams={Promise.resolve({ offerId: id })} embedded />
+      </PageContainer>
+    </main>
   );
 }

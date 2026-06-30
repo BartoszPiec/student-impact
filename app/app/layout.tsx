@@ -1,7 +1,15 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getRequestContext } from "@/lib/auth/request-context";
 import { EnsureOnboarding } from "./EnsureOnboarding";
 import { AppNavbar } from "./app-navbar";
-import { redirect } from "next/navigation";
+import { AppTourProvider } from "@/components/app-tour/app-tour-provider";
+import { cn } from "@/lib/utils";
+
+type OnboardingDetails = {
+  kierunek?: string | null;
+  nazwa?: string | null;
+};
 
 export default async function AppLayout({
   children,
@@ -9,80 +17,57 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
+  const { user, role } = await getRequestContext();
 
-  // 1) user z cookies (SSR)
-  const { data } = await supabase.auth.getUser();
-  const user = data.user;
-
-  // Niezalogowani użytkownicy nie mają dostępu do /app/*
   if (!user) redirect("/auth");
 
-  // 2) rola z profiles (jeśli zalogowany)
-  const { data: profile } = user
-    ? await supabase
-      .from("profiles")
-      .select("role")
-      .eq("user_id", user.id)
-      .maybeSingle()
-    : { data: null };
+  const detailsQuery = role === "student"
+    ? supabase.from("student_profiles").select("kierunek").eq("user_id", user.id).maybeSingle()
+    : role === "company"
+      ? supabase.from("company_profiles").select("nazwa").eq("user_id", user.id).maybeSingle()
+      : Promise.resolve({ data: null, error: null });
 
-  const role = profile?.role ?? null;
-
-  // Pobieramy dodatkowe dane do sprawdzenia onboardingu
-  let hasDetails = false;
-  if (user && role === "student") {
-    const { data: sp } = await supabase.from("student_profiles").select("kierunek").eq("user_id", user.id).maybeSingle();
-    if (sp?.kierunek) hasDetails = true;
-  } else if (user && role === "company") {
-    const { data: cp } = await supabase.from("company_profiles").select("nazwa").eq("user_id", user.id).maybeSingle();
-    // Sprawdzamy czy nazwa istnieje i nie jest domyślna
-    if (cp?.nazwa && cp.nazwa !== "Firma Bez Nazwy") hasDetails = true;
-  }
-
-  // 3) liczba nieprzeczytanych powiadomień (SSR)
-  let unread = 0;
-  let unreadChat = 0;
-
-  if (user) {
-    const { data: unreadRows } = await supabase
+  const [detailsResult, notificationsResult, chatResult] = await Promise.all([
+    detailsQuery,
+    supabase
       .from("notifications")
-      .select("id")
+      .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
-      .is("read_at", null);
+      .is("read_at", null),
+    supabase.rpc("get_my_unread_chat_count"),
+  ]);
 
-    unread = unreadRows?.length ?? 0;
-
-    // Count unread chat messages only inside the user's conversations.
-    const { data: conversations } = await supabase
-      .from("conversations")
-      .select("id")
-      .or(`company_id.eq.${user.id},student_id.eq.${user.id}`);
-
-    const conversationIds = conversations?.map((conversation) => conversation.id) ?? [];
-
-    if (conversationIds.length > 0) {
-      const { count: chatCount } = await supabase
-        .from("messages")
-        .select("id", { count: "exact", head: true })
-        .in("conversation_id", conversationIds)
-        .neq("sender_id", user.id)
-        .is("read_at", null);
-
-      unreadChat = chatCount ?? 0;
-    }
-  }
-
-  // --- ONBOARDING CHECK ---
-  // Jeśli użytkownik jest zalogowany, ma rolę, ale nie ma 'details' -> needs onboarding.
-  // Wykluczamy admina z onboardingu.
-  const needsOnboarding = !!(user && role && role !== 'admin' && !hasDetails);
+  const details = detailsResult.data as OnboardingDetails | null;
+  const hasDetails = role === "student"
+    ? Boolean(details?.kierunek)
+    : role === "company"
+      ? Boolean(details?.nazwa && details.nazwa !== "Firma Bez Nazwy")
+      : true;
+  const unread = notificationsResult.count ?? 0;
+  const unreadChatValue = Number(chatResult.data ?? 0);
+  const unreadChat = Number.isFinite(unreadChatValue) ? unreadChatValue : 0;
+  const needsOnboarding = Boolean(role && role !== "admin" && !hasDetails);
 
   return (
-    <div className="min-h-screen">
-      {needsOnboarding && <EnsureOnboarding />}
-      <AppNavbar user={user} role={role} unread={unread} unreadChat={unreadChat} />
-
-      <main className="min-h-screen">{children}</main>
-    </div>
+    <AppTourProvider
+      userId={user.id}
+      role={role}
+      enabled={!needsOnboarding && (role === "company" || role === "student")}
+    >
+      <div className="min-h-screen max-w-full overflow-x-hidden bg-[#f3f6fb]">
+        {needsOnboarding ? <EnsureOnboarding /> : null}
+        <AppNavbar user={user} role={role} unread={unread} unreadChat={unreadChat} />
+        <main
+          className={cn(
+            "min-h-screen max-w-full overflow-x-hidden pb-24 lg:pb-0",
+            role === "admin"
+              ? "bg-[linear-gradient(180deg,#10245f_0,#10245f_8rem,#f3f6fb_8rem,#f3f6fb_100%)] pt-28 sm:pt-32"
+              : "bg-[linear-gradient(180deg,#10245f_0,#10245f_6rem,#f3f6fb_6rem,#f3f6fb_100%)] pt-20 sm:pt-24",
+          )}
+        >
+          {children}
+        </main>
+      </div>
+    </AppTourProvider>
   );
 }

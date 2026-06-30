@@ -66,13 +66,23 @@ export function extractRequestFormAnswers(
     .map(([key, value]) => {
       const questionId = key.replace("q_", "");
       const questionDef = schema.find((field) => field.id === questionId);
+      let normalizedValue = "";
+
+      if (typeof value === "string") {
+        normalizedValue = value;
+      } else if (typeof File !== "undefined" && value instanceof File) {
+        normalizedValue = value.name || "";
+      } else {
+        normalizedValue = String(value ?? "");
+      }
 
       return {
         id: questionId,
         label: questionDef?.label || questionId.toUpperCase(),
-        value: String(value),
+        value: normalizedValue,
       };
-    });
+    })
+    .filter((answer) => answer.value.trim().length > 0);
 }
 
 export function buildLegacyRequirementsText(params: {

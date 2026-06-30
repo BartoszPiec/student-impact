@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Upload, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import Image from "next/image";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
 
 interface ImageUploadProps {
     value: string[];
@@ -14,37 +13,34 @@ interface ImageUploadProps {
     folder?: string;
 }
 
-export default function ImageUpload({ value = [], onChange, bucketName = "portfolio", folder = "uploads" }: ImageUploadProps) {
+export default function ImageUpload({ value = [], onChange, bucketName = "portfolio" }: ImageUploadProps) {
     const [isUploading, setIsUploading] = useState(false);
 
     async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files?.length) return;
 
         setIsUploading(true);
-        const supabase = createClient();
         const newUrls: string[] = [];
 
         try {
             for (let i = 0; i < e.target.files.length; i++) {
                 const file = e.target.files[i];
-                const fileExt = file.name.split('.').pop();
-                const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-                const { error } = await supabase.storage
-                    .from(bucketName)
-                    .upload(fileName, file);
-
-                if (error) {
-                    toast.error(`Błąd przesyłania pliku: ${file.name}`);
+                if (bucketName !== "portfolio") {
+                    toast.error("Ten komponent obsluguje tylko upload portfolio.");
                     continue;
                 }
 
-                const { data } = supabase.storage.from(bucketName).getPublicUrl(fileName);
-                newUrls.push(data.publicUrl);
+                try {
+                    const uploaded = await uploadPrivateFile({ file, purpose: "portfolio_image" });
+                    newUrls.push(uploaded.ref);
+                } catch {
+                    toast.error(`Błąd przesyłania pliku: ${file.name}`);
+                    continue;
+                }
             }
 
             onChange([...value, ...newUrls]);
-        } catch (err) {
+        } catch {
             toast.error("Błąd podczas wysyłania zdjęć.");
         } finally {
             setIsUploading(false);

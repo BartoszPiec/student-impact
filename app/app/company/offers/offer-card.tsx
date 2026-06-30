@@ -1,189 +1,518 @@
 "use client";
 
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Briefcase, Zap, MapPin, Users, CalendarClock, MessageSquare } from "lucide-react";
-import CopyOfferLinkButton from "@/components/copy-offer-link-button";
-import { cn } from "@/lib/utils";
-import { setOfferStatus } from "./_actions";
-import { openChatForApplication } from "../../chat/_actions";
+import {
+  Briefcase,
+  CalendarClock,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  HandCoins,
+  MessageSquare,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Zap,
+} from "lucide-react";
 
-function StatusBadge({ status, hasDelivered }: { status: string; hasDelivered?: boolean }) {
-    if (hasDelivered)
-        return (
-            <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 px-3 py-1 rounded-full font-bold transition-colors">
-                Weryfikacja
-            </Badge>
-        );
-    if (status === "negotiation")
-        return (
-            <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-100 border-orange-200 px-3 py-1 rounded-full font-bold transition-colors">
-                Negocjacje
-            </Badge>
-        );
-    if (status === "published")
-        return (
-            <Badge
-                variant="secondary"
-                className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-100 px-3 py-1 rounded-full font-bold transition-colors"
-            >
-                Opublikowane
-            </Badge>
-        );
-    if (status === "in_progress")
-        return (
-            <Badge
-                variant="secondary"
-                className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-100 animate-pulse px-3 py-1 rounded-full font-bold"
-            >
-                W realizacji
-            </Badge>
-        );
-    if (status === "closed")
-        return (
-            <Badge
-                variant="secondary"
-                className="bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200 px-3 py-1 rounded-full font-bold transition-colors"
-            >
-                Zakończone
-            </Badge>
-        );
-    return <Badge variant="outline" className="rounded-full px-3 py-1">{status}</Badge>;
-}
+import { Button } from "@/components/ui/button";
+import { openChatForApplication } from "../../chat/_actions";
+import {
+  COMPANY_CARD_TOKENS,
+  CompanyMetricTile,
+  CompanyStatePill,
+  type CompanyCardTone,
+} from "../_components/company-card-theme";
+
+export type CompanyOffer = {
+  id: string;
+  itemType?: "offer" | "service_order";
+  itemLabel?: string;
+  tytul: string | null;
+  typ: string | null;
+  stawka: number | null;
+  status: string | null;
+  created_at: string | null;
+  location: string | null;
+  salary_range_min: number | null;
+  salary_range_max: number | null;
+  is_remote: boolean | null;
+  contract_type: string | null;
+  is_platform_service: boolean | null;
+};
+
+export type CompanyOfferStats = {
+  total: number;
+  sent: number;
+  accepted: number;
+  hasApproved: boolean;
+  hasDelivered: boolean;
+  acceptedAppId: string | null;
+  acceptedProfile: { first_name: string; last_name: string; id: string } | null;
+  acceptedStudentId: string | null;
+  agreedStawka: number | null;
+  contractStatus: string | null;
+};
+
+export type OfferWorkState = "action" | "collecting" | "in_progress" | "closed";
+export type OfferStage = "candidates" | "terms" | "delivery" | "review" | "done";
+
+export type OfferCardModel = {
+  workState: OfferWorkState;
+  stage: OfferStage;
+  stageLabel: string;
+  label: string;
+  tone: CompanyCardTone;
+  actionRequired: boolean;
+  actionLabel: string;
+  actionHref: string;
+  note: string;
+};
 
 function formatDate(value?: string | null) {
-    if (!value) return "";
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString("pl-PL", { year: "numeric", month: "long", day: "numeric" });
+  if (!value) return "Brak daty";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Brak daty";
+  return date.toLocaleDateString("pl-PL", { year: "numeric", month: "long", day: "numeric" });
+}
+
+function formatMoney(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "Do ustalenia";
+  return `${value.toLocaleString("pl-PL")} PLN`;
+}
+
+function getBudgetLabel(offer: CompanyOffer, stats: CompanyOfferStats, isInProgress: boolean) {
+  if (isInProgress && stats.agreedStawka) return formatMoney(stats.agreedStawka);
+  if (offer.salary_range_min && offer.salary_range_min > 0) {
+    const max =
+      offer.salary_range_max && offer.salary_range_max > offer.salary_range_min
+        ? ` - ${offer.salary_range_max.toLocaleString("pl-PL")}`
+        : "+";
+    return `${offer.salary_range_min.toLocaleString("pl-PL")}${max} PLN`;
+  }
+  if (offer.salary_range_max && offer.salary_range_max > 0) {
+    return `do ${offer.salary_range_max.toLocaleString("pl-PL")} PLN`;
+  }
+  return formatMoney(offer.stawka);
+}
+
+function isChallengeOffer(offer: Pick<CompanyOffer, "typ">) {
+  const normalizedType = offer.typ?.toLocaleLowerCase("pl-PL") ?? "";
+  return normalizedType.includes("challenge") || normalizedType.includes("wyzwan");
+}
+
+function getOfferTypeLabel(offer: CompanyOffer, isServiceOrder: boolean) {
+  if (isServiceOrder) return "Usluga systemowa";
+  if (isChallengeOffer(offer)) return "Wyzwanie do wyceny";
+  return offer.typ || "Ogloszenie";
+}
+
+function getDetailHref(offer: CompanyOffer) {
+  return offer.itemType === "service_order" ? `/app/company/orders/${offer.id}` : `/app/company/offers/${offer.id}`;
+}
+
+function resolveServiceOrderCardModel(offer: CompanyOffer): OfferCardModel {
+  const detailHref = getDetailHref(offer);
+  const status = offer.status ?? "pending";
+
+  if (["completed", "closed", "cancelled"].includes(status)) {
+    return {
+      workState: "closed",
+      stage: "done",
+      stageLabel: "Archiwum",
+      label: "Zakonczone",
+      tone: "slate",
+      actionRequired: false,
+      actionLabel: "Podglad",
+      actionHref: detailHref,
+      note: "Zakonczone zamowienie usługi.",
+    };
+  }
+
+  if (status === "pending_selection") {
+    return {
+      workState: "collecting",
+      stage: "candidates",
+      stageLabel: "Zgłoszenia",
+      label: "Czeka na zgłoszenia",
+      tone: "indigo",
+      actionRequired: false,
+      actionLabel: "Szczegoly",
+      actionHref: detailHref,
+      note: "Na razie nie ma przypisanego wykonawcy.",
+    };
+  }
+
+  if (status === "pending") {
+    return {
+      workState: "action",
+      stage: "candidates",
+      stageLabel: "Wybor wykonawcy",
+      label: "Wymaga decyzji",
+      tone: "indigo",
+      actionRequired: true,
+      actionLabel: "Wybierz studenta",
+      actionHref: detailHref,
+      note: "Wybierz wykonawce, aby uruchomic realizacje.",
+    };
+  }
+
+  if (["countered", "proposal_sent", "inquiry"].includes(status)) {
+    return {
+      workState: "action",
+      stage: "terms",
+      stageLabel: "Warunki",
+      label: "Negocjacje",
+      tone: "amber",
+      actionRequired: true,
+      actionLabel: "Sprawdz warunki",
+      actionHref: detailHref,
+      note: "Zamowienie czeka na decyzje lub uzgodnienie warunków.",
+    };
+  }
+
+  if (["delivered", "pending_review"].includes(status)) {
+    return {
+      workState: "action",
+      stage: "review",
+      stageLabel: "Odbior pracy",
+      label: "Do sprawdzenia",
+      tone: "red",
+      actionRequired: true,
+      actionLabel: "Sprawdz prace",
+      actionHref: detailHref,
+      note: "Student dostarczyl material do akceptacji.",
+    };
+  }
+
+  if (["pending_student_confirmation", "pending_confirmation"].includes(status)) {
+    return {
+      workState: "in_progress",
+      stage: "terms",
+      stageLabel: "Potwierdzenie",
+      label: "Czeka na studenta",
+      tone: "amber",
+      actionRequired: false,
+      actionLabel: "Podglad",
+      actionHref: detailHref,
+      note: "Student potwierdza przyjecie realizacji.",
+    };
+  }
+
+  return {
+    workState: "in_progress",
+    stage: "delivery",
+    stageLabel: "Realizacja",
+    label: "W realizacji",
+    tone: "emerald",
+    actionRequired: false,
+    actionLabel: "Panel realizacji",
+    actionHref: detailHref,
+    note: "Zamowienie usługi jest aktywne.",
+  };
+}
+
+export function resolveOfferCardModel(offer: CompanyOffer, stats: CompanyOfferStats): OfferCardModel {
+  if (offer.itemType === "service_order") {
+    return resolveServiceOrderCardModel(offer);
+  }
+
+  const isClosed = offer.status === "closed" || stats.hasApproved;
+  const hasAccepted = stats.accepted > 0;
+  const detailHref = getDetailHref(offer);
+  const acceptedHref = stats.acceptedAppId ? `/app/deliverables/${stats.acceptedAppId}` : detailHref;
+  const isChallenge = isChallengeOffer(offer);
+
+  if (isClosed) {
+    return {
+      workState: "closed",
+      stage: "done",
+      stageLabel: "Archiwum",
+      label: "Zakonczone",
+      tone: "slate",
+      actionRequired: false,
+      actionLabel: "Podglad",
+      actionHref: detailHref,
+      note: "Archiwalne ogloszenie.",
+    };
+  }
+
+  if (stats.hasDelivered) {
+    return {
+      workState: "action",
+      stage: "review",
+      stageLabel: "Odbior pracy",
+      label: "Do sprawdzenia",
+      tone: "red",
+      actionRequired: true,
+      actionLabel: "Sprawdz prace",
+      actionHref: acceptedHref,
+      note: "Student dostarczyl material do akceptacji.",
+    };
+  }
+
+  if (hasAccepted && stats.contractStatus === "draft") {
+    return {
+      workState: "action",
+      stage: "terms",
+      stageLabel: "Warunki",
+      label: "Wymaga decyzji",
+      tone: "amber",
+      actionRequired: true,
+      actionLabel: "Uzgodnij warunki",
+      actionHref: acceptedHref,
+      note: "Warunki są jeszcze w negocjacji.",
+    };
+  }
+
+  if (!hasAccepted && stats.sent > 0) {
+    return {
+      workState: "action",
+      stage: "candidates",
+      stageLabel: "Kandydaci",
+      label: "Nowe zgłoszenia",
+      tone: "indigo",
+      actionRequired: true,
+      actionLabel: "Przejrzyj kandydatow",
+      actionHref: detailHref,
+      note: isChallenge ? `${stats.sent} pitchy czeka na decyzje.` : `${stats.sent} kandydatow czeka na decyzje.`,
+    };
+  }
+
+  if (offer.status === "in_progress" || hasAccepted) {
+    return {
+      workState: "in_progress",
+      stage: "delivery",
+      stageLabel: "Realizacja",
+      label: "W realizacji",
+      tone: "emerald",
+      actionRequired: false,
+      actionLabel: "Panel realizacji",
+      actionHref: acceptedHref,
+      note: stats.acceptedProfile ? `Realizuje: ${stats.acceptedProfile.first_name}` : "Realizacja jest aktywna.",
+    };
+  }
+
+  return {
+    workState: "collecting",
+    stage: "candidates",
+    stageLabel: "Kandydaci",
+    label: "Zbiera kandydatow",
+    tone: "slate",
+    actionRequired: false,
+    actionLabel: "Szczegoly",
+    actionHref: detailHref,
+    note: isChallenge
+      ? stats.total > 0
+        ? `${stats.total} pitchy lacznie.`
+        : "Wyzwanie jest widoczne dla studentow i czeka na kontroferty."
+      : stats.total > 0
+        ? `${stats.total} aplikacji lacznie.`
+        : "Ogloszenie jest widoczne dla studentow.",
+  };
 }
 
 export default function OfferCard({
-    o,
-    stats
+  offer,
+  stats,
+  compact = false,
 }: {
-    o: any,
-    stats: { total: number, sent: number, accepted: number, hasApproved: boolean, hasDelivered?: boolean, acceptedAppId: string | null, acceptedProfile?: { first_name: string, last_name: string, id: string } | null, acceptedStudentId?: string | null, agreedStawka?: number | null, contractStatus?: string | null }
+  offer: CompanyOffer;
+  stats: CompanyOfferStats;
+  compact?: boolean;
 }) {
-    const { total, sent, accepted, hasApproved, hasDelivered, acceptedAppId, acceptedProfile, acceptedStudentId, agreedStawka } = stats;
+  const model = resolveOfferCardModel(offer, stats);
+  const isInProgress = model.workState === "in_progress" || model.workState === "action";
+  const chatAction = stats.acceptedAppId ? openChatForApplication.bind(null, stats.acceptedAppId) : null;
+  const detailHref = getDetailHref(offer);
+  const isServiceOrder = offer.itemType === "service_order";
+  const isPendingServiceSelection = isServiceOrder && offer.status === "pending_selection";
+  const itemLabel = offer.itemLabel || (isServiceOrder ? "Usluga" : isChallengeOffer(offer) ? "Wyzwanie" : "Ogloszenie");
+  const performerFallback =
+    isPendingServiceSelection
+      ? "Brak zgłoszeń"
+      : isServiceOrder && offer.status === "pending"
+        ? "Do wyboru wykonawcy"
+      : isServiceOrder
+        ? "Szczegoly w zamowieniu"
+        : "Bez wykonawcy";
+  const tone = COMPANY_CARD_TOKENS[model.tone];
 
-    const isJobOffer = o.typ === "job" || o.typ === "Praca" || o.typ === "praca";
-    const isClosed = o.status === "closed";
-    const isInProgress = (o.status === "in_progress" || accepted > 0) && !isClosed;
+  const banner =
+    model.stage === "review"
+      ? {
+          icon: <ShieldCheck className="h-4 w-4" />,
+          title: "Praca czeka na Twoj odbior",
+          sub: model.note,
+          pill: "Wymagana akcja",
+        }
+      : model.stage === "terms"
+        ? {
+            icon: <HandCoins className="h-4 w-4" />,
+            title: model.actionRequired ? "Trwa uzgadnianie warunków" : "Czekamy na finalne potwierdzenie",
+            sub: model.note,
+            pill: model.actionRequired ? "Wymagana akcja" : "Czeka na studenta",
+            pillIcon: model.actionRequired ? null : <Clock3 className="h-3 w-3" />,
+          }
+        : model.stage === "candidates"
+          ? {
+              icon: <Users className="h-4 w-4" />,
+              title: model.actionRequired
+                ? "Nowe zgłoszenia do przejrzenia"
+                : isPendingServiceSelection
+                  ? "Czekamy na zgłoszenia"
+                  : "Ogloszenie zbiera kandydatow",
+              sub: model.note,
+              pill: model.actionRequired ? "Wymagana akcja" : isPendingServiceSelection ? "Brak zgłoszeń" : "Nowe zgłoszenia",
+              pillIcon: model.actionRequired ? null : <Sparkles className="h-3 w-3" />,
+            }
+          : model.stage === "delivery"
+            ? {
+                icon: <Zap className="h-4 w-4" />,
+                title: "Projekt jest w realizacji",
+                sub: model.note,
+                pill: "W realizacji",
+                pillIcon: <Sparkles className="h-3 w-3" />,
+              }
+            : model.stage === "done"
+              ? {
+                  icon: <CheckCircle2 className="h-4 w-4" />,
+                  title: "Element zakonczony lub archiwalny",
+                  sub: model.note,
+                  pill: "Zakonczone",
+                  pillIcon: <CheckCircle2 className="h-3 w-3" />,
+                }
+              : null;
 
-    // Oblicz efektywny status na podstawie stanu aplikacji (nie tylko offers.status z bazy)
-    const effectiveStatus = isClosed
-        ? "closed"
-        : (accepted > 0 && stats.contractStatus === 'draft')
-            ? "negotiation"
-            : accepted > 0
-                ? "in_progress"
-                : (o.status ?? "published");
+  return (
+    <article
+      className="relative overflow-hidden bg-white"
+      style={{
+        borderRadius: compact ? 24 : 28,
+        border: "1px solid #eef0f4",
+        boxShadow: model.actionRequired
+          ? `0 0 0 2px ${tone.ring}, 0 18px 50px -12px ${tone.glow}, 0 4px 12px rgba(15,36,96,0.04)`
+          : "0 4px 18px rgba(15,36,96,0.05)",
+      }}
+    >
+      <div className="flex">
+        <div className="w-2 shrink-0" style={{ background: tone.barGrad }} />
 
-    const chatAction = acceptedAppId ? openChatForApplication.bind(null, acceptedAppId) : null;
-
-    return (
-        <Card className="hover:shadow-xl transition-all duration-500 border-transparent bg-white group rounded-3xl overflow-hidden shadow-sm hover:border-indigo-100/50 hover:-translate-y-1">
-            <CardContent className="p-0">
-                <div className="flex flex-col md:flex-row gap-0">
-                    {/* Left Color Strip based on type */}
-                    <div className={cn(
-                        "w-full md:w-2 md:h-initial h-2 shrink-0 transition-colors duration-500",
-                        isJobOffer ? "bg-indigo-500 group-hover:bg-indigo-600" : "bg-amber-500 group-hover:bg-amber-600"
-                    )} />
-
-                    <div className="flex flex-col md:flex-row flex-1 p-6 justify-between gap-6 items-start md:items-center">
-                        {/* Title & Info */}
-                        <div className="space-y-4 flex-1 w-full">
-                            <div className="flex items-center gap-3 flex-wrap">
-                                <Link
-                                    href={`/app/company/offers/${o.id}`}
-                                    className="font-extrabold text-xl text-slate-900 hover:text-indigo-600 transition-colors line-clamp-2 leading-tight"
-                                >
-                                    {o.tytul}
-                                </Link>
-                                <StatusBadge status={effectiveStatus} hasDelivered={hasDelivered} />
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-y-2 gap-x-6 text-sm">
-                                <div className="flex items-center gap-2 text-slate-500 font-medium bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
-                                    <CalendarClock className="w-4 h-4 text-indigo-500" />
-                                    <span>{formatDate(o.created_at)}</span>
-                                </div>
-
-                                {acceptedProfile ? (
-                                    <Link
-                                        href={`/app/students/${acceptedProfile.id}`}
-                                        className="flex items-center gap-2 text-indigo-700 font-bold bg-indigo-50/50 px-3 py-1.5 rounded-xl border border-indigo-100/50 hover:bg-indigo-100 transition-all"
-                                    >
-                                        <Users className="w-4 h-4 text-indigo-600" />
-                                        <span>{acceptedProfile.first_name}</span>
-                                    </Link>
-                                ) : (
-                                    <div className="flex items-center gap-2 text-slate-400 font-medium bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 italic">
-                                        <Users className="w-4 h-4" />
-                                        <span>Czeka na studenta</span>
-                                    </div>
-                                )}
-
-                                <div className="flex items-center gap-2 text-slate-600 font-bold">
-                                    <Zap className="w-4 h-4 text-amber-500" />
-                                    <span>{total} <span className="font-medium text-slate-400">aplikacji</span></span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Price & Actions */}
-                        <div className="flex flex-col md:items-end items-start gap-4">
-                            <div className="flex flex-col md:items-end">
-                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">
-                                    {isInProgress && agreedStawka ? "Uzgodniona stawka" : "Budżet / Wynagrodzenie"}
-                                </span>
-                                <div className="font-black text-2xl text-slate-900">
-                                    {/* Show agreed rate when in progress, otherwise show original offer rate */}
-                                    {isInProgress && agreedStawka ? (
-                                        <span>{agreedStawka} <span className="text-sm font-bold text-slate-400">PLN</span></span>
-                                    ) : isJobOffer ? (
-                                        (o.salary_range_min && o.salary_range_min > 0) ? (
-                                            <span className="flex items-baseline gap-1">
-                                                {o.salary_range_min}
-                                                <span className="text-sm font-bold text-slate-400">{o.salary_range_max ? `- ${o.salary_range_max}` : "+"} PLN</span>
-                                            </span>
-                                        ) : (o.stawka && o.stawka > 0) ? (
-                                            <span>{o.stawka} <span className="text-sm font-bold text-slate-400">PLN</span></span>
-                                        ) : <span className="text-slate-300">N/A</span>
-                                    ) : (
-                                        o.stawka ? (
-                                            <span>{o.stawka} <span className="text-sm font-bold text-slate-400">PLN</span></span>
-                                        ) : <span className="text-slate-300">N/A</span>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 w-full md:w-auto mt-2">
-                                {isInProgress && acceptedAppId ? (
-                                    <>
-                                        <Button asChild className="h-10 rounded-xl bg-slate-900 hover:bg-black text-white px-5 font-bold shadow-lg shadow-slate-200">
-                                            <Link href={`/app/deliverables/${acceptedAppId}`}>Zarządzaj</Link>
-                                        </Button>
-                                        <form action={chatAction!}>
-                                            <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 transition-all">
-                                                <MessageSquare className="w-4.5 h-4.5" />
-                                            </Button>
-                                        </form>
-                                    </>
-                                ) : (
-                                    <Button asChild variant="outline" className="h-10 rounded-xl border-indigo-100 text-indigo-700 font-bold hover:bg-indigo-50/50 hover:border-indigo-200 transition-all px-6">
-                                        <Link href={`/app/company/offers/${o.id}`}>Szczegóły</Link>
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
+        <div className={`flex-1 ${compact ? "p-5" : "p-6"}`}>
+          {banner ? (
+            <div
+              className="mb-5 flex items-center gap-3 rounded-2xl px-4 py-3"
+              style={{ background: tone.bannerBg, border: `1px solid ${tone.bannerBorder}` }}
+            >
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-white"
+                style={{ color: tone.bar, boxShadow: `0 2px 8px ${tone.glow}` }}
+              >
+                {banner.icon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13.5px] font-extrabold text-slate-900">{banner.title}</div>
+                <div className="mt-0.5 text-xs font-semibold" style={{ color: tone.text }}>
+                  {banner.sub}
                 </div>
-            </CardContent>
-        </Card>
-    );
+              </div>
+              <CompanyStatePill tone={model.tone} solid icon={banner.pillIcon}>
+                {banner.pill}
+              </CompanyStatePill>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-5 xl:flex-row">
+            <div className="min-w-0 flex-1">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <CompanyStatePill tone={model.tone}>{model.label}</CompanyStatePill>
+                <CompanyStatePill tone={model.tone}>{model.stageLabel}</CompanyStatePill>
+                <CompanyStatePill tone="slate">{itemLabel}</CompanyStatePill>
+              </div>
+
+              <Link href={detailHref} className="block text-xl font-black leading-tight text-slate-950 transition hover:text-indigo-700">
+                {offer.tytul || (isServiceOrder ? "Zamowienie usługi" : "Ogloszenie bez tytulu")}
+              </Link>
+
+              <div className="mb-3 mt-3 flex flex-wrap gap-3 text-[11.5px] font-semibold text-slate-400">
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  {formatDate(offer.created_at)}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Briefcase className="h-3.5 w-3.5" />
+                  {getOfferTypeLabel(offer, isServiceOrder)}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5" />
+                  {isServiceOrder ? "Panel firmy" : `${stats.total} aplikacji`}
+                </span>
+              </div>
+
+              <div className="mb-4 rounded-r-xl border-l-[3px] bg-slate-50 px-4 py-3 text-sm italic leading-6 text-slate-600" style={{ borderLeftColor: tone.bar }}>
+                {model.note}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {stats.acceptedProfile ? (
+                  <Link
+                    href={`/app/students/${stats.acceptedProfile.id}`}
+                    className="inline-flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                  >
+                    <Users className="h-4 w-4" />
+                    {stats.acceptedProfile.first_name}
+                  </Link>
+                ) : (
+                  <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">
+                    <Users className="h-4 w-4" />
+                    {performerFallback}
+                  </span>
+                )}
+
+                {chatAction ? (
+                  <form action={chatAction}>
+                    <Button type="submit" variant="outline" className="h-9 rounded-xl border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      Czat
+                    </Button>
+                  </form>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex w-full flex-col gap-3 xl:w-[248px] xl:shrink-0">
+              <div className="grid min-w-0 grid-cols-2 gap-2">
+                <CompanyMetricTile
+                  label={isInProgress && stats.agreedStawka ? "Stawka uzgodniona" : "Budzet"}
+                  value={getBudgetLabel(offer, stats, isInProgress)}
+                  sub={isServiceOrder ? "Zamowienie firmy" : "Kwota oferty"}
+                  className="min-w-0"
+                  noWrapValue
+                />
+                {model.actionRequired ? (
+                  <CompanyMetricTile
+                    label="Status"
+                    value={model.stageLabel}
+                    sub={model.label}
+                    tone={model.tone}
+                    emphasize
+                    className="min-w-0"
+                    valueFontSize="clamp(15px, 1.25vw, 18px)"
+                    valueLineHeight={1.08}
+                    allowBreakValue
+                  />
+                ) : null}
+              </div>
+
+              <Button asChild className="h-11 rounded-2xl bg-gradient-to-r from-slate-950 to-slate-800 font-extrabold text-white hover:from-indigo-700 hover:to-indigo-600">
+                <Link href={model.actionHref}>
+                  {model.actionLabel}
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
 }

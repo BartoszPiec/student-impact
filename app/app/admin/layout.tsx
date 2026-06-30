@@ -1,5 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/admin/auth";
 
 /**
  * Layout admina — chroni WSZYSTKIE podstrony /app/admin/* przed nieadminami.
@@ -10,18 +9,13 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  await requireAdmin({ redirectOnFail: true });
 
-  if (!user) redirect("/auth");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single();
-
-  if (profile?.role !== "admin") redirect("/app");
-
-  return <>{children}</>;
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.18),_transparent_28%),linear-gradient(180deg,_#0f172a_0%,_#020617_100%)]">
+      <div className="mx-auto w-full max-w-[1680px] px-4 pb-12 pt-6 md:px-6 lg:px-8">
+        {children}
+      </div>
+    </div>
+  );
 }

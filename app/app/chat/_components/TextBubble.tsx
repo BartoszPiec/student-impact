@@ -5,9 +5,9 @@ export function TextBubble({ content, isMine }: { content: string; isMine: boole
     return (
         <div
             className={cn(
-                "px-4 py-2.5 rounded-2xl shadow-sm max-w-[85%] break-words whitespace-pre-wrap text-[15px] leading-relaxed",
+                "max-w-[min(82vw,36rem)] whitespace-pre-wrap break-words rounded-2xl px-3 py-2.5 text-[15px] leading-relaxed shadow-sm [overflow-wrap:anywhere] sm:max-w-[85%] sm:px-4",
                 isMine
-                    ? "bg-indigo-600 text-white rounded-tr-sm"
+                    ? "bg-[#10245f] text-white rounded-tr-sm"
                     : "bg-slate-50 text-slate-800 border border-slate-100/50 rounded-tl-sm"
             )}
         >

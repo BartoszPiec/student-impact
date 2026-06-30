@@ -1,8 +1,20 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
+
 import { createClient } from "@/lib/supabase/server";
+import { trySendNotification } from "@/lib/notifications/server";
+import { buildRateLimitKey, enforceRateLimit } from "@/lib/rate-limit";
+import { logSavedOfferError } from "@/lib/observability/saved-offers";
+import { UUID_RE } from "@/lib/security/validation";
+import { ensureConversationIdForApplication } from "@/lib/services/service-order-conversations";
+import {
+  closeRejectedApplicationConversation,
+  rejectCompetingApplicationsForOffer,
+} from "@/lib/services/application-chat-closure";
 
 type AppSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type JsonPayload = Record<string, unknown>;
@@ -28,10 +40,6 @@ type ApplicationRowWithOffer = ApplicationRowBase & {
   proposed_stawka?: number | null;
   counter_stawka?: number | null;
   offers: RelationValue<OfferRecord>;
-};
-
-type SimpleConversationRow = {
-  id: string;
 };
 
 type ConversationArgs = {
@@ -63,6 +71,29 @@ type IdRow = {
   id: string;
 };
 
+const uuidSchema = z.string().trim().regex(UUID_RE, "Nieprawidłowy identyfikator.");
+const applicationIdSchema = uuidSchema;
+const moneySchema = z.coerce
+  .number()
+  .finite("Podaj prawidłową stawkę.")
+  .min(1, "Stawka musi być większa od zera.")
+  .max(100_000, "Stawka przekracza limit dla oferty.")
+  .transform((value) => Number(value.toFixed(2)));
+const quoteProposalSchema = z.object({
+  conversationId: uuidSchema,
+  offerId: uuidSchema,
+  price: moneySchema,
+  message: z.string().trim().max(1_000, "Wiadomość jest zbyt długa.").default(""),
+});
+
+function parseOrThrow<T>(parsed: z.ZodSafeParseResult<T>): T {
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message || "Nieprawidłowe dane formularza.");
+  }
+
+  return parsed.data;
+}
+
 function unwrapRelation<T>(value: RelationValue<T>): T | null {
   if (Array.isArray(value)) {
     return value[0] ?? null;
@@ -74,7 +105,7 @@ function unwrapRelation<T>(value: RelationValue<T>): T | null {
 function getOffer(row: ApplicationRowWithOffer): OfferRecord {
   const offer = unwrapRelation(row.offers);
   if (!offer) {
-    throw new Error("Missing related offer");
+    throw new Error("Nie znaleziono powiązanej oferty.");
   }
 
   return offer;
@@ -82,43 +113,39 @@ function getOffer(row: ApplicationRowWithOffer): OfferRecord {
 
 function getCompanyId(offer: OfferRecord): string {
   if (!offer.company_id) {
-    throw new Error("Missing offer company");
+    throw new Error("Nie znaleziono firmy przypisanej do oferty.");
   }
 
   return offer.company_id;
 }
 
 function isMultiInstanceOffer(offer: OfferRecord): boolean {
-  if (offer.is_platform_service === true) {
-    return true;
-  }
+  return offer.is_platform_service === true;
+}
 
-  const offerType = offer.typ?.toLowerCase() ?? "";
-  return offerType.includes("micro") || offerType.includes("mikro");
+async function hasAnotherLockedApplication(
+  supabase: AppSupabaseClient,
+  offerId: string,
+  applicationId: string,
+) {
+  const { count, error } = await supabase
+    .from("applications")
+    .select("id", { count: "exact", head: true })
+    .eq("offer_id", offerId)
+    .neq("id", applicationId)
+    .in("status", ["accepted", "in_progress", "completed"]);
+
+  if (error) throw new Error("Nie udało się sprawdzić statusu innych zgłoszeń.");
+  return (count ?? 0) > 0;
 }
 
 async function notifyUser(
-  supabase: AppSupabaseClient,
+  _supabase: AppSupabaseClient,
   userId: string,
   typ: string,
   payload: JsonPayload = {},
 ) {
-  try {
-    await supabase.rpc("create_notification", {
-      p_user_id: userId,
-      p_typ: typ,
-      p_payload: payload,
-    });
-  } catch (err: unknown) {
-    console.error("notifyUser error:", err);
-  }
-}
-
-function toNumber(value: FormDataEntryValue | null): number | null {
-  if (typeof value !== "string") return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  return parsed;
+  await trySendNotification(userId, typ, payload);
 }
 
 function toMinorUnits(value: number | null | undefined): number | null {
@@ -126,37 +153,28 @@ function toMinorUnits(value: number | null | undefined): number | null {
   return Math.round(value * 100);
 }
 
+async function enforceApplicationsRateLimit(userId: string, action: string, targetId: string) {
+  const headerStore = await headers();
+  const forwarded = headerStore.get("x-forwarded-for");
+  const ip = forwarded?.split(",")[0]?.trim() || headerStore.get("x-real-ip") || "unknown";
+
+  const rateKey = buildRateLimitKey(["applications", action, userId, ip, targetId]);
+  const rateLimitResult = await enforceRateLimit("apply", rateKey);
+  if (!rateLimitResult.success) {
+    throw new Error("Zbyt wiele operacji na aplikacjach. Spróbuj ponownie za chwilę.");
+  }
+}
+
 async function ensureConversationForApplication(
   supabase: AppSupabaseClient,
   args: ConversationArgs,
 ) {
-  const { data: existingData } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("application_id", args.application_id)
-    .maybeSingle();
-
-  const existing = existingData as SimpleConversationRow | null;
-  if (existing?.id) return existing.id;
-
-  const { data: createdData, error } = await supabase
-    .from("conversations")
-    .insert({
-      application_id: args.application_id,
-      company_id: args.company_id,
-      student_id: args.student_id,
-      offer_id: args.offer_id,
-      type: "application",
-    })
-    .select("id")
-    .maybeSingle();
-
-  const created = createdData as SimpleConversationRow | null;
-  if (error || !created?.id) {
-    throw new Error(error?.message ?? "Nie udalo sie utworzyc rozmowy");
-  }
-
-  return created.id;
+  return ensureConversationIdForApplication(supabase, {
+    applicationId: args.application_id,
+    offerId: args.offer_id,
+    companyId: args.company_id,
+    studentId: args.student_id,
+  });
 }
 
 async function insertChatMessage(
@@ -178,7 +196,35 @@ async function insertChatMessage(
     payload,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("Nie udało się zapisać wiadomości.");
+}
+
+async function acceptApplicationWithAgreedRate(
+  supabase: AppSupabaseClient,
+  params: {
+    applicationId: string;
+    studentId: string;
+    fromStatuses: string[];
+    agreed: number;
+  },
+) {
+  const { data: updated, error } = await supabase
+    .from("applications")
+    .update({
+      status: "accepted",
+      agreed_stawka: params.agreed,
+      agreed_stawka_minor: toMinorUnits(params.agreed),
+      decided_at: new Date().toISOString(),
+    })
+    .eq("id", params.applicationId)
+    .eq("student_id", params.studentId)
+    .in("status", params.fromStatuses)
+    .select("id")
+    .single();
+
+  if (error || !updated) {
+    throw new Error("Nie udało się zaakceptować stawki. Odśwież stronę i spróbuj ponownie.");
+  }
 }
 
 export async function acceptCounterAsStudent(applicationId: string) {
@@ -187,13 +233,15 @@ export async function acceptCounterAsStudent(applicationId: string) {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  const parsedApplicationId = parseOrThrow(applicationIdSchema.safeParse(applicationId));
+  await enforceApplicationsRateLimit(user.id, "accept_counter", parsedApplicationId);
 
   const { data, error } = await supabase
     .from("applications")
     .select(
       "id, status, student_id, offer_id, counter_stawka, offers!inner(id, tytul, company_id, stawka, is_platform_service, typ)",
     )
-    .eq("id", applicationId)
+    .eq("id", parsedApplicationId)
     .single();
 
   const appRow = data as ApplicationRowWithOffer | null;
@@ -207,32 +255,58 @@ export async function acceptCounterAsStudent(applicationId: string) {
 
   const offer = getOffer(appRow);
   const companyId = getCompanyId(offer);
-  const agreed = appRow.counter_stawka;
-
-  const { error: updateError } = await supabase
-    .from("applications")
-    .update({
-      status: "accepted",
-      agreed_stawka: agreed,
-      agreed_stawka_minor: toMinorUnits(agreed),
-      decided_at: new Date().toISOString(),
-    })
-    .eq("id", applicationId);
-
-  if (updateError) throw new Error(updateError.message);
-
-  await supabase.rpc("ensure_contract_for_application", {
-    p_application_id: applicationId,
-  });
-
-  if (!isMultiInstanceOffer(offer)) {
-    const now = new Date().toISOString();
+  if (!isMultiInstanceOffer(offer) && (await hasAnotherLockedApplication(supabase, appRow.offer_id, parsedApplicationId))) {
     await supabase
       .from("applications")
-      .update({ status: "rejected", decided_at: now })
-      .eq("offer_id", appRow.offer_id)
-      .neq("id", applicationId)
+      .update({ status: "rejected", decided_at: new Date().toISOString() })
+      .eq("id", parsedApplicationId)
       .in("status", ["sent", "countered"]);
+
+    const conversationId = await closeRejectedApplicationConversation(supabase, {
+      applicationId: parsedApplicationId,
+      offerId: appRow.offer_id,
+      companyId,
+      studentId: appRow.student_id,
+      senderId: companyId,
+      content: "Niestety tym razem firma wybrała kogoś innego.",
+    });
+
+    revalidatePath(`/app/chat/${conversationId}`);
+    revalidatePath("/app/applications");
+    return;
+  }
+  const agreed = appRow.counter_stawka;
+
+  await acceptApplicationWithAgreedRate(supabase, {
+    applicationId: parsedApplicationId,
+    studentId: user.id,
+    fromStatuses: ["countered"],
+    agreed,
+  });
+
+  const { error: contractError } = await supabase.rpc("ensure_contract_for_application", {
+    p_application_id: parsedApplicationId,
+  });
+  if (contractError) throw new Error("Stawka została zaakceptowana, ale nie udało się przygotować kontraktu.");
+
+  if (!isMultiInstanceOffer(offer)) {
+    const rejectedApplications = await rejectCompetingApplicationsForOffer(supabase, {
+      offerId: appRow.offer_id,
+      acceptedApplicationId: parsedApplicationId,
+      companyId,
+      senderId: companyId,
+      content: "Niestety tym razem firma wybrała kogoś innego.",
+    });
+
+    for (const rejectedApplication of rejectedApplications) {
+      await notifyUser(supabase, rejectedApplication.studentId, "offer_closed", {
+        offer_id: appRow.offer_id,
+        offer_title: offer.tytul,
+        reason: "accepted_other",
+        conversation_id: rejectedApplication.conversationId,
+      });
+      revalidatePath(`/app/chat/${rejectedApplication.conversationId}`);
+    }
 
     await supabase
       .from("offers")
@@ -242,7 +316,7 @@ export async function acceptCounterAsStudent(applicationId: string) {
 
   try {
     const conversationId = await ensureConversationForApplication(supabase, {
-      application_id: applicationId,
+      application_id: parsedApplicationId,
       offer_id: appRow.offer_id,
       company_id: companyId,
       student_id: appRow.student_id,
@@ -252,7 +326,7 @@ export async function acceptCounterAsStudent(applicationId: string) {
       supabase,
       conversationId,
       user.id,
-      `Stawka ${agreed} zl zaakceptowana.`,
+      `Stawka ${agreed} zł zaakceptowana.`,
       "rate.accepted",
       {
         agreed_stawka: agreed,
@@ -265,7 +339,7 @@ export async function acceptCounterAsStudent(applicationId: string) {
   }
 
   await notifyUser(supabase, companyId, "counter_accepted", {
-    application_id: applicationId,
+    application_id: parsedApplicationId,
     offer_id: appRow.offer_id,
     offer_title: offer.tytul,
     agreed_stawka: agreed,
@@ -275,7 +349,7 @@ export async function acceptCounterAsStudent(applicationId: string) {
   revalidatePath("/app/applications");
   revalidatePath("/app/company/offers");
   revalidatePath("/app/company/applications");
-  revalidatePath(`/app/deliverables/${applicationId}`);
+  revalidatePath(`/app/deliverables/${parsedApplicationId}`);
   revalidatePath("/app/notifications");
 }
 
@@ -285,13 +359,15 @@ export async function acceptProposalAsStudent(applicationId: string) {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  const parsedApplicationId = parseOrThrow(applicationIdSchema.safeParse(applicationId));
+  await enforceApplicationsRateLimit(user.id, "accept_proposal", parsedApplicationId);
 
   const { data, error } = await supabase
     .from("applications")
     .select(
       "id, status, student_id, offer_id, proposed_stawka, offers!inner(id, tytul, company_id, stawka, is_platform_service, typ)",
     )
-    .eq("id", applicationId)
+    .eq("id", parsedApplicationId)
     .single();
 
   const appRow = data as ApplicationRowWithOffer | null;
@@ -305,32 +381,58 @@ export async function acceptProposalAsStudent(applicationId: string) {
 
   const offer = getOffer(appRow);
   const companyId = getCompanyId(offer);
-  const agreed = appRow.proposed_stawka;
-
-  const { error: updateError } = await supabase
-    .from("applications")
-    .update({
-      status: "accepted",
-      agreed_stawka: agreed,
-      agreed_stawka_minor: toMinorUnits(agreed),
-      decided_at: new Date().toISOString(),
-    })
-    .eq("id", applicationId);
-
-  if (updateError) throw new Error(updateError.message);
-
-  await supabase.rpc("ensure_contract_for_application", {
-    p_application_id: applicationId,
-  });
-
-  if (!isMultiInstanceOffer(offer)) {
-    const now = new Date().toISOString();
+  if (!isMultiInstanceOffer(offer) && (await hasAnotherLockedApplication(supabase, appRow.offer_id, parsedApplicationId))) {
     await supabase
       .from("applications")
-      .update({ status: "rejected", decided_at: now })
-      .eq("offer_id", appRow.offer_id)
-      .neq("id", applicationId)
+      .update({ status: "rejected", decided_at: new Date().toISOString() })
+      .eq("id", parsedApplicationId)
       .in("status", ["sent", "countered"]);
+
+    const conversationId = await closeRejectedApplicationConversation(supabase, {
+      applicationId: parsedApplicationId,
+      offerId: appRow.offer_id,
+      companyId,
+      studentId: appRow.student_id,
+      senderId: companyId,
+      content: "Niestety tym razem firma wybrała kogoś innego.",
+    });
+
+    revalidatePath(`/app/chat/${conversationId}`);
+    revalidatePath("/app/applications");
+    return;
+  }
+  const agreed = appRow.proposed_stawka;
+
+  await acceptApplicationWithAgreedRate(supabase, {
+    applicationId: parsedApplicationId,
+    studentId: user.id,
+    fromStatuses: ["sent"],
+    agreed,
+  });
+
+  const { error: contractError } = await supabase.rpc("ensure_contract_for_application", {
+    p_application_id: parsedApplicationId,
+  });
+  if (contractError) throw new Error("Propozycja została zaakceptowana, ale nie udało się przygotować kontraktu.");
+
+  if (!isMultiInstanceOffer(offer)) {
+    const rejectedApplications = await rejectCompetingApplicationsForOffer(supabase, {
+      offerId: appRow.offer_id,
+      acceptedApplicationId: parsedApplicationId,
+      companyId,
+      senderId: companyId,
+      content: "Niestety tym razem firma wybrała kogoś innego.",
+    });
+
+    for (const rejectedApplication of rejectedApplications) {
+      await notifyUser(supabase, rejectedApplication.studentId, "offer_closed", {
+        offer_id: appRow.offer_id,
+        offer_title: offer.tytul,
+        reason: "accepted_other",
+        conversation_id: rejectedApplication.conversationId,
+      });
+      revalidatePath(`/app/chat/${rejectedApplication.conversationId}`);
+    }
 
     await supabase
       .from("offers")
@@ -340,7 +442,7 @@ export async function acceptProposalAsStudent(applicationId: string) {
 
   try {
     const conversationId = await ensureConversationForApplication(supabase, {
-      application_id: applicationId,
+      application_id: parsedApplicationId,
       offer_id: appRow.offer_id,
       company_id: companyId,
       student_id: appRow.student_id,
@@ -350,7 +452,7 @@ export async function acceptProposalAsStudent(applicationId: string) {
       supabase,
       conversationId,
       user.id,
-      `Stawka ${agreed} zl zaakceptowana.`,
+      `Stawka ${agreed} zł zaakceptowana.`,
       "application_accepted",
       {
         agreed_stawka: agreed,
@@ -362,7 +464,7 @@ export async function acceptProposalAsStudent(applicationId: string) {
   }
 
   await notifyUser(supabase, companyId, "application_accepted", {
-    application_id: applicationId,
+    application_id: parsedApplicationId,
     offer_id: appRow.offer_id,
     offer_title: offer.tytul,
     agreed_stawka: agreed,
@@ -372,7 +474,7 @@ export async function acceptProposalAsStudent(applicationId: string) {
   revalidatePath("/app/applications");
   revalidatePath("/app/company/offers");
   revalidatePath("/app/company/applications");
-  revalidatePath(`/app/deliverables/${applicationId}`);
+  revalidatePath(`/app/deliverables/${parsedApplicationId}`);
   revalidatePath("/app/notifications");
 }
 
@@ -381,11 +483,13 @@ export async function rejectProposalAsStudent(applicationId: string) {
   const { data: authData } = await supabase.auth.getUser();
   const user = authData.user;
   if (!user) redirect("/auth");
+  const parsedApplicationId = parseOrThrow(applicationIdSchema.safeParse(applicationId));
+  await enforceApplicationsRateLimit(user.id, "reject_proposal", parsedApplicationId);
 
   const { data, error } = await supabase
     .from("applications")
     .select("id, status, student_id, offer_id, offers!inner(id, tytul, company_id)")
-    .eq("id", applicationId)
+    .eq("id", parsedApplicationId)
     .single();
 
   const appRow = data as ApplicationRowWithOffer | null;
@@ -399,16 +503,20 @@ export async function rejectProposalAsStudent(applicationId: string) {
   const offer = getOffer(appRow);
   const companyId = getCompanyId(offer);
 
-  const { error: updateError } = await supabase
+  const { data: updatedApplication, error: updateError } = await supabase
     .from("applications")
     .update({ status: "rejected", decided_at: new Date().toISOString() })
-    .eq("id", applicationId);
+    .eq("id", parsedApplicationId)
+    .eq("student_id", user.id)
+    .in("status", ["sent"])
+    .select("id")
+    .single();
 
-  if (updateError) throw new Error(updateError.message);
+  if (updateError || !updatedApplication) throw new Error("Nie udało się odrzucić propozycji. Odśwież stronę i spróbuj ponownie.");
 
   try {
     const conversationId = await ensureConversationForApplication(supabase, {
-      application_id: applicationId,
+      application_id: parsedApplicationId,
       offer_id: appRow.offer_id,
       company_id: companyId,
       student_id: appRow.student_id,
@@ -426,7 +534,7 @@ export async function rejectProposalAsStudent(applicationId: string) {
   }
 
   await notifyUser(supabase, companyId, "application_rejected", {
-    application_id: applicationId,
+    application_id: parsedApplicationId,
     offer_id: appRow.offer_id,
     offer_title: offer.tytul,
   });
@@ -442,11 +550,13 @@ export async function rejectCounterAsStudent(applicationId: string) {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  const parsedApplicationId = parseOrThrow(applicationIdSchema.safeParse(applicationId));
+  await enforceApplicationsRateLimit(user.id, "reject_counter", parsedApplicationId);
 
   const { data, error } = await supabase
     .from("applications")
     .select("id, status, student_id, offer_id, offers!inner(id, tytul, company_id)")
-    .eq("id", applicationId)
+    .eq("id", parsedApplicationId)
     .single();
 
   const appRow = data as ApplicationRowWithOffer | null;
@@ -461,22 +571,26 @@ export async function rejectCounterAsStudent(applicationId: string) {
   const offer = getOffer(appRow);
   const companyId = getCompanyId(offer);
 
-  const { error: updateError } = await supabase
+  const { data: updatedApplication, error: updateError } = await supabase
     .from("applications")
     .update({ status: "rejected", decided_at: new Date().toISOString() })
-    .eq("id", applicationId);
+    .eq("id", parsedApplicationId)
+    .eq("student_id", user.id)
+    .in("status", ["countered"])
+    .select("id")
+    .single();
 
-  if (updateError) throw new Error(updateError.message);
+  if (updateError || !updatedApplication) throw new Error("Nie udało się odrzucić kontroferty. Odśwież stronę i spróbuj ponownie.");
 
   await notifyUser(supabase, companyId, "counter_rejected", {
-    application_id: applicationId,
+    application_id: parsedApplicationId,
     offer_id: appRow.offer_id,
     offer_title: offer.tytul,
   });
 
   try {
     const conversationId = await ensureConversationForApplication(supabase, {
-      application_id: applicationId,
+      application_id: parsedApplicationId,
       offer_id: appRow.offer_id,
       company_id: companyId,
       student_id: appRow.student_id,
@@ -507,19 +621,17 @@ export async function proposeNewPriceAsStudent(
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  const parsedApplicationId = parseOrThrow(applicationIdSchema.safeParse(applicationId));
+  await enforceApplicationsRateLimit(user.id, "propose_new_price", parsedApplicationId);
 
-  const proposed = toNumber(formData.get("proposed_stawka"));
-  if (proposed == null || proposed <= 0) {
-    revalidatePath("/app/applications");
-    return;
-  }
+  const proposed = parseOrThrow(moneySchema.safeParse(formData.get("proposed_stawka")));
 
   const { data, error } = await supabase
     .from("applications")
     .select(
       "id, status, student_id, offer_id, offers!inner(id, tytul, company_id, stawka)",
     )
-    .eq("id", applicationId)
+    .eq("id", parsedApplicationId)
     .single();
 
   const appRow = data as ApplicationRowWithOffer | null;
@@ -534,7 +646,7 @@ export async function proposeNewPriceAsStudent(
   const offer = getOffer(appRow);
   const companyId = getCompanyId(offer);
 
-  const { error: updateError } = await supabase
+  const { data: updatedApplication, error: updateError } = await supabase
     .from("applications")
     .update({
       status: "sent",
@@ -544,13 +656,17 @@ export async function proposeNewPriceAsStudent(
       agreed_stawka: null,
       agreed_stawka_minor: null,
     })
-    .eq("id", applicationId);
+    .eq("id", parsedApplicationId)
+    .eq("student_id", user.id)
+    .in("status", ["countered"])
+    .select("id")
+    .single();
 
-  if (updateError) throw new Error(updateError.message);
+  if (updateError || !updatedApplication) throw new Error("Nie udało się zapisać nowej stawki. Odśwież stronę i spróbuj ponownie.");
 
   try {
     const conversationId = await ensureConversationForApplication(supabase, {
-      application_id: applicationId,
+      application_id: parsedApplicationId,
       offer_id: appRow.offer_id,
       company_id: companyId,
       student_id: appRow.student_id,
@@ -560,13 +676,13 @@ export async function proposeNewPriceAsStudent(
       supabase,
       conversationId,
       user.id,
-      `Proponuje stawke ${proposed} zl.`,
+      `Proponuję stawkę ${proposed} zł.`,
       "rate.proposed",
       { proposed_stawka: proposed },
     );
 
     await notifyUser(supabase, companyId, "negotiation_proposed", {
-      application_id: applicationId,
+      application_id: parsedApplicationId,
       offer_id: appRow.offer_id,
       offer_title: offer.tytul,
       proposed_stawka: proposed,
@@ -592,39 +708,44 @@ export async function withdrawApplication(
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  const parsedApplicationId = parseOrThrow(applicationIdSchema.safeParse(applicationId));
+  await enforceApplicationsRateLimit(user.id, "withdraw", parsedApplicationId);
 
   const { data, error } = await supabase
     .from("applications")
     .select("id, student_id, status, offer_id")
-    .eq("id", applicationId)
+    .eq("id", parsedApplicationId)
     .single();
 
   const appRow = data as ApplicationRowBase | null;
   if (error || !appRow) {
     revalidatePath("/app/applications");
-    return { error: "Nie znaleziono zgloszenia." };
+    return { error: "Nie znaleziono zgłoszenia." };
   }
 
   if (appRow.student_id !== user.id) {
-    return { error: "Brak dostepu do zgloszenia." };
+    return { error: "Brak dostępu do zgłoszenia." };
   }
 
   if (appRow.status !== "sent" && appRow.status !== "countered") {
     revalidatePath("/app/applications");
-    return { error: `Nie mozna usunac zgloszenia o statusie: ${appRow.status}` };
+    return { error: `Nie można usunąć zgłoszenia o statusie: ${appRow.status}` };
   }
 
-  const { error: updateError } = await supabase
+  const { data: updatedApplication, error: updateError } = await supabase
     .from("applications")
     .update({
       status: "cancelled",
       cancelled_at: new Date().toISOString(),
     })
-    .eq("id", applicationId);
+    .eq("id", parsedApplicationId)
+    .eq("student_id", user.id)
+    .in("status", ["sent", "countered"])
+    .select("id")
+    .single();
 
-  if (updateError) {
-    console.error("Error cancelling application:", updateError);
-    return { error: updateError.message };
+  if (updateError || !updatedApplication) {
+    return { error: "Nie udało się wycofać zgłoszenia. Odśwież stronę i spróbuj ponownie." };
   }
 
   try {
@@ -637,10 +758,10 @@ export async function withdrawApplication(
     const offer = offerData as OfferNotificationRow | null;
     if (offer?.company_id) {
       await notifyUser(supabase, offer.company_id, "application_withdrawn", {
-        application_id: applicationId,
+        application_id: parsedApplicationId,
         offer_id: appRow.offer_id,
         offer_title: offer.tytul,
-        snippet: `Kandydat wycofal zgloszenie do oferty "${offer.tytul ?? "oferta"}".`,
+        snippet: `Kandydat wycofał zgłoszenie do oferty "${offer.tytul ?? "oferta"}".`,
       });
     }
   } catch {
@@ -656,15 +777,35 @@ export async function withdrawApplication(
 
 export async function removeSavedOffer(offerId: string) {
   const supabase = await createClient();
-  const { data: authData } = await supabase.auth.getUser();
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) {
+    await logSavedOfferError({
+      source: "saved_offers.applications.auth_lookup",
+      error: authError,
+      offerId,
+    });
+    return;
+  }
+
   const user = authData.user;
   if (!user) return;
+  const parsedOfferId = parseOrThrow(uuidSchema.safeParse(offerId));
 
-  await supabase
+  const { error } = await supabase
     .from("saved_offers")
     .delete()
-    .eq("offer_id", offerId)
+    .eq("offer_id", parsedOfferId)
     .eq("student_id", user.id);
+
+  if (error) {
+    await logSavedOfferError({
+      source: "saved_offers.applications.delete",
+      error,
+      userId: user.id,
+      offerId: parsedOfferId,
+    });
+    return;
+  }
 
   revalidatePath("/app/applications");
 }
@@ -678,87 +819,119 @@ export async function submitQuoteProposal(
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
   const user = authData.user;
-  if (!user) throw new Error("Musisz byc zalogowany.");
+  if (!user) throw new Error("Musisz być zalogowany.");
 
-  const { data } = await supabase
+  const input = parseOrThrow(quoteProposalSchema.safeParse({
+    conversationId,
+    offerId,
+    price,
+    message,
+  }));
+  await enforceApplicationsRateLimit(user.id, "submit_quote", input.offerId);
+
+  const { data, error: conversationError } = await supabase
     .from("conversations")
     .select("id, company_id, student_id, offer_id, offers(tytul, company_id)")
-    .eq("id", conversationId)
+    .eq("id", input.conversationId)
     .single();
 
   const conversation = data as ConversationRow | null;
-  if (!conversation || conversation.student_id !== user.id) {
-    throw new Error("Brak dostepu do rozmowy.");
+  if (conversationError || !conversation || conversation.student_id !== user.id) {
+    throw new Error("Brak dostępu do rozmowy.");
   }
 
-  const { data: existingAppData } = await supabase
+  if (conversation.offer_id !== input.offerId) {
+    throw new Error("Rozmowa nie dotyczy wskazanej oferty.");
+  }
+
+  const { data: existingAppData, error: existingAppError } = await supabase
     .from("applications")
-    .select("id")
-    .eq("offer_id", offerId)
+    .select("id, status")
+    .eq("offer_id", input.offerId)
     .eq("student_id", user.id)
     .maybeSingle();
+  if (existingAppError) throw new Error("Nie udało się sprawdzić istniejącego zgłoszenia.");
 
-  const existingApp = existingAppData as IdRow | null;
+  const existingApp = existingAppData as (IdRow & { status: string }) | null;
   let appId = existingApp?.id ?? null;
 
   if (existingApp) {
-    await supabase
+    if (!["sent", "countered"].includes(existingApp.status)) {
+      throw new Error("Nie można zmienić propozycji dla tego statusu zgłoszenia.");
+    }
+
+    const { data: updatedApplication, error: updateError } = await supabase
       .from("applications")
       .update({
         status: "sent",
-        proposed_stawka: price,
-        message_to_company: message,
+        proposed_stawka: input.price,
+        message_to_company: input.message,
       })
-      .eq("id", existingApp.id);
+      .eq("id", existingApp.id)
+      .eq("student_id", user.id)
+      .in("status", ["sent", "countered"])
+      .select("id")
+      .single();
+
+    if (updateError || !updatedApplication) {
+      throw new Error("Nie udało się zaktualizować propozycji. Odśwież stronę i spróbuj ponownie.");
+    }
+
+    appId = updatedApplication.id;
   } else {
     const { data: newAppData, error } = await supabase
       .from("applications")
       .insert({
-        offer_id: offerId,
+        offer_id: input.offerId,
         student_id: user.id,
         status: "sent",
-        proposed_stawka: price,
-        message_to_company: message,
+        proposed_stawka: input.price,
+        message_to_company: input.message,
       })
       .select("id")
-      .maybeSingle();
+      .single();
 
     const newApp = newAppData as IdRow | null;
     if (error || !newApp) {
-      throw new Error(error?.message || "Nie udalo sie zlozyc oferty.");
+      throw new Error("Nie udało się złożyć oferty. Odśwież stronę i spróbuj ponownie.");
     }
 
     appId = newApp.id;
   }
 
-  await supabase
+  const { data: linkedConversation, error: linkError } = await supabase
     .from("conversations")
     .update({ application_id: appId })
-    .eq("id", conversationId);
+    .eq("id", input.conversationId)
+    .eq("student_id", user.id)
+    .eq("offer_id", input.offerId)
+    .select("id")
+    .single();
 
-  const content = `Zlozylem oferte realizacji: ${price} zl.\n${message}`;
+  if (linkError || !linkedConversation) throw new Error("Nie udało się powiązać propozycji z rozmową.");
+
+  const content = `Złożyłem ofertę realizacji: ${input.price} zł.\n${input.message}`;
 
   try {
-    await insertChatMessage(supabase, conversationId, user.id, content, "negotiation_proposed", {
-      proposed_stawka: price,
+    await insertChatMessage(supabase, input.conversationId, user.id, content, "negotiation_proposed", {
+      proposed_stawka: input.price,
       initiator: "student",
     });
 
     const offerTitle = unwrapRelation(conversation.offers)?.tytul || "Zapytanie";
     await notifyUser(supabase, conversation.company_id, "negotiation_proposed", {
-      conversation_id: conversationId,
-      offer_id: offerId,
+      conversation_id: input.conversationId,
+      offer_id: input.offerId,
       offer_title: offerTitle,
-      proposed_stawka: price,
-      snippet: `Otrzymales oferte od studenta: ${price} zl`,
+      proposed_stawka: input.price,
+      snippet: `Otrzymałeś ofertę od studenta: ${input.price} zł`,
     });
-  } catch (err: unknown) {
-    console.error("Error sending message/notify:", err);
+  } catch {
     return {
-      error: err instanceof Error ? err.message : "Nie udalo sie wyslac wiadomosci.",
+      error: "Propozycja została zapisana, ale nie udało się wysłać wiadomości.",
     };
   }
 
-  revalidatePath(`/app/chat/${conversationId}`);
+  revalidatePath(`/app/chat/${input.conversationId}`);
   return { success: true };
 }

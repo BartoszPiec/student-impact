@@ -107,6 +107,8 @@ export function normalizeMessage(
         event = "rate.proposed";
         if (payload.amount != null && payload.proposed_stawka == null) {
           payload = { ...payload, proposed_stawka: payload.amount };
+        } else if (payload.counter_stawka != null && payload.proposed_stawka == null) {
+          payload = { ...payload, proposed_stawka: payload.counter_stawka };
         }
         break;
       case "counter_accepted":

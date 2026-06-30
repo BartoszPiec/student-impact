@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, Clock, Sparkles, User, Briefcase } from "lucide-react";
+import { Clock, Sparkles, User, Briefcase } from "lucide-react";
 import Link from "next/link";
 import { SERVICE_CATEGORIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -24,9 +24,7 @@ type Package = {
     is_system?: boolean;
     categories?: string[] | null;
     profiles?: {
-        imie: string;
-        nazwisko: string;
-        avatar_url: string | null;
+        public_name: string | null;
     } | null;
 };
 
@@ -48,7 +46,9 @@ export default function CatalogClient({ packages, isCompany }: { packages: Packa
         <div className="space-y-8">
             {/* TABS HEADER */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full sm:w-auto">
+                <Tabs value={activeTab} onValueChange={(value) => {
+                    if (value === "system" || value === "student") setActiveTab(value);
+                }} className="w-full sm:w-auto">
                     <TabsList className="grid w-full grid-cols-2 p-1 bg-slate-100 h-auto">
                         <TabsTrigger value="system" className="data-[state=active]:bg-white data-[state=active]:text-indigo-600 py-2.5">
                             <Sparkles className="mr-2 h-4 w-4" /> Gotowe Pakiety
@@ -95,13 +95,9 @@ export default function CatalogClient({ packages, isCompany }: { packages: Packa
                             {!pkg.is_system && pkg.profiles && pkg.student_id && (
                                 <Link href={`/app/students/${pkg.student_id}`} className="mb-3 flex items-center gap-2 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg w-fit border border-slate-100 hover:bg-slate-100 hover:border-slate-300 transition-all cursor-pointer">
                                     <div className="h-6 w-6 rounded-full bg-slate-200 overflow-hidden relative">
-                                        {pkg.profiles.avatar_url ? (
-                                            <img src={pkg.profiles.avatar_url} alt="Avatar" className="object-cover w-full h-full" />
-                                        ) : (
-                                            <User className="h-3 w-3 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-400" />
-                                        )}
+                                        <User className="h-3 w-3 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-400" />
                                     </div>
-                                    <span className="font-medium text-slate-700">{pkg.profiles.imie} {pkg.profiles.nazwisko}</span>
+                                    <span className="font-medium text-slate-700">{pkg.profiles.public_name || "Student"}</span>
                                 </Link>
                             )}
 
@@ -156,9 +152,9 @@ export default function CatalogClient({ packages, isCompany }: { packages: Packa
                                                 try {
                                                     await createInquiryAction(pkg.id);
                                                     toast.success("Zapytanie wysłane! Sprawdź czat i pulpit zleceń.");
-                                                } catch (err: any) {
-                                                    console.error(err);
-                                                    toast.error(err.message || "Wystąpił błąd");
+                                                } catch (error: unknown) {
+                                                    console.error(error);
+                                                    toast.error(error instanceof Error ? error.message : "Wystąpił błąd");
                                                 }
                                             });
                                         }}

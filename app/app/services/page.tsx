@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
 import { redirect } from "next/navigation";
 import CatalogClient from "./catalog-client";
+import Link from "next/link";
+import { getRequestContext } from "@/lib/auth/request-context";
 
 export const dynamic = "force-dynamic";
 
@@ -16,37 +18,46 @@ const fullBleedStyle = {
 
 export default async function ServicesCatalogPage() {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, role } = await getRequestContext();
 
     if (!user) redirect("/auth");
 
-    const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .single();
+    const isCompany = role === "company";
 
-    const isCompany = profile?.role === "company";
-
-    // Pobierz WSZYSTKIE pakiety (systemowe i studenckie)
-    const { data: allPackages } = await supabase
+    const { data: packageRows, error: packagesError } = await supabase
         .from("service_packages")
-        .select(`
-            *,
-            price_max,
-            profiles:student_id (
-                imie, nazwisko, avatar_url
-            )
-        `)
+        .select("id, title, description, price, price_max, delivery_time_days, student_id, is_system, categories")
         .eq("status", "active")
         .order("is_system", { ascending: false }) // Systemowe najpierw
         .order("price", { ascending: true });
+
+    if (packagesError) {
+        throw new Error("Nie udało się pobrać katalogu usług.");
+    }
+
+    const studentIds = [...new Set((packageRows ?? []).flatMap((pkg) => pkg.student_id ? [pkg.student_id] : []))];
+    const { data: studentRows, error: studentsError } = studentIds.length > 0
+        ? await supabase
+            .from("student_public_profiles")
+            .select("user_id, public_name")
+            .in("user_id", studentIds)
+        : { data: [], error: null };
+
+    if (studentsError) {
+        throw new Error("Nie udało się pobrać autorów usług.");
+    }
+
+    const studentsById = new Map((studentRows ?? []).map((student) => [student.user_id, student]));
+    const allPackages = (packageRows ?? []).map((pkg) => ({
+        ...pkg,
+        profiles: pkg.student_id ? studentsById.get(pkg.student_id) ?? null : null,
+    }));
 
     return (
         <main className="space-y-8 pb-20">
             {/* HERO SECTION */}
             <div style={fullBleedStyle} className="relative bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 px-6 sm:px-12 lg:px-24 py-16 text-white shadow-xl overflow-hidden mb-12">
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
+                <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-10"></div>
                 <div className="relative z-10 w-full max-w-[2000px] mx-auto">
                     <Badge variant="outline" className="mb-4 border-white/20 text-indigo-300 bg-white/5 backdrop-blur-sm px-3 py-1">
                         <Sparkles className="mr-2 h-3.5 w-3.5" />
@@ -65,7 +76,7 @@ export default async function ServicesCatalogPage() {
                     {isCompany && (
                         <div className="mt-8 flex flex-wrap gap-4">
                             <Button asChild variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-none backdrop-blur-md">
-                                <a href="/app/company/packages">Twoje Zamówienia →</a>
+                                <Link href="/app/company/packages">Twoje Zamówienia →</Link>
                             </Button>
                         </div>
                     )}

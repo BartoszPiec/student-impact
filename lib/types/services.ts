@@ -22,14 +22,20 @@ export type ServiceOrder = {
   status:
     | "inquiry"
     | "pending"
+    | "pending_selection"
+    | "pending_student_confirmation"
+    | "pending_confirmation"
     | "proposal_sent"
     | "countered"
     | "accepted"
+    | "active"
     | "in_progress"
+    | "revision"
     | "delivered"
     | "completed"
     | "rejected"
-    | "cancelled";
+    | "cancelled"
+    | "disputed";
   amount: number;
   counter_amount?: number | null;
   requirements: string | null;

@@ -1,751 +1,829 @@
-"use client";
-
-import { useState, useEffect, useRef } from "react";
+import type { ComponentType } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  Banknote,
+  BarChart3,
+  BriefcaseBusiness,
+  Check,
   CheckCircle2,
-  Briefcase,
-  GraduationCap,
-  TrendingUp,
-  Search,
-  Star,
-  Globe,
-  Video,
-  Code,
-  BarChart,
-  Palette,
-  Languages,
-  Clipboard,
-  PenTool,
-  Bot,
-  Scale,
-  Database,
+  ClipboardCheck,
+  FileCheck2,
+  LockKeyhole,
+  MessageSquare,
+  PenLine,
+  Plus,
+  ShieldCheck,
   Sparkles,
-  Menu,
-  X
+  Star,
+  Users,
+  Video,
+  WandSparkles,
+  Zap,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger
-} from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { LandingFaqAccordion } from "@/components/landing-faq-accordion";
+import { LandingNavbar } from "@/components/landing-navbar";
 
-// --- Types ---
-interface ServiceData {
-  icon: any;
+type IconComponent = ComponentType<{ className?: string }>;
+
+type PackageCard = {
+  title: string;
   description: string;
-  stats: {
-    price: string;
-    time: string;
-    projects: string;
-    rating: string;
-  };
-  examples: string[];
-  funFact: string;
-}
-
-const SERVICE_DATA: Record<string, ServiceData> = {
-  'Serwisy internetowe': {
-    icon: Globe,
-    description: 'Profesjonalne strony internetowe i aplikacje webowe tworzone przez studentów IT i designu. Od landing page\'ów po złożone systemy e-commerce.',
-    stats: { price: '500-5000 zł', time: '1-4 tygodnie', projects: '340+', rating: '4.8/5' },
-    examples: ['Landing pages dla startupów', 'Strony wizytówki firm', 'Sklepy internetowe (e-commerce)', 'Systemy CMS i blogi', 'Aplikacje webowe SaaS'],
-    funFact: 'Czy wiesz, że 67% naszych studentów IT tworzy strony w React i Vue.js? To te same technologie, których używają Google i Facebook!'
-  },
-  'Multimedia': {
-    icon: Video,
-    description: 'Montaż wideo, animacje, produkcja audio i grafika ruchoma. Studenci z kierunków multimedia tworzą profesjonalne treści wizualne i dźwiękowe.',
-    stats: { price: '300-3000 zł', time: '3-14 dni', projects: '280+', rating: '4.9/5' },
-    examples: ['Montaż filmów promocyjnych', 'Animacje 2D i 3D', 'Produkcja podcastów', 'Motion graphics', 'Obróbka zdjęć produktowych'],
-    funFact: 'Studenci z naszej platformy zmontowali już ponad 500 godzin materiału wideo! To więcej niż cała seria Breaking Bad.'
-  },
-  'Programowanie i IT': {
-    icon: Code,
-    description: 'Od aplikacji mobilnych po systemy backendowe. Studenci informatyki tworzą rozwiązania w Python, Java, JavaScript, C# i wielu innych technologiach.',
-    stats: { price: '1000-10000 zł', time: '2-8 tygodni', projects: '520+', rating: '4.7/5' },
-    examples: ['Aplikacje mobilne (iOS/Android)', 'Systemy backendowe i API', 'Automatyzacja procesów', 'Integracje z systemami zewnętrznymi', 'Skrypty i narzędzia deweloperskie'],
-    funFact: 'Najczęściej wybierany język? Python! 42% projektów programistycznych wykorzystuje właśnie ten język.'
-  },
-  'Marketing': {
-    icon: BarChart,
-    description: 'Kampanie w social media, SEO, content marketing i analityka. Studenci marketingu pomagają firmom dotrzeć do swojej grupy docelowej.',
-    stats: { price: '400-4000 zł', time: '1-6 tygodni', projects: '390+', rating: '4.8/5' },
-    examples: ['Kampanie w social media', 'Optymalizacja SEO', 'Email marketing', 'Analityka i raporty', 'Strategie content marketingu'],
-    funFact: 'Nasze kampanie social media wygenerowały łącznie ponad 2 miliony wyświetleń! Studenci znają trendy lepiej niż ktokolwiek.'
-  },
-  'Design': {
-    icon: Palette,
-    description: 'UI/UX design, branding, identyfikacja wizualna i grafika użytkowa. Studenci ASP i projektowania tworzą estetyczne i funkcjonalne projekty.',
-    stats: { price: '300-5000 zł', time: '1-4 tygodnie', projects: '450+', rating: '4.9/5' },
-    examples: ['Projekty UI/UX aplikacji', 'Logo i identyfikacja wizualna', 'Materiały marketingowe', 'Projekty opakowań', 'Ilustracje i grafiki'],
-    funFact: 'Portfolio studentów designu zawiera już ponad 2000 projektów! Średnio każdy designer ma 4-5 zrealizowanych projektów.'
-  },
-  'Tłumaczenia': {
-    icon: Languages,
-    description: 'Tłumaczenia pisemne i ustne w ponad 20 językach. Studenci filologii tłumaczą dokumenty biznesowe, strony www, materiały marketingowe i więcej.',
-    stats: { price: '50-500 zł', time: '1-7 dni', projects: '670+', rating: '4.9/5' },
-    examples: ['Tłumaczenia stron internetowych', 'Dokumenty biznesowe', 'Materiały marketingowe', 'Podtytuły do wideo', 'Lokalizacja aplikacji'],
-    funFact: 'Najczęściej tłumaczone języki to angielski, niemiecki i hiszpański. Ale mamy też studentów znających norweski, japoński i hindi!'
-  },
-  'Prace biurowe': {
-    icon: Clipboard,
-    description: 'Wsparcie administracyjne, wprowadzanie danych, obsługa korespondencji i organizacja. Studenci pomagają w codziennych zadaniach biurowych.',
-    stats: { price: '30-300 zł', time: '1-5 dni', projects: '540+', rating: '4.7/5' },
-    examples: ['Wprowadzanie danych do systemów', 'Obsługa mailingu', 'Przygotowanie prezentacji', 'Transkrypcja nagrań', 'Zarządzanie kalendarzem'],
-    funFact: 'Studenci wprowadzili już ponad 500,000 wpisów danych! To jak wypełnienie 10,000 arkuszy Excela.'
-  },
-  'Copywriting': {
-    icon: PenTool,
-    description: 'Tworzenie angażujących treści: artykuły blogowe, teksty sprzedażowe, opisy produktów. Studenci dziennikarstwa i marketingu piszą content, który sprzedaje.',
-    stats: { price: '100-1000 zł', time: '2-10 dni', projects: '410+', rating: '4.8/5' },
-    examples: ['Artykuły blogowe (SEO)', 'Opisy produktów e-commerce', 'Teksty landing pages', 'Posty w social media', 'Scenariusze video'],
-    funFact: 'Nasi copywriterzy napisali już ponad 1 milion słów! To więcej niż trylogia Władcy Pierścieni i Harry Potter razem wzięte.'
-  },
-  'Usprawnienia AI': {
-    icon: Bot,
-    description: 'Implementacja AI w biznesie: chatboty, automatyzacja z GPT, analiza danych AI, ML models. Studenci AI pomagają firmom wejść w erę sztucznej inteligencji.',
-    stats: { price: '800-8000 zł', time: '1-6 tygodni', projects: '180+', rating: '4.9/5' },
-    examples: ['Chatboty i asystenci AI', 'Automatyzacja procesów z GPT', 'Analiza danych z ML', 'Systemy rekomendacji', 'Przetwarzanie języka naturalnego'],
-    funFact: 'AI to najszybciej rosnąca kategoria! W 2025 liczba projektów wzrosła o 340% w porównaniu do 2024.'
-  },
-  'Prawo': {
-    icon: Scale,
-    description: 'Konsultacje prawne, przegląd umów, pomoc w rejestracji działalności. Studenci prawa pomagają małym firmom i startupom w kwestiach prawnych.',
-    stats: { price: '200-2000 zł', time: '1-14 dni', projects: '150+', rating: '4.7/5' },
-    examples: ['Przegląd umów handlowych', 'Regulaminy i polityki prywatności', 'Pomoc w rejestracji firmy', 'Konsultacje prawne', 'Drafting dokumentów'],
-    funFact: 'Studenci prawa przejrzeli już ponad 800 umów! Średni czas odpowiedzi? Tylko 24 godziny.'
-  },
-  'Analiza danych': {
-    icon: Database,
-    description: 'Analiza biznesowa, wizualizacje danych, dashboardy, predykcje. Studenci data science przekształcają surowe dane w wartościowe insights.',
-    stats: { price: '500-5000 zł', time: '1-4 tygodnie', projects: '230+', rating: '4.8/5' },
-    examples: ['Dashboardy i raporty', 'Analiza sprzedaży', 'Segmentacja klientów', 'Modele predykcyjne', 'Wizualizacje danych'],
-    funFact: 'Studenci przeanalizowali już ponad 50 milionów rekordów danych! Najczęściej używane narzędzia to Python, R i Power BI.'
-  },
-  'Inne prace': {
-    icon: Sparkles,
-    description: 'Nie znalazłeś swojej kategorii? Na platformie znajdziesz też: coaching, konsulting, research, event management i wiele więcej!',
-    stats: { price: '100-3000 zł', time: '1-30 dni', projects: '320+', rating: '4.8/5' },
-    examples: ['Research i ankiety', 'Konsulting biznesowy', 'Event management', 'Tutoring i edukacja', 'Wsparcie w projektach naukowych'],
-    funFact: 'Ta kategoria to prawdziwa skarbnica! Od planowania eventów po pomoc w pisaniu prac naukowych - studenci mają różnorodne talenty.'
-  }
+  price: string;
+  label: string;
+  icon: IconComponent;
+  color: string;
 };
 
-// --- Components ---
+type PricingCard = {
+  label: string;
+  value: string;
+  sub: string;
+  points: string[];
+  featured?: boolean;
+};
 
-function AnimatedCounter({ value, duration = 2000 }: { value: string, duration?: number }) {
-  const [current, setCurrent] = useState(0);
-  const nodeRef = useRef<HTMLSpanElement>(null);
-  const isDecimal = value.includes('.');
-  const numericValue = parseFloat(value.replace(/[^0-9.]/g, ''));
-  const suffix = value.replace(/[0-9.]/g, '');
+const trustPills = [
+  { label: "Depozyt Student2Work", icon: ShieldCheck },
+  { label: "Umowy A/B online", icon: FileCheck2 },
+  { label: "Kontrola jakosci", icon: Users },
+  { label: "Faktura VAT + PIT", icon: ClipboardCheck },
+  { label: "Tryb sporu", icon: MessageSquare },
+  { label: "Platnosci: Stripe", icon: LockKeyhole },
+];
 
-  useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        let start = 0;
-        const steps = 60;
-        const increment = numericValue / steps;
-        const interval = duration / steps;
+const safetyCards = [
+  {
+    title: "Depozyt Student2Work",
+    description: "Platnosc zablokowana do czasu, az zaakceptujesz efekt. Zero placenia w ciemno.",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Zweryfikowani studenci",
+    description: "Zadanie probne, portfolio i wlasciwy kierunek studiow. Wykonawca nie jest przypadkowy.",
+    icon: Users,
+  },
+  {
+    title: "Dwie umowy A/B",
+    description: "Firma i student akceptuja umowy online, zanim w ogole ruszy platnosc.",
+    icon: FileCheck2,
+  },
+  {
+    title: "Kontrola jakosci",
+    description: "Operator sprawdza prace checklista jakosci, zanim trafi do Ciebie. Nie loteria.",
+    icon: Sparkles,
+  },
+  {
+    title: "Placic za efekt",
+    description: "Akceptujesz kazdy etap. Auto-akceptacja po terminie chroni tez wykonawce.",
+    icon: Banknote,
+  },
+  {
+    title: "Spor i oceny",
+    description: "Zglos problem do panelu admina. Po zleceniu publiczne oceny obu stron.",
+    icon: MessageSquare,
+  },
+];
 
-        const timer = setInterval(() => {
-          start += increment;
-          if (start >= numericValue) {
-            setCurrent(numericValue);
-            clearInterval(timer);
-          } else {
-            setCurrent(start);
-          }
-        }, interval);
-        observer.disconnect();
-      }
-    }, { threshold: 0.1 });
+const steps = [
+  {
+    number: "1",
+    title: "Wybierasz pakiet lub wystawiasz zlecenie",
+    description: "Gotowy pakiet ze stala cena, jasnym zakresem i terminem. Albo opisujesz wlasne zadanie w 5 minut.",
+    icon: PenLine,
+  },
+  {
+    number: "2",
+    title: "Student realizuje pod kontrola jakosci",
+    description: "Przydzielamy zweryfikowanego wykonawce wlasciwego kierunku. Praca idzie przez czat i modul dostaw.",
+    icon: Users,
+  },
+  {
+    number: "3",
+    title: "Akceptujesz efekt - platnosc z depozytu",
+    description: "Zadowolony? Srodki trafiaja do studenta. Fakture, rachunek i PIT rozliczamy my.",
+    icon: Check,
+  },
+];
 
-    if (nodeRef.current) observer.observe(nodeRef.current);
-    return () => observer.disconnect();
-  }, [numericValue, duration]);
+const packages: PackageCard[] = [
+  {
+    title: "Grafiki social media (komplet)",
+    description: "Spojny zestaw postow i stories pod Twoja marke.",
+    price: "od 299 zl",
+    label: "Grafika",
+    icon: WandSparkles,
+    color: "from-violet-500 to-purple-500",
+  },
+  {
+    title: "Prezentacja / pitch deck (PPT)",
+    description: "Profesjonalne slajdy gotowe na spotkanie albo inwestora.",
+    price: "od 399 zl",
+    label: "Prezentacje",
+    icon: BarChart3,
+    color: "from-blue-500 to-indigo-500",
+  },
+  {
+    title: "Montaz Reels / krotkie wideo",
+    description: "Dynamiczny montaz pod social media - ciecia i napisy.",
+    price: "od 349 zl",
+    label: "Wideo",
+    icon: Video,
+    color: "from-cyan-500 to-sky-500",
+  },
+  {
+    title: "Retusz zdjec produktowych",
+    description: "Czyste tlo, rowne kolory - sklepowy standard.",
+    price: "od 199 zl",
+    label: "Grafika",
+    icon: Sparkles,
+    color: "from-pink-500 to-rose-500",
+  },
+  {
+    title: "Wizytowka Google (Business Profile)",
+    description: "Pelny setup, zeby klienci znalezli Cie w mapach.",
+    price: "od 249 zl",
+    label: "Marketing",
+    icon: BriefcaseBusiness,
+    color: "from-amber-500 to-orange-500",
+  },
+  {
+    title: "Korekta i redakcja tekstu (PL)",
+    description: "Tekst bez literowek i kalek - strona, oferta, regulamin.",
+    price: "od 149 zl",
+    label: "Copywriting",
+    icon: PenLine,
+    color: "from-teal-600 to-emerald-500",
+  },
+];
 
+const pricingCards: PricingCard[] = [
+  {
+    label: "Koszt startu",
+    value: "0 zl",
+    sub: "abonamentu i oplat za samo konto",
+    points: ["Dostep do katalogu bez oplaty", "Brief i wycena bez zobowiazan", "Placisz dopiero przy realnym zleceniu"],
+  },
+  {
+    label: "Formalnosci",
+    value: "1 faktura",
+    sub: "dla firmy, reszta po naszej stronie",
+    points: ["My prowadzimy umowy i akceptacje online", "Ty dostajesz fakture VAT do rozliczenia", "Student rozlicza sie z platforma, nie z firma"],
+  },
+  {
+    label: "Kontrola zlecenia",
+    value: "5 etapow",
+    sub: "od briefu do bezpiecznej wyplaty",
+    points: ["Brief i dopasowanie wykonawcy", "Umowy oraz depozyt przed startem", "Odbior, poprawki albo tryb sporu"],
+    featured: true,
+  },
+];
+
+const testimonials = [
+  {
+    name: "Marek K.",
+    role: "wlasciciel sklepu e-commerce",
+    initials: "MK",
+    text: "Wrzucilem zalegly backlog grafik na social media - komplet dostalem w cztery dni i bez sciagania kogokolwiek na etat.",
+  },
+  {
+    name: "Anna B.",
+    role: "biuro rachunkowe, 6 osob",
+    initials: "AB",
+    text: "Najbardziej przekonalo mnie, ze place dopiero po akceptacji. Pierwszy raz zlecilam cos online zupelnie bez stresu.",
+  },
+  {
+    name: "Tomasz L.",
+    role: "founder, startup B2B",
+    initials: "TL",
+    text: "Prezentacja dla inwestorow gotowa w trzy dni i w stalej cenie. Kontrola jakosci wylapala literowki, ktorych nie zauwazylem.",
+  },
+];
+
+const faqs = [
+  {
+    question: "Czy wspolpraca jest legalna i bezpieczna?",
+    answer:
+      "Tak. Kazde zlecenie obejmuja dwie umowy, ktore obie strony akceptuja online. Wystawiamy fakture VAT firmie, rachunek studentowi, a podatek PIT rozliczamy po naszej stronie. Platnosci obsluguje Stripe.",
+  },
+  {
+    question: "Kiedy faktycznie place za zlecenie?",
+    answer: "Srodki trafiaja do depozytu Student2Work przed startem, ale student otrzymuje wyplate dopiero po akceptacji efektu lub po auto-akceptacji po terminie.",
+  },
+  {
+    question: "Co, jesli student nie dowiezie albo efekt jest slaby?",
+    answer: "Mozesz poprosic o poprawki albo zglosic spor. Do czasu rozstrzygniecia platnosc pozostaje zablokowana.",
+  },
+  {
+    question: "Jak weryfikujecie studentow?",
+    answer: "Sprawdzamy profil, kierunek, portfolio, jakosc komunikacji i dopasowanie do kategorii zadania.",
+  },
+  {
+    question: "Czy dostane fakture VAT?",
+    answer: "Tak. Firma rozlicza sie z platforma, a formalnosci po stronie studenta przejmuje Student Impact.",
+  },
+  {
+    question: "Ile to kosztuje?",
+    answer: "Pakiety maja stale ceny, a wlasne zlecenia dzialaja prowizyjnie. Nie ma abonamentu za samo konto.",
+  },
+];
+
+function LogoMark({ dark = false }: { dark?: boolean }) {
   return (
-    <span ref={nodeRef} className="stat-number">
-      {isDecimal ? current.toFixed(1) : Math.floor(current).toLocaleString('pl-PL')}
-      {suffix}
+    <div className="flex items-center gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0f2460] shadow-sm ring-1 ring-white/15">
+        <span className="text-sm font-black text-[#c5fb37]">S2</span>
+      </div>
+      <span className={`text-xl font-black tracking-tight ${dark ? "text-white" : "text-[#0f2460]"}`}>
+        Student<span className="text-[#25d49f]">2</span>Work
+      </span>
+    </div>
+  );
+}
+
+function SectionBadge({ children, dark = false }: { children: string; dark?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-black ${
+        dark ? "border-lime-300/20 bg-lime-300/10 text-lime-200" : "border-slate-200 bg-white text-[#0f2460]"
+      }`}
+    >
+      <Zap className="h-3.5 w-3.5" />
+      {children}
     </span>
   );
 }
 
-function RevealOnScroll({ children, className }: { children: React.ReactNode, className?: string }) {
-  const [isVisible, setIsVisible] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setIsVisible(true);
-        observer.unobserve(entry.target);
-      }
-    }, { threshold: 0.15 });
-
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <div ref={ref} className={cn("transition-all duration-1000", isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12", className)}>
-      {children}
-    </div>
-  );
+function HomeNav() {
+  return <LandingNavbar audience="company" />;
 }
 
-export default function LandingPage() {
-  const [activeModel, setActiveModel] = useState<"standard" | "longterm" | "services">("standard");
+function HeroMockup() {
+  const candidates = ["AK", "MB", "PW", "KN"];
 
   return (
-    <div className="min-h-screen bg-white font-sans text-[#1a1a2e] overflow-x-hidden">
-
-      {/* --- NAVIGATION --- */}
-      <nav className="fixed top-0 w-full z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200/60 shadow-sm flex justify-between items-center px-[5%] py-4">
-        <div className="text-xl md:text-2xl font-bold gradient-text">
-          <Link href="/">🎓 Student2Work</Link>
-        </div>
-        <div className="flex gap-2 md:gap-4">
-          <Link href="/auth">
-            <Button variant="outline" className="rounded-full border-[#667eea] text-[#667eea] hover:bg-[#667eea] hover:text-white transition-all px-4 md:px-6">
-              Logowanie
-            </Button>
-          </Link>
-          <Link href="/auth">
-            <Button className="rounded-full gradient-primary text-white shadow-primary hover:shadow-primary-lg transition-all px-4 md:px-6">
-              Dołącz teraz
-            </Button>
-          </Link>
-        </div>
-      </nav>
-
-      {/* --- HERO SECTION --- */}
-      <section className="relative min-h-[90vh] flex items-center bg-gradient-to-br from-[#f5f7fa] to-[#c3cfe2] px-[5%] py-24 overflow-hidden">
-        {/* Floating Shapes */}
-        <div className="absolute top-[10%] left-[5%] w-24 h-24 opacity-10 pointer-events-none animate-rotate-slow">
-          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-            <path fill="#667eea" d="M44.7,-76.4C58.8,-69.2,71.8,-59.1,79.6,-45.8C87.4,-32.6,90,-16.3,88.5,-0.9C87,14.6,81.4,29.2,73.1,42.8C64.8,56.4,53.8,69,40.1,76.3C26.4,83.6,10,85.6,-6.1,85.1C-22.2,84.6,-38.1,81.6,-52.4,74.8C-66.7,68,-79.4,57.4,-86.8,43.8C-94.2,30.2,-96.3,13.6,-94.1,-2.3C-91.9,-18.2,-85.4,-33.4,-76.2,-46.8C-67,-60.2,-55.1,-71.8,-41.3,-79.2C-27.5,-86.6,-12.1,-89.8,2.4,-93.9C16.9,-98,30.6,-83.6,44.7,-76.4Z" transform="translate(100 100)" />
-          </svg>
-        </div>
-        <div className="absolute top-[60%] right-[8%] w-36 h-36 opacity-10 pointer-events-none animate-rotate-slow-reverse">
-          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-            <path fill="#764ba2" d="M39.5,-65.6C51.4,-58.3,61.4,-47.5,68.5,-35.1C75.6,-22.7,79.8,-8.7,79.3,5.1C78.8,18.9,73.6,32.5,65.4,44.3C57.2,56.1,46,66.1,33.2,71.8C20.4,77.5,6,78.9,-8.7,78.1C-23.4,77.3,-38.4,74.3,-51.2,67.5C-64,60.7,-74.6,50.1,-80.8,37.4C-87,24.7,-88.8,10,-85.9,-3.7C-83,-17.4,-75.4,-30.1,-66.4,-41.3C-57.4,-52.5,-47,-62.2,-34.8,-69.3C-22.6,-76.4,-8.8,-80.9,3.5,-86.7C15.8,-92.5,27.6,-72.9,39.5,-65.6Z" transform="translate(100 100)" />
-          </svg>
-        </div>
-
-        <div className="w-full max-w-[2000px] mx-auto text-center relative z-10">
-          <RevealOnScroll className="inline-block bg-white text-[#667eea] px-6 py-2 rounded-full font-bold shadow-soft mb-8 text-sm">
-            <span className="text-[#667eea] mr-2">●</span> Nowa era pracy dla studentów
-          </RevealOnScroll>
-
-          <RevealOnScroll>
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold leading-[1.1] mb-6">
-              Połącz ambicję<br />
-              <span className="gradient-text">z realnym biznesem</span>
-            </h1>
-            <p className="text-lg md:text-xl text-[#5a5a7a] max-w-3xl mx-auto mb-10 leading-relaxed">
-              Platforma, która zmienia zasady gry. Studenci zdobywają doświadczenie w komercyjnych projektach,
-              a firmy zyskują dostęp do świeżych talentów.
-            </p>
-          </RevealOnScroll>
-
-          <RevealOnScroll className="flex flex-wrap justify-center gap-4">
-            <Link href="/auth">
-              <Button className="h-14 px-10 rounded-full gradient-primary text-lg font-bold text-white shadow-primary animate-in zoom-in-50 duration-500">
-                Zacznij jako Student →
-              </Button>
-            </Link>
-            <Link href="/auth">
-              <Button variant="outline" className="h-14 px-10 rounded-full border-[#667eea] text-[#667eea] bg-white text-lg font-bold hover:bg-slate-50">
-                Zatrudnij Studenta
-              </Button>
-            </Link>
-          </RevealOnScroll>
-        </div>
-
-        {/* Decorative Gradients */}
-        <div className="absolute -top-20 -right-20 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px] animate-pulse" />
-        <div className="absolute -bottom-20 -left-20 w-[300px] h-[300px] bg-purple-500/10 rounded-full blur-[80px] animate-pulse delay-1000" />
-      </section>
-
-      {/* --- STATS SECTION --- */}
-      <section className="py-20 px-[5%] bg-white">
-        <div className="w-full max-w-[2000px] mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard icon="🎓" label="Aktywnych studentów" sublabel="+234 w tym miesiącu" value="2847" />
-          <StatCard icon="🏢" label="Firm partnerskich" sublabel="Z różnych branż" value="512" />
-          <StatCard icon="✅" label="Zrealizowanych projektów" sublabel="Wartość 2.4M PLN" value="1429" />
-          <StatCard icon="⭐" label="Średnia ocena" sublabel="Ponad 800 opinii" value="4.9" />
-        </div>
-      </section>
-
-      {/* --- JOURNEY SECTION --- */}
-      <section className="py-24 px-[5%] bg-white border-t border-slate-100">
-        <div className="w-full max-w-[2000px] mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold mb-4">Jak działa <span className="gradient-text">współpraca?</span></h2>
-            <p className="text-lg text-[#5a5a7a]">Wybierz model współpracy dopasowany do Twoich potrzeb</p>
-          </div>
-
-          {/* Model Switcher */}
-          <div className="flex flex-wrap justify-center gap-4 mb-16">
-            {[
-              { id: 'standard', label: '📋 Zlecenie jednorazowe', value: 'standard' },
-              { id: 'longterm', label: '🤝 Współpraca długoterminowa', value: 'longterm' },
-              { id: 'services', label: '💼 Usługi studentów', value: 'services' }
-            ].map(m => (
-              <button
-                key={m.id}
-                onClick={() => setActiveModel(m.value as any)}
-                className={cn(
-                  "px-6 py-3 rounded-full font-bold transition-all border-2 text-sm",
-                  activeModel === m.value
-                    ? "gradient-primary text-white border-transparent shadow-md"
-                    : "bg-white border-slate-200 text-[#5a5a7a] hover:border-[#667eea] hover:text-[#667eea]"
-                )}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Timeline Content */}
-          <div className="relative">
-            {/* Central Line (Desktop) */}
-            <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-1 bg-gradient-to-b from-[#667eea] to-[#764ba2] translate-x-[-50%] z-0" />
-
-            {activeModel === 'standard' && (
-              <div className="space-y-24">
-                <TimelineStep
-                  number={1}
-                  label="START"
-                  title="Firma tworzy zlecenie"
-                  desc="Firma publikuje szczegółowy opis projektu, określa budżet, wymagane umiejętności i deadline. System automatycznie dopasowuje zlecenie do odpowiednich studentów."
-                  visual={<CreateOrderVisual />}
-                />
-                <TimelineStep
-                  number={2}
-                  label="REKRUTACJA"
-                  title="Student aplikuje, firma wybiera"
-                  desc="Zainteresowani studenci składają aplikacje z portfolio i propozycją realizacji. Firma przegląda kandydatury i wybiera najlepszego studenta do współpracy."
-                  visual={<ApplicationsVisual />}
-                  reverse
-                />
-                <TimelineStep
-                  number={3}
-                  label="PLANOWANIE"
-                  title="Ustalanie kamieni milowych"
-                  desc="Po akceptacji, student wraz z firmą ustala szczegółowy plan pracy - definiują milestony, terminy i kryteria akceptacji każdego etapu projektu."
-                  visual={<MilestonesVisual />}
-                />
-                <TimelineStep
-                  number={4}
-                  label="REALIZACJA"
-                  title="Wykonanie i zatwierdzanie etapów"
-                  desc="Student wykonuje zlecenie etapami. Po zakończeniu każdego milestone'a, firma weryfikuje i zatwierdza pracę, co uruchamia wypłatę środków za dany etap."
-                  visual={<ProgressVisual />}
-                  reverse
-                />
-                <TimelineStep
-                  number={5}
-                  label="FINALIZACJA"
-                  title="Ocena i zakończenie"
-                  desc="Po zakończeniu projektu firma wystawia studentowi ocenę, która pojawia się w jego profilu. Dobra opinia to klucz do kolejnych zleceń i budowania reputacji!"
-                  visual={<RatingVisual />}
-                />
-              </div>
-            )}
-
-            {activeModel === 'longterm' && (
-              <div className="space-y-24">
-                <TimelineStep
-                  number={1}
-                  label="START"
-                  title="Firma publikuje ofertę"
-                  desc="Firma określa zakres obowiązków, wymagane umiejętności, stawkę godzinową i minimalny wymiar czasu. Może to być praca zdalna lub hybrydowa."
-                  visual={<CreateOrderVisual />}
-                />
-                <TimelineStep
-                  number={2}
-                  label="REKRUTACJA"
-                  title="Proces rekrutacji i okres próbny"
-                  desc="Studenci aplikują, firma przeprowadza rozmowy i wybiera kandydata. Współpraca może rozpocząć się od krótkiego okresu próbnego."
-                  visual={<ApplicationsVisual />}
-                  reverse
-                />
-                <TimelineStep
-                  number={3}
-                  label="WSPÓŁPRACA"
-                  title="Regularna praca i rozliczanie"
-                  desc="Student pracuje regularnie według ustalonego harmonogramu. System śledzi godziny pracy, które są rozliczane w cyklach tygodniowych."
-                  visual={<ProgressVisual />}
-                />
-                <TimelineStep
-                  number={4}
-                  label="OCENA"
-                  title="Okresowy feedback"
-                  desc="Co miesiąc firma i student omawiają postępy, wyznaczają nowe cele i dostosowują zakres obowiązków. Budowanie długoterminowej relacji!"
-                  visual={<RatingVisual />}
-                  reverse
-                />
-              </div>
-            )}
-
-            {activeModel === 'services' && (
-              <div className="space-y-24">
-                <TimelineStep
-                  number={1}
-                  label="PRZEGLĄDAJ"
-                  title="Wyszukaj usługę"
-                  desc="Przeglądaj portfolio studentów oferujących gotowe usługi - od designu po programowanie. Każdy profil zawiera oceny i realne realizacje."
-                  visual={<ApplicationsVisual />}
-                />
-                <TimelineStep
-                  number={2}
-                  label="WYCENA"
-                  title="Poproś o wycenę"
-                  desc="Po wybraniu studenta, opisz swoje potrzeby. Student przygotuje ofertę z szacowanym czasem realizacji i kosztem."
-                  visual={<CreateOrderVisual />}
-                  reverse
-                />
-                <TimelineStep
-                  number={3}
-                  label="PLANOWANIE"
-                  title="Uzgodnij milestony"
-                  desc="Razem ze studentem ustalacie kamienie milowe projektu. System zabezpiecza obie strony na każdym etapie płatności."
-                  visual={<MilestonesVisual />}
-                />
-                <TimelineStep
-                  number={4}
-                  label="REALIZACJA"
-                  title="Realizacja i poprawki"
-                  desc="Student dostarcza pracę etapami. Akceptujesz wyniki lub prosisz o poprawki w ramach ustalonych rund."
-                  visual={<ProgressVisual />}
-                  reverse
-                />
-                <TimelineStep
-                  number={5}
-                  label="FINALIZACJA"
-                  title="Finalizacja i ocena"
-                  desc="Po zakończeniu projektu wystawiasz ocenę. Zadowolony z rezultatu? Zbuduj stałą relację ze studentem!"
-                  visual={<RatingVisual />}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* --- SERVICES SECTION --- */}
-      <section className="py-24 px-[5%] bg-white">
-        <div className="w-full max-w-[2000px] mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-5xl font-bold mb-4">Jakie <span className="gradient-text">usługi</span> znajdziesz?</h2>
-            <p className="text-lg text-[#5a5a7a]">Szeroki wybór usług oferowanych przez utalentowanych studentów</p>
-          </div>
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 md:grid-cols-3 gap-4 md:gap-6">
-            {Object.keys(SERVICE_DATA).map(name => (
-              <ServiceDetailsModal key={name} name={name} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* --- TESTIMONIALS SECTION --- */}
-      <section className="py-24 px-[5%] bg-slate-50">
-        <div className="w-full max-w-[2000px] mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold mb-4">Co mówią <span className="gradient-text">nasi użytkownicy?</span></h2>
-            <p className="text-lg text-[#5a5a7a]">Zaufało nam już tysiące studentów i firm z całej Polski.</p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <TestimonialCard
-              name="Anna Kowalska"
-              role="Studentka IT · PW"
-              text="Dzięki Student2Work zrealizowałam swój pierwszy komercyjny projekt jeszcze na 2. roku studiów. To doświadczenie było bezcenne."
-              badge="Student"
-            />
-            <TestimonialCard
-              name="Michał Nowak"
-              role="CEO · TechStart"
-              text="Szukaliśmy kogoś do redesignu aplikacji. Student wykonał świetną robotę w połowie ceny rynkowej agencji. Polecam!"
-              badge="Firma"
-            />
-            <TestimonialCard
-              name="Piotr Wiśniewski"
-              role="Student Informatyki · AGH"
-              text="System milestone'ów świetnie chroni obie strony. Zbudowałem już portfolio z 8 projektów i zyskałem zaufanie klientów."
-              badge="Student"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* --- CTA SECTION --- */}
-      <section className="py-24 px-[5%] bg-[#1a1a2e] text-white text-center">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl md:text-5xl font-bold mb-6">Gotowy na start?</h2>
-          <p className="text-lg text-white/80 mb-10">Dołącz do społeczności, która łączy edukację z biznesem na nowych zasadach.</p>
-          <Link href="/auth">
-            <Button className="h-16 px-12 rounded-full gradient-primary text-xl font-bold shadow-2xl hover:scale-105 transition-all">
-              Dołącz teraz za darmo
-            </Button>
-          </Link>
-        </div>
-      </section>
-
-      {/* --- FOOTER --- */}
-      <footer className="py-10 px-[5%] bg-[#1a1a2e] text-white/50 border-t border-white/5">
-        <div className="w-full max-w-[2000px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="text-xl font-bold text-white">🎓 Student2Work</div>
-          <div className="text-sm">© {new Date().getFullYear()} Student2Work. All rights reserved.</div>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-// --- Sub-components ---
-
-function StatCard({ icon, value, label, sublabel }: { icon: string, value: string, label: string, sublabel: string }) {
-  return (
-    <RevealOnScroll className="p-8 rounded-3xl bg-slate-50 text-center transition-all hover:-translate-y-2 hover:shadow-2xl hover:bg-white group cursor-default border-2 border-transparent hover:border-[#667eea]/20">
-      <div className="text-4xl mb-4 transition-transform group-hover:scale-125 group-hover:rotate-12 duration-300">{icon}</div>
-      <div className="text-4xl md:text-5xl font-extrabold gradient-text mb-2 transition-all">
-        <AnimatedCounter value={value} />
+    <div className="relative">
+      <div className="landing-subtle-pulse absolute -right-5 -top-5 rounded-full bg-emerald-500 px-5 py-2 text-xs font-black text-white shadow-xl shadow-emerald-200">
+        Platnosc po akceptacji
       </div>
-      <div className="font-bold text-[#1a1a2e] mb-1">{label}</div>
-      <div className="text-xs text-[#9ca3af]">{sublabel}</div>
-    </RevealOnScroll>
-  );
-}
-
-function TimelineStep({ number, label, title, desc, visual, reverse, className }: {
-  number: number,
-  label: string,
-  title: string,
-  desc: string,
-  visual: React.ReactNode,
-  reverse?: boolean,
-  className?: string
-}) {
-  return (
-    <div className={cn("relative z-10", className)}>
-      {/* Circle with Number */}
-      <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full gradient-primary text-white items-center justify-center text-2xl font-bold shadow-primary z-20">
-        {number}
-      </div>
-
-      <div className={cn("flex flex-col lg:flex-row items-center gap-16 xl:gap-24", reverse ? "lg:flex-row-reverse" : "")}>
-        {/* Text */}
-        <RevealOnScroll className={cn("flex-1 text-center", reverse ? "lg:text-left lg:pl-16" : "lg:text-right lg:pr-16")}>
-          <div className="inline-block bg-[#667eea]/10 text-[#667eea] px-4 py-1 rounded-full text-xs font-bold mb-4">
-            {label}
-          </div>
-          <h3 className="text-2xl font-bold mb-4 text-[#1a1a2e] leading-tight">{title}</h3>
-          <p className="text-[#5a5a7a] leading-relaxed">{desc}</p>
-        </RevealOnScroll>
-
-        {/* Visual */}
-        <RevealOnScroll className="flex-1 flex justify-center">
-          <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
-            {visual}
-          </div>
-        </RevealOnScroll>
-      </div>
-    </div>
-  );
-}
-
-function TestimonialCard({ name, role, text, badge }: { name: string, role: string, text: string, badge: string }) {
-  return (
-    <RevealOnScroll className="bg-white p-8 rounded-3xl shadow-lg border border-slate-100 relative group hover:-translate-y-2 transition-all">
-      <div className="text-[#fbbf24] text-xl mb-4 group-hover:animate-star-bounce">★★★★★</div>
-      <p className="text-[#5a5a7a] leading-relaxed mb-6 italic overflow-hidden line-clamp-4">
-        "{text}"
-      </p>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full gradient-primary flex items-center justify-center text-white font-bold">
-            {name.charAt(0)}
-          </div>
+      <div className="rounded-[1.65rem] border border-slate-100 bg-white p-6 shadow-[0_28px_80px_-44px_rgba(15,36,96,0.75)]">
+        <div className="mb-5 flex items-center justify-between">
           <div>
-            <div className="font-bold text-sm text-[#1a1a2e]">{name}</div>
-            <div className="text-xs text-[#9ca3af]">{role}</div>
+            <p className="text-sm font-black text-[#0f2460]">Nowe zlecenie - #4821</p>
+          </div>
+          <div className="flex gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-rose-300" />
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
           </div>
         </div>
-        <div className="bg-[#667eea]/10 text-[#667eea] px-3 py-1 rounded-full text-[10px] font-bold uppercase">
-          {badge}
-        </div>
-      </div>
-    </RevealOnScroll>
-  );
-}
 
-// --- Visual Sub-components ---
-
-function CreateOrderVisual() {
-  return (
-    <div className="space-y-4">
-      <div className="h-3 bg-slate-100 rounded-full w-[80%] overflow-hidden relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#667eea] to-[#764ba2] animate-form-fill" />
-      </div>
-      <div className="h-3 bg-slate-100 rounded-full w-[60%] overflow-hidden relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#667eea] to-[#764ba2] animate-form-fill delay-150" />
-      </div>
-      <div className="h-3 bg-slate-100 rounded-full w-[90%] overflow-hidden relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#667eea] to-[#764ba2] animate-form-fill delay-300" />
-      </div>
-      <div className="h-3 bg-slate-100 rounded-full w-[40%] overflow-hidden relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#667eea] to-[#764ba2] animate-form-fill delay-500" />
-      </div>
-    </div>
-  );
-}
-
-function ApplicationsVisual() {
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      {['Anna K.', 'Marcin B.', 'Kasia W.', 'Tomek N.'].map(name => (
-        <div key={name} className="p-3 bg-slate-50 rounded-2xl text-center border border-transparent hover:border-[#667eea] hover:bg-slate-100 transition-all cursor-pointer group">
-          <div className="w-10 h-10 rounded-full gradient-primary mx-auto mb-2 shadow-inner group-hover:scale-110 transition-transform" />
-          <div className="text-[10px] font-bold truncate">{name}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MilestonesVisual() {
-  return (
-    <div className="space-y-3">
-      {['Projekt UI/UX', 'Frontend', 'Testy'].map((t, i) => (
-        <div key={t} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border-l-4 border-[#667eea]">
-          <div className={cn("w-5 h-5 rounded-md border-2 border-[#667eea] flex items-center justify-center", i === 0 ? "bg-[#667eea] text-white" : "text-transparent")}>
-            <CheckCircle2 className="w-4 h-4" />
-          </div>
-          <div className="text-xs font-medium text-[#5a5a7a]">{t}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ProgressVisual() {
-  return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <div className="flex justify-between text-[10px] font-bold"><span>Design</span><span>100%</span></div>
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full gradient-primary" style={{ width: '100%' }} />
-        </div>
-      </div>
-      <div className="space-y-1">
-        <div className="flex justify-between text-[10px] font-bold"><span>Dev</span><span>65%</span></div>
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full gradient-primary relative" style={{ width: '65%' }}>
-            <div className="absolute inset-x-0 h-full bg-white/20 animate-pulse" />
-          </div>
-        </div>
-      </div>
-      <div className="space-y-1">
-        <div className="flex justify-between text-[10px] font-bold"><span>Testy</span><span>0%</span></div>
-        <div className="h-2 bg-slate-100 rounded-full" />
-      </div>
-    </div>
-  );
-}
-
-function RatingVisual() {
-  return (
-    <div className="text-center space-y-4">
-      <div className="text-3xl text-[#fbbf24] flex justify-center gap-1 animate-star-bounce">
-        <Star className="fill-current" /><Star className="fill-current" /><Star className="fill-current" /><Star className="fill-current" /><Star className="fill-current" />
-      </div>
-      <div className="font-bold text-[#1a1a2e]">Doskonała współpraca!</div>
-    </div>
-  );
-}
-
-function ServiceDetailsModal({ name }: { name: string }) {
-  const data = SERVICE_DATA[name];
-  const Icon = data.icon;
-
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <div className="p-6 rounded-3xl bg-slate-50 text-center border-2 border-transparent hover:border-[#667eea] hover:bg-white hover:-translate-y-2 transition-all cursor-pointer group">
-          <div className="text-3xl mb-3 transition-transform group-hover:scale-125 group-hover:rotate-6 duration-300">
-            <Icon className="w-8 h-8 mx-auto text-[#667eea]" />
-          </div>
-          <div className="font-bold text-sm md:text-base text-[#1a1a2e] group-hover:text-[#667eea] transition-colors">{name}</div>
-        </div>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl rounded-[2rem] p-0 overflow-hidden border-none transition-all">
-        <div className="relative p-8 md:p-12 bg-white">
-          <DialogHeader className="mb-8">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-[#667eea]/10 flex items-center justify-center text-[#667eea]">
-                <Icon className="w-10 h-10" />
+        <div className="space-y-4">
+          {[
+            ["Tytul projektu", "w-4/5"],
+            ["Kategoria uslugi", "w-1/2"],
+            ["Budzet (PLN)", "w-1/3"],
+          ].map(([label, width]) => (
+            <div key={label}>
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+              <div className="rounded-xl bg-[#f4f7ef] p-3">
+                <div className={`h-2.5 rounded-full bg-slate-300 ${width}`} />
               </div>
-              <DialogTitle className="text-3xl font-extrabold text-[#1a1a2e]">{name}</DialogTitle>
             </div>
-          </DialogHeader>
+          ))}
+        </div>
 
-          <div className="space-y-8">
-            <p className="text-lg text-[#5a5a7a] leading-relaxed italic">
-              "{data.description}"
-            </p>
+        <div className="mt-6 border-t border-slate-100 pt-5">
+          <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+            Kandydaci - 4 zweryfikowanych
+          </p>
+          <div className="grid grid-cols-4 gap-3">
+            {candidates.map((candidate, index) => (
+              <div key={candidate} className={`rounded-xl border p-3 text-center ${index === 0 ? "border-lime-200 bg-lime-100" : "border-slate-100 bg-white"}`}>
+                <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-[#0f2460] text-xs font-black text-white">
+                  {candidate}
+                </div>
+                <p className="mt-2 text-xs font-black text-amber-500">★ 4,{9 - index}</p>
+              </div>
+            ))}
+          </div>
+        </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatDetail label="Średnia cena" value={data.stats.price} />
-              <StatDetail label="Czas realizacji" value={data.stats.time} />
-              <StatDetail label="Projektów" value={data.stats.projects} />
-              <StatDetail label="Ocena" value={data.stats.rating} />
+        <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-0.5 h-5 w-5 text-emerald-500" />
+            <div>
+              <p className="text-sm font-black text-[#0f2460]">Depozyt aktywny - umowy A/B podpisane</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">2 400 PLN zablokowane do akceptacji</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="landing-subtle-pulse absolute -bottom-5 -left-5 rounded-full border border-slate-100 bg-white px-4 py-2 text-xs font-black text-[#0f2460] shadow-xl">
+        ★ 4,9 - kontrola jakosci
+      </div>
+    </div>
+  );
+}
+
+function HomeHero() {
+  return (
+    <section className="relative overflow-hidden bg-[linear-gradient(105deg,#ffffff_0%,#ffffff_57%,#f3ffd6_100%)]">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,36,96,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(15,36,96,0.025)_1px,transparent_1px)] bg-[size:52px_52px]" />
+      <div className="relative mx-auto grid min-h-[580px] max-w-7xl items-center gap-12 px-4 pb-10 pt-28 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:px-8 lg:pb-12 lg:pt-32">
+        <div>
+          <div className="landing-enter-up mb-7 inline-flex max-w-full items-center gap-2 rounded-full bg-[#eaffae] px-4 py-2 text-sm font-black text-[#0f2460] max-[390px]:text-xs">
+            <Zap className="h-4 w-4" />
+            Dla malych i srednich firm w Polsce
+          </div>
+          <h1 className="landing-enter-up max-w-3xl text-[clamp(2.45rem,12vw,3.25rem)] font-black leading-[1.04] text-[#0f2460] sm:text-6xl lg:text-[4.25rem]" style={{ animationDelay: "100ms" }}>
+            Deleguj zadania tam, gdzie nie oplaca sie{" "}
+            <span className="relative inline-block">
+              <span className="relative z-10">zatrudniac.</span>
+              <span className="absolute bottom-1 left-0 right-0 z-0 h-5 bg-[#c5fb37]" />
+            </span>
+          </h1>
+          <p className="landing-enter-up mt-6 max-w-2xl text-base font-semibold leading-7 text-slate-600 sm:text-lg sm:leading-8" style={{ animationDelay: "200ms" }}>
+            Wybierasz gotowy pakiet w stalej cenie, zweryfikowany student realizuje go pod kontrola jakosci, a Ty placisz dopiero po akceptacji efektu. Umowy, fakture i podatki bierzemy na siebie.
+          </p>
+          <div className="landing-enter-up mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap" style={{ animationDelay: "300ms" }}>
+            <Button asChild className="landing-hover-lift h-14 rounded-full bg-[#c5fb37] px-7 text-base font-black text-[#0f2460] shadow-xl shadow-lime-200/70 hover:bg-[#b7f22b]">
+              <Link href="/auth?role=company">
+                Deleguj pierwsze zadanie
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="landing-hover-lift h-14 rounded-full border-slate-200 bg-white px-7 text-base font-black text-[#0f2460] hover:bg-slate-50">
+              <a href="#bezpieczenstwo">
+                <ShieldCheck className="mr-2 h-5 w-5" />
+                Jak chronimy Twoje pieniadze
+              </a>
+            </Button>
+          </div>
+          <div className="landing-enter-up mt-7 grid gap-3 text-sm font-black text-slate-500 sm:grid-cols-2" style={{ animationDelay: "400ms" }}>
+            {["Platnosc dopiero po akceptacji", "Zweryfikowani studenci", "Start w 24 godziny"].map((item) => (
+              <div key={item} className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="landing-enter-right hidden lg:block" style={{ animationDelay: "480ms" }}>
+          <div className="landing-float-slow">
+            <HeroMockup />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TrustStrip() {
+  return (
+    <section className="border-y border-slate-100 bg-white px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center">
+        <p className="max-w-[14rem] text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+          Bezpieczenstwo wbudowane w kazde zlecenie
+        </p>
+        <div className="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:flex-wrap">
+          {trustPills.map(({ label, icon: Icon }) => (
+            <span key={label} className="inline-flex min-w-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-center text-[12px] font-black leading-4 text-[#0f2460] sm:justify-start sm:px-4 sm:text-sm">
+              <Icon className="h-4 w-4 shrink-0 text-slate-500" />
+              <span className="min-w-0 break-words">{label}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MarketSection() {
+  const pains = [
+    { value: "24,9%", label: "Jakosc pracy" },
+    { value: "22,8%", label: "Terminowosc" },
+    { value: "21,8%", label: "Kompetencje wykonawcy" },
+  ];
+
+  return (
+    <section className="bg-[#f4f7ef] px-3 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <div>
+          <SectionBadge>Rynek freelancingu 2025</SectionBadge>
+          <h2 className="mt-7 max-w-xl text-3xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Polskie firmy juz zlecaja na zewnatrz. Trzy rzeczy je powstrzymuja.
+          </h2>
+          <div className="mt-6 flex flex-col gap-2 min-[380px]:flex-row min-[380px]:items-end min-[380px]:gap-3">
+            <span className="text-5xl font-black leading-none text-[#0f2460] sm:text-7xl">56%</span>
+            <span className="mb-2 max-w-[14rem] text-sm font-bold leading-5 text-slate-500">
+              firm zleca freelancerom co najmniej raz w miesiacu
+            </span>
+          </div>
+          <p className="mt-8 max-w-lg text-lg font-semibold leading-8 text-slate-600">
+            A 74% z nich utrzyma lub zwiekszy skale wspolpracy. Pytanie nie brzmi juz czy zlecac - tylko komu zaufac.
+          </p>
+          <p className="mt-6 text-sm font-bold text-slate-400">Dane: Useme - raport o rynku freelancingu w Polsce, 2025.</p>
+        </div>
+
+        <div className="space-y-4 sm:space-y-5">
+          {pains.map((pain) => (
+            <div key={pain.label} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+              <div className="grid min-w-0 grid-cols-[minmax(5.6rem,auto)_1fr] gap-x-4 gap-y-3 sm:flex sm:items-center sm:gap-5">
+                <span className="self-center whitespace-nowrap text-[clamp(2.15rem,10vw,3.1rem)] font-black leading-none text-[#0f2460] sm:min-w-[7rem] sm:text-4xl">{pain.value}</span>
+                <div className="min-w-0">
+                  <p className="mb-2 break-normal text-lg font-black leading-tight text-[#0f2460] [overflow-wrap:normal] sm:text-lg">{pain.label}</p>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full w-[86%] rounded-full bg-[#2e49a3]" />
+                  </div>
+                </div>
+                <span className="col-span-2 justify-self-start rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-600 sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm">rozwiazujemy</span>
+              </div>
+            </div>
+          ))}
+          <div className="rounded-2xl bg-[#0f2460] p-6 text-white shadow-xl shadow-slate-300">
+            <div className="flex gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-lime-300/15 text-[#c5fb37]">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <p className="font-bold leading-7 text-white/86">
+                To dokladnie te trzy bole rozwiazujemy - kuracja wykonawcow, kontrola jakosci i platnosc po akceptacji. Lider rynku ich nie dotyka.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SafetySection() {
+  return (
+    <section id="bezpieczenstwo" className="bg-[linear-gradient(135deg,#071739_0%,#10286a_100%)] px-4 py-20 text-white sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge dark>Bezpieczenstwo</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight sm:text-5xl">
+            Twoje pieniadze sa pod kontrola na kazdym kroku.
+          </h2>
+          <p className="mt-5 text-lg font-semibold leading-8 text-white/70">
+            Nie placisz w ciemno, student nie pracuje na slowo, a platforma sprawdza jakosc, zanim cokolwiek do Ciebie trafi.
+          </p>
+        </div>
+
+        <div className="mt-14 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+          <div className="rounded-[1.65rem] border border-white/10 bg-white/[0.06] p-7 shadow-2xl shadow-slate-950/20">
+            <div className="mb-8 flex items-center justify-between">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">Depozyt - #DEP-4821</p>
+              <span className="rounded-full bg-emerald-400/20 px-4 py-1.5 text-xs font-black text-emerald-200">Aktywne</span>
+            </div>
+            <div className="text-5xl font-black">2 400 <span className="text-xl text-white/45">PLN</span></div>
+            <p className="mt-3 text-sm font-bold text-white/45">Zablokowane - uwolnienie po akceptacji</p>
+
+            <div className="mt-8 grid grid-cols-3 overflow-hidden rounded-xl bg-white/8 text-center">
+              {[
+                ["Firma", "TechStart"],
+                ["Depozyt", "2 400 zl"],
+                ["Student", "Aleksandra K."],
+              ].map(([label, value]) => (
+                <div key={label} className="border-r border-white/10 px-3 py-4 last:border-r-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/35">{label}</p>
+                  <p className="mt-1 text-sm font-black">{value}</p>
+                </div>
+              ))}
             </div>
 
-            <div className="space-y-4">
-              <h4 className="font-extrabold text-[#1a1a2e]">Przykładowe projekty:</h4>
-              <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {data.examples.map(ex => (
-                  <li key={ex} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl text-sm text-[#5a5a7a] hover:bg-[#667eea]/5 transition-colors">
-                    <CheckCircle2 className="w-4 h-4 text-[#667eea]" />
-                    {ex}
+            <div className="mt-8 space-y-5 text-sm font-bold">
+              {["Srodki zablokowane", "Prace w toku", "Kontrola jakosci - akceptacja", "Wyplata do studenta"].map((item, index) => (
+                <div key={item} className={`flex items-center justify-between ${index > 1 ? "text-white/35" : "text-white"}`}>
+                  <span className="inline-flex items-center gap-3">
+                    <span className={`h-3 w-3 rounded-full ${index === 0 ? "bg-emerald-400" : index === 1 ? "bg-[#c5fb37]" : "bg-white/10"}`} />
+                    {item}
+                  </span>
+                  <span className="text-xs text-white/35">{index === 0 ? "12 kwi" : index === 1 ? "teraz" : index === 2 ? "prognoza 20 kwi" : "auto po akceptacji"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {safetyCards.map(({ title, description, icon: Icon }) => (
+              <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.06] p-6">
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-lime-300/12 text-[#c5fb37]">
+                  <Icon className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-black">{title}</h3>
+                <p className="mt-3 text-sm font-semibold leading-6 text-white/60">{description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StepsSection() {
+  return (
+    <section id="jak-dziala" className="bg-white px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge>Jak to dziala</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Trzy kroki. Zero formalnosci po Twojej stronie.
+          </h2>
+          <p className="mt-5 text-lg font-semibold leading-8 text-slate-600">
+            Tak jak na gieldzie zlecen - tylko z kuracja wykonawcy, kontrola jakosci i bezpieczna platnoscia.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {steps.map(({ number, title, description, icon: Icon }) => (
+            <div key={number} className="rounded-[1.35rem] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-7 flex items-center justify-between">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#c5fb37] text-sm font-black text-[#0f2460]">{number}</span>
+                <Icon className="h-7 w-7 text-slate-300" />
+              </div>
+              <h3 className="text-xl font-black leading-snug text-[#0f2460]">{title}</h3>
+              <p className="mt-4 text-sm font-semibold leading-6 text-slate-500">{description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PackagesSection() {
+  return (
+    <section id="pakiety" className="bg-[#f4f7ef] px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge>Katalog pakietow</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Gotowe pakiety w stalej cenie.
+          </h2>
+          <p className="mt-5 text-lg font-semibold leading-8 text-slate-600">
+            Wybierasz efekt, my dobieramy zweryfikowanego wykonawce. Bez negocjacji, bez niespodzianek.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {packages.map(({ title, description, price, label, icon: Icon, color }) => (
+            <Link key={title} href="/app/company/packages" className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+              <div className={`h-20 bg-gradient-to-r ${color} p-5`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-white">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <span className="rounded-full bg-white/25 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white">
+                    {label}
+                  </span>
+                </div>
+              </div>
+              <div className="p-6">
+                <h3 className="text-lg font-black leading-tight text-[#0f2460]">{title}</h3>
+                <p className="mt-3 min-h-12 text-sm font-semibold leading-6 text-slate-500">{description}</p>
+                <div className="mt-7 flex items-center justify-between border-t border-slate-100 pt-5">
+                  <span className="text-xl font-black text-[#0f2460]">{price} <span className="text-xs font-bold text-slate-400">brutto</span></span>
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-[#0f2460] transition group-hover:bg-[#c5fb37]">
+                    <ArrowRight className="h-5 w-5" />
+                  </span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+
+        <div className="mt-6 rounded-2xl bg-[#0f2460] p-6 text-white shadow-xl shadow-slate-300">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[#c5fb37]">
+                <Plus className="h-7 w-7" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black">Nie ma Twojego zadania?</h3>
+                <p className="mt-1 text-sm font-semibold text-white/60">Opisz, czego szukasz - studenci zloza Ci dopasowane oferty na gieldzie.</p>
+              </div>
+            </div>
+            <Button asChild className="h-14 rounded-full bg-[#c5fb37] px-8 font-black text-[#0f2460] hover:bg-[#b7f22b]">
+              <Link href="/app/company/jobs/new">Wystaw wlasne zlecenie</Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-8 text-center">
+          <Button asChild variant="outline" className="h-12 rounded-full border-slate-200 bg-white px-7 font-black text-[#0f2460]">
+            <Link href="/app/company/packages">
+              Zobacz caly katalog pakietow
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PricingSection() {
+  return (
+    <section id="cennik" className="bg-white px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge>Rozliczenia</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Najwazniejsze zasady wspolpracy.
+          </h2>
+          <p className="mt-5 text-lg font-semibold leading-8 text-slate-600">
+            Firma wie, kiedy placi, student wie, kiedy otrzyma wyplate, a platforma pilnuje umow, depozytu, jakosci i odbioru pracy.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-5 lg:grid-cols-3">
+          {pricingCards.map((card) => (
+            <div key={card.label} className={`rounded-2xl border p-7 shadow-sm ${card.featured ? "border-[#0f2460] bg-[#0f2460] text-white shadow-2xl shadow-slate-300" : "border-slate-200 bg-white text-[#0f2460]"}`}>
+              <div className="mb-5 flex items-center justify-between">
+                <p className={`text-xs font-black uppercase tracking-[0.16em] ${card.featured ? "text-[#c5fb37]" : "text-slate-500"}`}>{card.label}</p>
+                {card.featured ? (
+                  <span className="rounded-full bg-[#c5fb37] px-3 py-1 text-[10px] font-black uppercase text-[#0f2460]">Kontrola procesu</span>
+                ) : null}
+              </div>
+              <p className="text-5xl font-black">{card.value}</p>
+              <p className={`mt-1 text-sm font-semibold ${card.featured ? "text-white/55" : "text-slate-500"}`}>{card.sub}</p>
+              <ul className="mt-7 space-y-4">
+                {card.points.map((point) => (
+                  <li key={point} className="flex gap-3 text-sm font-semibold">
+                    <Check className={`mt-0.5 h-4 w-4 shrink-0 ${card.featured ? "text-[#c5fb37]" : "text-emerald-500"}`} />
+                    <span className={card.featured ? "text-white/80" : "text-slate-600"}>{point}</span>
                   </li>
                 ))}
               </ul>
             </div>
-
-            <div className="bg-[#667eea]/10 p-6 rounded-2xl border-l-4 border-[#667eea]">
-              <div className="font-bold text-[#667eea] mb-1">💡 Ciekawostka</div>
-              <p className="text-sm text-[#5a5a7a]">{data.funFact}</p>
-            </div>
-
-            <Link href="/auth">
-              <Button className="w-full h-14 rounded-full gradient-primary text-white font-bold text-lg shadow-primary mt-4">
-                Znajdź eksperta w tej kategorii →
-              </Button>
-            </Link>
-          </div>
+          ))}
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </section>
   );
 }
 
-function StatDetail({ label, value }: { label: string, value: string }) {
+function TestimonialsSection() {
   return (
-    <div className="p-4 bg-slate-50 rounded-2xl text-center">
-      <div className="text-sm font-extrabold gradient-text mb-1 truncate">{value}</div>
-      <div className="text-[10px] text-[#9ca3af] font-bold uppercase tracking-wider">{label}</div>
+    <section className="bg-slate-100/70 px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge>Opinie</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Mniej chaosu. Wiecej zrobionych rzeczy.
+          </h2>
+          <p className="mt-5 text-lg font-semibold leading-8 text-slate-600">
+            Tak firmy i studenci opisuja dobrze poprowadzona wspolprace projektowa.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {testimonials.map((item) => (
+            <div key={item.name} className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
+              <div className="mb-6 flex gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star key={star} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                ))}
+              </div>
+              <p className="min-h-28 text-base font-semibold leading-7 text-[#0f2460]">&quot;{item.text}&quot;</p>
+              <div className="mt-6 flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0f2460] text-sm font-black text-white">{item.initials}</div>
+                <div>
+                  <p className="font-black text-[#0f2460]">{item.name}</p>
+                  <p className="text-sm font-semibold text-slate-400">{item.role}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FAQSection() {
+  return (
+    <section id="faq" className="bg-white px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl">
+        <div className="text-center">
+          <SectionBadge>FAQ</SectionBadge>
+          <h2 className="mt-6 text-4xl font-black leading-tight text-[#0f2460] sm:text-5xl">
+            Pytania, ktore zadaja firmy.
+          </h2>
+        </div>
+
+        <LandingFaqAccordion items={faqs} />
+      </div>
+    </section>
+  );
+}
+
+function FinalCTA() {
+  return (
+    <section className="relative overflow-hidden bg-[#c5fb37] px-4 py-24 sm:px-6 lg:px-8">
+      <div className="absolute -left-24 -top-36 h-80 w-80 rounded-full border border-[#0f2460]/10" />
+      <div className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full border border-[#0f2460]/10" />
+      <div className="relative mx-auto max-w-5xl text-center">
+        <h2 className="text-4xl font-black leading-tight text-[#0f2460] sm:text-6xl">
+          Deleguj pierwsze zadanie. Zaplac dopiero za efekt.
+        </h2>
+        <p className="mx-auto mt-7 max-w-3xl text-xl font-semibold leading-8 text-[#0f2460]/75">
+          Rejestracja zajmuje 2 minuty. Bez abonamentu, bez zobowiazan, bez ryzyka.
+        </p>
+        <div className="mt-9 flex flex-col justify-center gap-4 sm:flex-row">
+          <Button asChild className="h-14 rounded-full bg-[#0f2460] px-9 text-base font-black text-white hover:bg-[#071739]">
+            <Link href="/auth?role=company">
+              Deleguj zadanie
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="h-14 rounded-full border-[#0f2460] bg-transparent px-9 text-base font-black text-[#0f2460] hover:bg-[#0f2460]/5">
+            <Link href="/dla-studentow">Zacznij jako student</Link>
+          </Button>
+        </div>
+        <p className="mt-8 text-base font-black text-[#0f2460]/55">
+          Bezplatna rejestracja · Platnosc po akceptacji · Faktura i PIT po naszej stronie
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function HomeFooter() {
+  return (
+    <footer className="bg-[#071739] px-4 py-16 text-white sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid gap-12 lg:grid-cols-[1.2fr_2fr]">
+          <div>
+            <LogoMark dark />
+            <p className="mt-7 max-w-sm text-lg font-semibold leading-8 text-white/62">
+              Operacyjne wsparcie dla malych i srednich firm. Deleguj zadania zweryfikowanym studentom - bez etatu, bez rekrutacji, z platnoscia po akceptacji.
+            </p>
+          </div>
+
+          <div className="grid gap-8 sm:grid-cols-3">
+            {[
+              { title: "Platforma", links: [["Jak to dziala", "#jak-dziala"], ["Bezpieczenstwo", "#bezpieczenstwo"], ["Katalog pakietow", "#pakiety"], ["Rozliczenia", "#cennik"]] },
+              { title: "Dla firm", links: [["Deleguj zadanie", "/auth?role=company"], ["Jak dziala depozyt", "#bezpieczenstwo"], ["Wystaw ogloszenie", "/app/company/jobs/new"]] },
+              { title: "Dla studentów", links: [["Gielda zlecen", "/dla-studentow#zlecenia"], ["Jak zaczac", "/dla-studentow#jak-zaczac"], ["Wyplaty i PIT", "/dla-studentow#wyplata"]] },
+            ].map((group) => (
+              <div key={group.title}>
+                <p className="mb-6 text-sm font-black uppercase tracking-[0.22em] text-white/35">{group.title}</p>
+                <div className="grid gap-4">
+                  {group.links.map(([label, href]) => (
+                    <Link key={label} href={href} className="text-lg font-semibold text-white/65 hover:text-white">
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-16 grid gap-8 border-t border-white/10 pt-8 text-sm font-semibold text-white/55 md:grid-cols-[1fr_auto] md:items-center">
+          <div className="grid gap-4 sm:grid-cols-3 sm:max-w-md">
+            <Link href="/regulamin" className="hover:text-white">Regulamin</Link>
+            <Link href="/polityka-prywatnosci" className="hover:text-white">Polityka prywatnosci</Link>
+            <Link href="/polityka-prywatnosci" className="hover:text-white">RODO</Link>
+          </div>
+          <div className="flex flex-col gap-3 md:items-end">
+            <p>© 2026 Student2Work. Wszelkie prawa zastrzezone.</p>
+            <p className="inline-flex items-center gap-2 text-emerald-300">
+              <ShieldCheck className="h-4 w-4" />
+              Platnosci chronione przez depozyt Student2Work i Stripe
+            </p>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <div className="landing-page min-h-screen overflow-x-clip bg-white font-sans text-slate-950">
+      <HomeNav />
+      <main>
+        <HomeHero />
+        <TrustStrip />
+        <MarketSection />
+        <SafetySection />
+        <StepsSection />
+        <PackagesSection />
+        <PricingSection />
+        <TestimonialsSection />
+        <FAQSection />
+        <FinalCTA />
+      </main>
+      <HomeFooter />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { CheckCircle2, Loader2, MessageSquare, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { acceptServiceProposalAction, counterServiceProposalAction, rejectServiceProposalAction } from "@/app/app/services/_actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,14 +19,24 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-import { acceptServiceProposalAction, counterServiceProposalAction, rejectServiceProposalAction } from "@/app/app/services/_actions";
-
 interface CompanyOrderDetailActionsProps {
-  order: any;
+  order: {
+    id: string;
+    status: string;
+    amount: number | null;
+    counter_amount: number | null;
+  };
   chatLink: string;
+  canMessage?: boolean;
+  canSelectStudent?: boolean;
 }
 
-export default function CompanyOrderDetailActions({ order, chatLink }: CompanyOrderDetailActionsProps) {
+export default function CompanyOrderDetailActions({
+  order,
+  chatLink,
+  canMessage = true,
+  canSelectStudent = false,
+}: CompanyOrderDetailActionsProps) {
   const router = useRouter();
   const [counterAmount, setCounterAmount] = useState(String(order.counter_amount ?? order.amount ?? ""));
   const [counterOpen, setCounterOpen] = useState(false);
@@ -33,8 +44,17 @@ export default function CompanyOrderDetailActions({ order, chatLink }: CompanyOr
   const [counterLoading, setCounterLoading] = useState(false);
   const [rejectLoading, setRejectLoading] = useState(false);
 
-  const isRealizationActive = ["accepted", "in_progress", "delivered", "completed"].includes(order.status);
-  const canReject = ["inquiry", "pending", "proposal_sent", "countered"].includes(order.status);
+  const isRealizationActive = ["accepted", "active", "in_progress", "revision", "delivered", "completed"].includes(order.status);
+  const isPendingSelection = order.status === "pending_selection";
+  const isPendingStudentConfirmation = ["pending_student_confirmation", "pending_confirmation"].includes(order.status);
+  const canReject = [
+    "inquiry",
+    "pending",
+    "pending_selection",
+    "pending_student_confirmation",
+    "pending_confirmation",
+    "proposal_sent",
+  ].includes(order.status);
 
   const handleAcceptProposal = async () => {
     try {
@@ -42,8 +62,8 @@ export default function CompanyOrderDetailActions({ order, chatLink }: CompanyOr
       await acceptServiceProposalAction(order.id);
       toast.success("Oferta studenta została zaakceptowana.");
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Nie udało się zaakceptować oferty.");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Nie udało sie zaakceptować oferty.");
     } finally {
       setAcceptLoading(false);
     }
@@ -52,7 +72,7 @@ export default function CompanyOrderDetailActions({ order, chatLink }: CompanyOr
   const handleCounter = async () => {
     const amount = Number(counterAmount);
     if (!amount || Number.isNaN(amount) || amount <= 0) {
-      toast.error("Podaj prawidłową kwotę kontroferty.");
+      toast.error("Podaj prawidlowa kwote kontroferty.");
       return;
     }
 
@@ -62,15 +82,15 @@ export default function CompanyOrderDetailActions({ order, chatLink }: CompanyOr
       toast.success("Kontroferta została wysłana do studenta.");
       setCounterOpen(false);
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Nie udało się wysłać kontroferty.");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Nie udało sie wysłać kontroferty.");
     } finally {
       setCounterLoading(false);
     }
   };
 
   const handleReject = async () => {
-    if (!confirm("Czy na pewno chcesz zamknąć tę negocjację?")) {
+    if (!confirm("Czy na pewno chcesz zamknąć te negocjacje?")) {
       return;
     }
 
@@ -79,8 +99,8 @@ export default function CompanyOrderDetailActions({ order, chatLink }: CompanyOr
       await rejectServiceProposalAction(order.id);
       toast.success("Negocjacja została zakończona.");
       router.push("/app/company/orders");
-    } catch (error: any) {
-      toast.error(error.message || "Nie udało się zamknąć negocjacji.");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Nie udało sie zamknąć negocjacji.");
     } finally {
       setRejectLoading(false);
     }
@@ -94,31 +114,42 @@ export default function CompanyOrderDetailActions({ order, chatLink }: CompanyOr
         </Link>
       ) : null}
 
-      <Link href={chatLink} className="flex-1 sm:flex-none">
-        <Button variant="outline" className="w-full">
+      {canMessage ? (
+        <Link href={chatLink} className="flex-1 sm:flex-none">
+          <Button variant="outline" className="w-full">
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Czat / wiadomosc
+          </Button>
+        </Link>
+      ) : (
+        <Button disabled variant="secondary" className="flex-1 cursor-not-allowed opacity-80 sm:flex-none">
           <MessageSquare className="mr-2 h-4 w-4" />
-          Czat / wiadomość
+          Czat aktywuje sie po wyborze studenta
         </Button>
-      </Link>
+      )}
 
       {order.status === "proposal_sent" ? (
         <>
-          <Button onClick={handleAcceptProposal} disabled={acceptLoading} className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700 sm:flex-none">
+          <Button
+            onClick={handleAcceptProposal}
+            disabled={acceptLoading}
+            className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700 sm:flex-none"
+          >
             {acceptLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-            Akceptuj ofertę
+            Akceptuj oferte
           </Button>
 
           <Dialog open={counterOpen} onOpenChange={setCounterOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="flex-1 border-orange-300 text-orange-700 hover:bg-orange-50 sm:flex-none">
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Złóż kontrofertę
+                Zloz kontroferte
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Kontroferta dla studenta</DialogTitle>
-                <DialogDescription>Podaj nową kwotę, którą chcesz zaproponować wykonawcy.</DialogDescription>
+                <DialogDescription>Podaj nowa kwote, która chcesz zaproponowac wykonawcy.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div>
@@ -132,7 +163,7 @@ export default function CompanyOrderDetailActions({ order, chatLink }: CompanyOr
                 </Button>
                 <Button onClick={handleCounter} disabled={counterLoading} className="bg-orange-600 text-white hover:bg-orange-700">
                   {counterLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Wyślij kontrofertę
+                  Wyslij kontroferte
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -142,20 +173,32 @@ export default function CompanyOrderDetailActions({ order, chatLink }: CompanyOr
 
       {order.status === "countered" ? (
         <Button disabled variant="secondary" className="cursor-not-allowed opacity-80">
-          Czekasz na decyzję studenta
+          Czekasz na decyzje studenta
         </Button>
       ) : null}
 
-      {order.status === "pending" || order.status === "inquiry" ? (
+      {isPendingSelection ? (
         <Button disabled variant="secondary" className="cursor-not-allowed opacity-80">
-          Czekasz na pierwszą wycenę
+          {canSelectStudent ? "Wybierz studenta z listy poniżej" : "Czekasz na zgłoszenia studentów"}
+        </Button>
+      ) : null}
+
+      {isPendingStudentConfirmation ? (
+        <Button disabled variant="secondary" className="cursor-not-allowed opacity-80">
+          Czekasz na potwierdzenie realizacji przez studenta
+        </Button>
+      ) : null}
+
+      {(order.status === "pending" || order.status === "inquiry") && !isPendingSelection ? (
+        <Button disabled variant="secondary" className="cursor-not-allowed opacity-80">
+          Czekasz na pierwsza wycene
         </Button>
       ) : null}
 
       {canReject ? (
         <Button variant="destructive" onClick={handleReject} disabled={rejectLoading} className="flex-1 sm:flex-none">
           {rejectLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-          Odrzuć
+          Odrzuc
         </Button>
       ) : null}
     </div>

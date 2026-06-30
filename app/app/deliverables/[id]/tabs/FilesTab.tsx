@@ -1,21 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { FileIcon, UploadCloud, Trash2, Download } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { addResource, deleteResource, getSignedStorageUrl } from "@/app/app/deliverables/_actions";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
+
+type ResourceRow = {
+    id: string;
+    file_name: string | null;
+    file_path: string | null;
+    created_at: string | null;
+};
+
+type FilesTabProps = {
+    applicationId: string;
+    resources: ResourceRow[];
+    deliverables?: unknown[];
+    isCompany: boolean;
+};
 
 export function FilesTab({
     applicationId,
     resources,
-    deliverables,
     isCompany
-}: any) {
+}: FilesTabProps) {
     const [isUploading, setIsUploading] = useState(false);
 
 
@@ -34,19 +45,19 @@ export function FilesTab({
         if (!file) return;
 
         setIsUploading(true);
-        const supabase = createClient();
 
         try {
-            // Upload to 'deliverables' bucket (reusing bucket, distinct path)
-            const fileName = `resources/${applicationId}/${Date.now()}_${file.name}`;
-            const { error } = await supabase.storage.from('deliverables').upload(fileName, file);
-            if (error) throw error;
+            const uploaded = await uploadPrivateFile({
+                file,
+                purpose: "deliverable_resource",
+                sourceId: applicationId,
+            });
 
             // Save to DB (store object path, not public URL)
             const formData = new FormData();
-            formData.append("filename", file.name);
-            formData.append("fileUrl", fileName);
-            formData.append("fileSize", String(file.size));
+            formData.append("filename", uploaded.name);
+            formData.append("fileUrl", uploaded.path);
+            formData.append("fileSize", String(uploaded.size));
 
             await addResource(applicationId, formData);
 
@@ -58,16 +69,6 @@ export function FilesTab({
             e.target.value = ""; // reset
         }
     }
-
-    // Aggregate student files
-    const studentFiles: any[] = [];
-    deliverables.forEach((d: any) => {
-        if (d.files && Array.isArray(d.files)) {
-            d.files.forEach((f: any) => {
-                studentFiles.push({ ...f, deliverableId: d.id, created_at: d.created_at });
-            });
-        }
-    });
 
     return (
         <div className="space-y-8">
@@ -87,7 +88,7 @@ export function FilesTab({
                         </div>
                     ) : (
                         <div className="grid gap-2">
-                            {resources.map((res: any) => (
+                            {resources.map((res) => (
                                 <div key={res.id} className="flex items-center justify-between p-3 bg-white border rounded-lg hover:shadow-sm transition-shadow">
                                     <div className="flex items-center gap-3 overflow-hidden">
                                         <div className="p-2 bg-indigo-50 text-indigo-600 rounded">
@@ -95,7 +96,9 @@ export function FilesTab({
                                         </div>
                                         <div className="truncate">
                                             <div className="font-medium text-sm truncate">{res.file_name}</div>
-                                            <div className="text-xs text-muted-foreground">{new Date(res.created_at).toLocaleDateString()}</div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {res.created_at ? new Date(res.created_at).toLocaleDateString() : "-"}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">

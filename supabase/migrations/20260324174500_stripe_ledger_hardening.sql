@@ -92,7 +92,10 @@ BEGIN
     ) VALUES (
       'platform_commission', p_fee_pln, 'PLN', 'credit', p_contract_id, p_application_id,
       p_session_id, 'Prowizja platformy — kontrakt ' || p_contract_id,
-      jsonb_build_object('gross_amount', p_amount_pln, 'fee_rate', 0.05)
+      jsonb_build_object(
+        'gross_amount', p_amount_pln,
+        'fee_rate', CASE WHEN p_amount_pln > 0 THEN ROUND((p_fee_pln / p_amount_pln)::numeric, 4) ELSE NULL END
+      )
     );
   END IF;
 

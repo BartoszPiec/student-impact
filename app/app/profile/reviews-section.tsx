@@ -4,6 +4,18 @@ import { Stars, ReviewCard } from "@/components/ReviewCard";
 
 export const dynamic = "force-dynamic";
 
+type ReviewRow = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  company_id: string | null;
+  reviewer_role: string;
+  reviewer_id: string;
+};
+
+type CompanyRow = { user_id: string; nazwa: string | null };
+
 export default async function ReviewsSection() {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -36,7 +48,7 @@ export default async function ReviewsSection() {
     );
   }
 
-  const rows = reviews ?? [];
+  const rows = (reviews ?? []) as ReviewRow[];
   if (rows.length === 0) {
     return (
       <section className="space-y-2">
@@ -48,33 +60,35 @@ export default async function ReviewsSection() {
     );
   }
 
-  const avg = rows.reduce((sum, r: any) => sum + (Number(r.rating) || 0), 0) / rows.length;
+  const avg = rows.reduce((sum, review) => sum + (Number(review.rating) || 0), 0) / rows.length;
 
   const companyIds = Array.from(new Set(
-    rows.map((r: any) => r.company_id || (r.reviewer_role === 'company' ? r.reviewer_id : null)).filter(Boolean)
+    rows
+      .map((review) => review.company_id || (review.reviewer_role === "company" ? review.reviewer_id : null))
+      .filter((companyId): companyId is string => Boolean(companyId))
   ));
   const { data: companies } = companyIds.length
     ? await supabase.from("company_profiles").select("user_id, nazwa").in("user_id", companyIds)
-    : { data: [] as any[] };
+    : { data: [] as CompanyRow[] };
 
-  const companyNameMap = new Map((companies ?? []).map((c: any) => [c.user_id, c.nazwa]));
+  const companyNameMap = new Map(((companies ?? []) as CompanyRow[]).map((company) => [company.user_id, company.nazwa]));
 
   return (
     <section className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">Oceny i referencje</h2>
           <p className="text-sm text-slate-500 font-medium">Zweryfikowane opinie od pracodawców.</p>
         </div>
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full border border-slate-100 shadow-sm">
+        <div className="flex w-fit max-w-full items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-2 shadow-sm sm:rounded-full sm:px-4">
           <span className="text-lg font-bold text-slate-800">{avg.toFixed(1)}</span>
           <Stars rating={Math.round(avg)} />
-          <span className="text-xs text-slate-400 font-medium ml-1">({rows.length})</span>
+          <span className="ml-1 whitespace-nowrap text-xs font-medium text-slate-400">({rows.length})</span>
         </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {rows.map((r: any) => {
+        {rows.map((r) => {
           const cId = r.company_id || r.reviewer_id;
           const cName = companyNameMap.get(cId) || "Firma";
 

@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/test-results
+test-*.ts
 
 # next.js
 /.next/
@@ -47,3 +49,20 @@ yarn-error.log*
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# local agent worktrees / chat artifacts
+.claude/worktrees/
+.fable-qa/
+QA_LIVE_COLLAB.md
+
+.vercel
+
+# local agent config, dev logs, supabase CLI temp (not for VCS)
+.claude/settings.local.json
+.codex-temp/
+codex-dev.*
+.next-dev.log
+supabase/.temp/
+
+.vercel
+.env*

@@ -29,7 +29,26 @@ import {
   SERVICE_ORDER_BUCKETS,
 } from "./service-order-status";
 
-function getOrderPreview(order: any) {
+export type DashboardOrder = {
+  id: string;
+  company_id: string;
+  status: string;
+  amount: number;
+  counter_amount?: number | null;
+  created_at: string;
+  requirements: string | null;
+  request_snapshot: unknown;
+  package: { title?: string | null } | Array<{ title?: string | null }> | null;
+};
+
+export type CompanySummary = { nazwa?: string | null };
+
+function getPackageTitle(order: DashboardOrder) {
+  const packageData = Array.isArray(order.package) ? order.package[0] : order.package;
+  return packageData?.title || "Usługa archiwalna";
+}
+
+function getOrderPreview(order: DashboardOrder) {
   const snapshot = isRequestSnapshot(order.request_snapshot) ? order.request_snapshot : null;
 
   if (snapshot?.source === "student_private_proposal") {
@@ -42,8 +61,8 @@ function getOrderPreview(order: any) {
 }
 
 interface DashboardClientProps {
-  initialOrders: any[];
-  companyData: Record<string, any>;
+  initialOrders: DashboardOrder[];
+  companyData: Record<string, CompanySummary>;
 }
 
 export default function DashboardClient({ initialOrders, companyData }: DashboardClientProps) {
@@ -57,7 +76,7 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
     if (searchTerm) {
       const lowerSearch = searchTerm.toLowerCase();
       result = result.filter((order) => {
-        const title = order.package?.title?.toLowerCase() || "";
+        const title = getPackageTitle(order).toLowerCase();
         const companyName = companyData[order.company_id]?.nazwa?.toLowerCase() || "";
         return title.includes(lowerSearch) || companyName.includes(lowerSearch);
       });
@@ -94,8 +113,8 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
   };
 
   return (
-    <div className="space-y-8">
-      <div className="animate-in fade-in slide-in-from-top-4 rounded-3xl border border-slate-100 bg-white p-4 shadow-xl shadow-slate-200/50">
+    <div className="space-y-5">
+      <div className="animate-in rounded-2xl border border-slate-200 bg-white p-3 shadow-sm fade-in slide-in-from-top-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-center">
           <div className="relative w-full md:flex-1">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
@@ -103,13 +122,13 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
               placeholder="Szukaj po nazwie firmy lub usługi..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-12 font-medium transition-all focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+              className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-12 font-medium transition-all focus:border-lime-200 focus:bg-white focus:ring-2 focus:ring-lime-100"
             />
           </div>
 
           <div className="no-scrollbar flex w-full gap-3 overflow-x-auto pb-2 md:w-auto md:pb-0">
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="h-12 w-[210px] rounded-2xl border-slate-200 bg-white font-bold text-slate-700 focus:ring-2 focus:ring-indigo-100">
+              <SelectTrigger className="h-11 w-[190px] rounded-xl border-slate-200 bg-white font-bold text-slate-700 focus:ring-2 focus:ring-lime-100">
                 <div className="flex items-center gap-2">
                   <SlidersHorizontal className="h-4 w-4 text-slate-400" />
                   <SelectValue placeholder="Status" />
@@ -125,7 +144,7 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
             </Select>
 
             <Select value={sort} onValueChange={setSort}>
-              <SelectTrigger className="h-12 w-[180px] rounded-2xl border-slate-200 bg-white font-bold text-slate-700 focus:ring-2 focus:ring-indigo-100">
+              <SelectTrigger className="h-11 w-[160px] rounded-xl border-slate-200 bg-white font-bold text-slate-700 focus:ring-2 focus:ring-lime-100">
                 <SelectValue placeholder="Sortowanie" />
               </SelectTrigger>
               <SelectContent>
@@ -141,7 +160,7 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
                 onClick={clearFilters}
                 variant="ghost"
                 size="icon"
-                className="h-12 w-12 shrink-0 rounded-2xl text-slate-400 hover:bg-red-50 hover:text-red-500"
+                className="h-11 w-11 shrink-0 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-500"
                 title="Wyczyść filtry"
               >
                 <X className="h-5 w-5" />
@@ -165,7 +184,7 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
               : "Obecnie nie masz żadnych nowych zapytań ani aktywnych zleceń."}
           </p>
           <Link href="/app/services/my">
-            <Button className="gradient-primary h-14 rounded-2xl px-10 font-black text-white shadow-xl shadow-indigo-500/20">
+            <Button className="h-14 rounded-2xl bg-[#10245f] px-10 font-black text-white shadow-sm hover:bg-[#0b1b47]">
               ZARZĄDZAJ USŁUGAMI
             </Button>
           </Link>
@@ -179,7 +198,7 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
 
             return (
               <section key={section.key} className="space-y-4">
-                <div className="flex flex-col gap-3 rounded-[2rem] border border-slate-100 bg-white p-6 shadow-lg shadow-slate-200/30 md:flex-row md:items-end md:justify-between">
+                <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
                   <div className="space-y-2">
                     <div className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
                       <Inbox className="h-3.5 w-3.5" />
@@ -194,7 +213,7 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
                 </div>
 
                 <div className="grid gap-6">
-                  {section.orders.map((order: any) => {
+                  {section.orders.map((order) => {
                     const statusMeta = getServiceOrderStatusMeta(order.status);
                     const companyName = companyData[order.company_id]?.nazwa || "Firma partnerska";
                     const amountLabel = order.status === "countered" && order.counter_amount ? order.counter_amount : order.amount;
@@ -202,13 +221,13 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
                     return (
                       <Card
                         key={order.id}
-                        className="group relative overflow-hidden rounded-[2rem] border-none bg-white shadow-xl shadow-slate-200/50 ring-1 ring-slate-100 transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/10"
+                      className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-lime-200 hover:shadow-md"
                       >
                         <CardContent className="p-0">
                           <div className="flex flex-col lg:flex-row">
-                            <div className="flex flex-col justify-between gap-6 border-r border-slate-100 bg-slate-50 p-8 transition-colors group-hover:bg-indigo-50/30 lg:w-72">
+                            <div className="flex flex-col justify-between gap-5 border-b border-slate-100 bg-amber-50/45 p-5 transition-colors group-hover:bg-amber-50 lg:w-64 lg:border-b-0 lg:border-r">
                               <div className="space-y-4">
-                                <span className={`inline-flex rounded-full px-4 py-1.5 text-[10px] font-black uppercase tracking-widest ${statusMeta.badgeClass}`}>
+                                <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-normal ${statusMeta.badgeClass}`}>
                                   {statusMeta.label}
                                 </span>
 
@@ -216,8 +235,8 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
                                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                                     {order.status === "countered" ? "KONTROFERTA FIRMY" : "WYNAGRODZENIE"}
                                   </p>
-                                  <div className="flex items-center gap-2 text-2xl font-black tabular-nums text-slate-900">
-                                    <Wallet className="h-5 w-5 text-indigo-500" />
+                                  <div className="flex items-center gap-2 text-2xl font-black tabular-nums text-[#10245f]">
+                                    <Wallet className="h-5 w-5 text-[#10245f]" />
                                     {amountLabel}
                                     <span className="text-xs font-bold text-slate-400">PLN</span>
                                   </div>
@@ -229,6 +248,9 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
 
                               <div className="space-y-3">
                                 <p className="text-sm font-semibold leading-relaxed text-slate-600">{statusMeta.summaryLabel}</p>
+                                <div className="rounded-xl border border-lime-200 bg-lime-100 px-3 py-2 text-xs font-black uppercase tracking-normal text-[#0b1b47] shadow-sm">
+                                  Następna akcja: {statusMeta.nextActionLabel}
+                                </div>
                                 <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
                                   <Calendar className="h-3.5 w-3.5" />
                                   {format(new Date(order.created_at), "d MMM yyyy", { locale: pl }).toUpperCase()}
@@ -236,13 +258,13 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
                               </div>
                             </div>
 
-                            <div className="flex flex-1 flex-col p-8">
+                            <div className="flex flex-1 flex-col p-5 sm:p-6">
                               <div className="flex-1 space-y-6">
                                 <div className="space-y-2">
-                                  <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">WYBRANA USŁUGA</p>
+                                  <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#10245f]">WYBRANA USŁUGA</p>
                                   <Link href={`/app/services/dashboard/${order.id}`} className="block">
-                                    <h3 className="line-clamp-1 text-2xl font-black text-slate-900 transition-colors group-hover:text-indigo-600">
-                                      {order.package?.title || "Usługa archiwalna"}
+                                    <h3 className="line-clamp-2 text-xl font-black text-[#10245f]">
+                                      {getPackageTitle(order)}
                                     </h3>
                                   </Link>
                                 </div>
@@ -257,7 +279,7 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
                                   </div>
                                 </div>
 
-                                <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-6 transition-all group-hover:border-indigo-100 group-hover:bg-white">
+                                <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 transition-all group-hover:border-lime-200 group-hover:bg-white">
                                   <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">WYMAGANIA I OPIS</p>
                                   <p className="line-clamp-2 text-sm font-medium leading-relaxed text-slate-600">
                                     {getOrderPreview(order)}
@@ -266,9 +288,9 @@ export default function DashboardClient({ initialOrders, companyData }: Dashboar
                               </div>
                             </div>
 
-                            <div className="flex items-center justify-center p-8 lg:border-l lg:border-slate-50">
+                            <div className="flex items-center justify-center p-5 lg:border-l lg:border-slate-50">
                               <Link href={`/app/services/dashboard/${order.id}`} className="w-full lg:w-auto">
-                                <Button className="group/btn flex h-14 w-full items-center gap-3 rounded-2xl border-none bg-slate-900 px-8 font-black text-white shadow-xl transition-all hover:bg-indigo-600 lg:w-auto">
+                                <Button className="group/btn flex h-11 w-full items-center gap-3 rounded-full border-none bg-[#10245f] px-6 font-black text-white shadow-sm transition-all hover:bg-[#0b1b47] lg:w-auto">
                                   SZCZEGÓŁY
                                   <ArrowRight className="h-5 w-5 transition-transform group-hover/btn:translate-x-1" />
                                 </Button>

@@ -23,9 +23,47 @@ Example:
 20260324190312_security_hardening_rls_privilege_escalation.sql
 ```
 
-## Current production-facing migration groups
+## Current production status
 
-State as of 2026-03-24.
+State as of 2026-06-20:
+
+- local migration versions: `104`
+- remote migration versions: `104`
+- local-only versions: `0`
+- remote-only versions: `0`
+- remote dry-run result: `Remote database is up to date.`
+- production readiness RPC: no missing critical tables, functions, or RLS coverage
+
+### 2026-06-20 reconciliation
+
+The repository and the linked official Supabase project were reconciled in this
+order:
+
+1. Fetched 44 historical remote migration files that had been applied outside
+   the current repository history.
+2. Archived 22 ambiguous eight-digit legacy migration files under
+   `supabase/_archive/legacy-migrations/`; they are no longer part of the CLI
+   migration pipeline.
+3. Repaired 24 migration-history versions only after checking that their schema,
+   RLS, RPC, constraint, or data effect already existed remotely.
+4. Applied and verified the five genuinely missing migrations:
+
+| Version | Name | DB status |
+|---|---|---|
+| 20260418121500 | sync_service_package_price_bounds_from_variants | APPLIED |
+| 20260418195500 | deduplicate_conversations_and_enforce_uniques | APPLIED |
+| 20260418224000 | sync_platform_offer_pricing_from_packages | APPLIED |
+| 20260509103000 | pilot_mvp_chat_and_conversation_constraints | APPLIED |
+| 20260614110000 | security_audit_hardening | APPLIED |
+
+Preflight found no duplicate rows requiring deletion. Postflight confirmed zero
+duplicate groups, zero package price-bound mismatches, private document buckets,
+the canonical profile SELECT policy set, and no production-readiness findings.
+
+## Historical production-facing migration groups
+
+State originally recorded on 2026-03-24; statuses below reflect the reconciled
+2026-06-20 production history.
 
 ### Security / ledger hardening
 
@@ -50,6 +88,13 @@ State as of 2026-03-24.
 | 20260324195427 | accounting_scale_tables_v1 | APPLIED |
 | 20260324195523 | accounting_materialized_views_v2 | APPLIED |
 | 20260324204443 | unification_hardening_phase_a | APPLIED |
+
+### Accounting analytics / reporting
+
+| Version | Name | DB status |
+|--------|------|-----------|
+| 20260325203000 | admin_accounting_analytics_v1 | APPLIED |
+| 20260325210000 | variable_commission_model_v1 | APPLIED |
 
 ## Drift status
 

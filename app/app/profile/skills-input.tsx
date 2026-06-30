@@ -20,7 +20,7 @@ function normalize(s: string) {
 export default function SkillsInput({
   name = "kompetencje_json",
   initial = [],
-  placeholder = "Dodaj kompetencję i Enter…",
+  placeholder = "Dodaj kompetencję",
   max = 20,
 }: Props) {
   const [tags, setTags] = React.useState<string[]>(
@@ -59,18 +59,18 @@ export default function SkillsInput({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 space-y-2">
       <input type="hidden" name={name} value={JSON.stringify(tags)} />
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex min-w-0 flex-wrap gap-2">
         {tags.map((t) => (
-          <Badge key={t} variant="outline" className="flex items-center gap-1">
-            {t}
+          <Badge key={t} variant="outline" className="flex max-w-full min-w-0 items-center gap-1 whitespace-normal break-words rounded-lg px-2 py-1 text-left leading-snug">
+            <span className="min-w-0 break-words">{t}</span>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-5 w-5"
+              className="h-5 w-5 shrink-0"
               onClick={() => setTags((prev) => prev.filter((x) => x !== t))}
               aria-label={`Usuń ${t}`}
             >
@@ -87,9 +87,10 @@ export default function SkillsInput({
         onPaste={onPaste}
         placeholder={tags.length >= max ? `Limit ${max} kompetencji` : placeholder}
         disabled={tags.length >= max}
+        className="min-w-0"
       />
 
-      <div className="text-xs text-muted-foreground">
+      <div className="text-xs leading-relaxed text-muted-foreground">
         Enter lub przecinek dodaje tag. Backspace na pustym polu usuwa ostatni.
       </div>
     </div>

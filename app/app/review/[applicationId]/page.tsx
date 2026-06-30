@@ -33,14 +33,22 @@ export default async function StudentReviewPage({
 
   if (!appRow || appRow.student_id !== user.id) redirect("/app/applications");
 
-  // deliverable musi być approved, inaczej nie oceniamy
-  const { data: deliv } = await supabase
-    .from("deliverables")
-    .select("status")
+  // Opinia jest dostępna po zamknięciu kontraktu lub rozliczeniu wszystkich etapów.
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("status, milestones(status)")
     .eq("application_id", applicationId)
     .maybeSingle();
 
-  if (!deliv || deliv.status !== "approved") redirect(`/app/deliverables/${applicationId}`);
+  const milestones = Array.isArray(contract?.milestones) ? contract.milestones : [];
+  const allMilestonesReleased =
+    milestones.length > 0 &&
+    milestones.every((milestone: { status?: string | null }) =>
+      ["released", "accepted", "completed", "refunded"].includes(String(milestone.status)),
+    );
+  const canReview = appRow.status === "completed" || contract?.status === "completed" || allMilestonesReleased;
+
+  if (!canReview) redirect(`/app/deliverables/${applicationId}`);
 
   const { data: offer } = await supabase
     .from("offers")

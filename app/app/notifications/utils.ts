@@ -1,5 +1,73 @@
 
-export function getNotificationTitle(n: { typ: string; payload?: any, content?: string | null }) {
+export type NotificationRoutePayload = Record<string, unknown> & {
+    redirect_path?: unknown;
+    target_url?: unknown;
+    href?: unknown;
+    conversation_id?: unknown;
+    application_id?: unknown;
+    service_order_id?: unknown;
+    order_id?: unknown;
+    offer_id?: unknown;
+    contract_id?: unknown;
+};
+
+type NotificationPayload = NotificationRoutePayload;
+
+function getPayloadString(payload: NotificationRoutePayload, key: keyof NotificationRoutePayload) {
+    const value = payload[key];
+    return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getSafeAppPath(value: string | null) {
+    if (!value) {
+        return null;
+    }
+
+    return value === "/app" || value.startsWith("/app/") ? value : null;
+}
+
+export function getNotificationHref(n: { payload?: NotificationRoutePayload | null }): string {
+    const payload = n.payload ?? {};
+    const directPath = getSafeAppPath(
+        getPayloadString(payload, "redirect_path")
+        ?? getPayloadString(payload, "target_url")
+        ?? getPayloadString(payload, "href"),
+    );
+
+    if (directPath) {
+        return directPath;
+    }
+
+    const conversationId = getPayloadString(payload, "conversation_id");
+    if (conversationId) {
+        return `/app/chat/${encodeURIComponent(conversationId)}`;
+    }
+
+    const applicationId = getPayloadString(payload, "application_id");
+    if (applicationId) {
+        return `/app/deliverables/${encodeURIComponent(applicationId)}`;
+    }
+
+    const serviceOrderId = getPayloadString(payload, "service_order_id")
+        ?? getPayloadString(payload, "order_id");
+    if (serviceOrderId) {
+        return `/app/deliverables/${encodeURIComponent(serviceOrderId)}`;
+    }
+
+    const offerId = getPayloadString(payload, "offer_id");
+    if (offerId) {
+        return `/app/offers/${encodeURIComponent(offerId)}`;
+    }
+
+    const contractId = getPayloadString(payload, "contract_id");
+    if (contractId) {
+        return `/app/notifications?contract=${encodeURIComponent(contractId)}`;
+    }
+
+    return "/app/notifications";
+}
+
+export function getNotificationTitle(n: { typ: string; payload?: NotificationPayload | null, content?: string | null }): string {
     if (n.content) return n.content; // Fallback to content if set (legacy)
 
     const p = n.payload || {};
@@ -63,7 +131,7 @@ export function getNotificationTitle(n: { typ: string; payload?: any, content?: 
         case "terms_agreed":
             return `Warunki uzgodnione: ${p.offer_title || "Oferta"}`;
 
-        // ── Escrow / Finansowanie ────────────────────────────────────────
+        // ── Depozyt / finansowanie ───────────────────────────────────────
         case "escrow_funded":
         case "contract_funded":
             return `Środki w depozycie – zacznij pracę! ${p.offer_title ? `(${p.offer_title})` : ""}`;
@@ -105,7 +173,15 @@ export function getNotificationTitle(n: { typ: string; payload?: any, content?: 
         case "cooperation_cancelled":
             return `Zlecenie anulowane: ${p.offer_title || "Zlecenie"}`;
 
+        // ── Spory / Zgłoszenia ───────────────────────────────────────────
+        case "problem_reported":
+            return `Zgłoszenie problemu od: ${p.reported_by === "firma" ? "firmy" : "studenta"}`;
+
         default:
-            return p.snippet || p.message || "Nowe powiadomienie";
+            return typeof p.snippet === "string"
+                ? p.snippet
+                : typeof p.message === "string"
+                    ? p.message
+                    : "Nowe powiadomienie";
     }
 }

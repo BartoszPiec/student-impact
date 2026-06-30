@@ -25,7 +25,6 @@ export class CeidgClient {
     async getCompanyByNip(nip: string): Promise<CeidgCompanyData | null> {
         // 1. Tryb symulacji (jeśli brak klucza lub środowisko testowe)
         if (!this.apiKey || process.env.NEXT_PUBLIC_SIMULATE_CEIDG === "true") {
-            console.log("[CEIDG] Running in simulation mode for NIP:", nip);
             return this.simulateResponse(nip);
         }
 

@@ -7,7 +7,7 @@ import { Search } from "lucide-react";
 export default function HeroSection() {
     return (
         <section className="relative bg-gradient-to-br from-[#1a1b4b] via-[#2e1065] to-[#4c1d95] text-white shadow-2xl border-b border-white/10 overflow-hidden mb-12">
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 contrast-150"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.16),transparent_55%)]" />
 
             <div className="relative z-10 px-6 py-16 md:py-24 text-center max-w-4xl mx-auto space-y-6">
                 <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight">

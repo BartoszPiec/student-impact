@@ -1,224 +1,186 @@
-
 "use client";
 
 import { useRef, useState } from "react";
-import { Input } from "@/components/ui/input";
+import { Paperclip, Plus, Send } from "lucide-react";
+
+import { sendFileMessage, sendTextMessage } from "@/app/app/chat/_actions";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
-import { Paperclip, Send, Banknote, CalendarClock, Plus } from "lucide-react";
-import { sendTextMessage, sendFileMessage, sendEventMessage } from "@/app/app/chat/_actions";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
 
 export function ChatInput({
-    conversationId,
-    placeholder = "Napisz wiadomość..."
+  conversationId,
+  placeholder = "Napisz wiadomość...",
+  locked = false,
+  lockedMessage = "Ta rozmowa jest zamknięta.",
 }: {
-    conversationId: string;
-    placeholder?: string;
+  conversationId: string;
+  placeholder?: string;
+  locked?: boolean;
+  lockedMessage?: string;
 }) {
-    const [message, setMessage] = useState("");
-    const [isUploading, setIsUploading] = useState(false);
-    const [attachment, setAttachment] = useState<{ url: string; type: 'image' | 'file'; name: string } | null>(null);
-    const [rateOpen, setRateOpen] = useState(false);
-    const [deadlineOpen, setDeadlineOpen] = useState(false);
-    const [rateValue, setRateValue] = useState("");
-    const [deadlineValue, setDeadlineValue] = useState("");
-    const fileInputRef = useRef<HTMLInputElement>(null);
+  const [message, setMessage] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [attachment, setAttachment] = useState<{ ref: string; type: "image" | "file"; name: string } | null>(null);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [actionSheetOpen, setActionSheetOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-    async function handleSend() {
-        if (!message.trim() && !attachment) return;
+  async function handleSend() {
+    if (locked) return;
+    if (!message.trim() && !attachment) return;
 
-        const content = message;
-        const att = attachment;
+    const content = message;
+    const currentAttachment = attachment;
 
-        // Optimistic clear
-        setMessage("");
-        setAttachment(null);
+    setMessage("");
+    setAttachment(null);
 
-        if (att) {
-            await sendFileMessage(conversationId, att.name, att.url, att.type);
-        }
-
-        if (content.trim()) {
-            await sendTextMessage(conversationId, content);
-        }
+    if (currentAttachment) {
+      await sendFileMessage(conversationId, currentAttachment.name, currentAttachment.ref, currentAttachment.type);
     }
 
-    async function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        try {
-            setIsUploading(true);
-            const supabase = createClient();
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-            const filePath = `${fileName}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('chat-attachments')
-                .upload(filePath, file);
-
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('chat-attachments')
-                .getPublicUrl(filePath);
-
-            const type = file.type.startsWith('image/') ? 'image' : 'file';
-            setAttachment({ url: publicUrl, type, name: file.name });
-        } catch (e) {
-            console.error("Upload failed:", e);
-            alert("Błąd wysyłania pliku.");
-        } finally {
-            setIsUploading(false);
-            if (fileInputRef.current) fileInputRef.current.value = "";
-        }
+    if (content.trim()) {
+      await sendTextMessage(conversationId, content);
     }
+  }
 
-    const submitRate = async () => {
-        if (!rateValue) return;
-        const rate = parseFloat(rateValue);
-        if (isNaN(rate)) {
-            alert("Proszę podać prawidłowa kwotę.");
-            return;
-        }
-        await sendEventMessage(conversationId, "rate.proposed", { proposed_stawka: rate }, `Proponuję stawkę: ${rate} zł`);
-        setRateOpen(false);
-        setRateValue("");
-    };
+  async function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || locked) return;
 
-    const submitDeadline = async () => {
-        if (!deadlineValue) return;
-        await sendEventMessage(conversationId, "deadline.proposed", { proposed_deadline: deadlineValue }, "");
-        setDeadlineOpen(false);
-        setDeadlineValue("");
-    };
+    try {
+      setIsUploading(true);
+      const uploaded = await uploadPrivateFile({
+        file,
+        purpose: "chat_attachment",
+        conversationId,
+      });
+      const type = file.type.startsWith("image/") ? "image" : "file";
+      setAttachment({ ref: uploaded.ref, type, name: uploaded.name });
+    } catch (error) {
+      console.error("Upload failed:", error);
+      alert("Błąd wysyłania pliku.");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
-    return (
-        <div className="flex flex-col gap-2 relative w-full px-4">
-            {/* Attachment Preview */}
-            {attachment && (
-                <div className="flex items-center gap-2 p-2 bg-slate-100 rounded-lg w-fit text-xs border border-slate-200">
-                    {attachment.type === 'image' ? (
-                        <div className="h-8 w-8 bg-slate-300 rounded overflow-hidden">
-                            {/*eslint-disable-next-line @next/next/no-img-element*/}
-                            <img src={attachment.url} alt="preview" className="h-full w-full object-cover" />
-                        </div>
-                    ) : (
-                        <div className="h-8 w-8 bg-indigo-100 text-indigo-600 flex items-center justify-center rounded">
-                            <Paperclip className="w-4 h-4" />
-                        </div>
-                    )}
-                    <span className="max-w-[150px] truncate">{attachment.name}</span>
-                    <button
-                        type="button"
-                        onClick={() => setAttachment(null)}
-                        className="ml-2 text-slate-400 hover:text-red-500"
-                    >
-                        ✕
-                    </button>
-                </div>
-            )}
+  const closeActionMenus = () => {
+    setActionsOpen(false);
+    setActionSheetOpen(false);
+  };
 
-            <div className="relative flex items-end gap-2">
-                <Input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
-                    onChange={handleFileSelect}
-                />
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
+    closeActionMenus();
+  };
 
-                {/* Actions Menu */}
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-full border-slate-200 text-slate-500">
-                            <Plus className="w-5 h-5" />
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-48 p-1" align="start">
-                        <Button variant="ghost" className="w-full justify-start gap-2 text-sm" onClick={() => fileInputRef.current?.click()}>
-                            <Paperclip className="w-4 h-4" /> Dodaj plik
-                        </Button>
-                        <Button variant="ghost" className="w-full justify-start gap-2 text-sm" onClick={() => setRateOpen(true)}>
-                            <Banknote className="w-4 h-4" /> Zaproponuj stawkę
-                        </Button>
-                        <Button variant="ghost" className="w-full justify-start gap-2 text-sm" onClick={() => setDeadlineOpen(true)}>
-                            <CalendarClock className="w-4 h-4" /> Zaproponuj termin
-                        </Button>
-                    </PopoverContent>
-                </Popover>
+  const fileActionButton = (
+    <Button variant="ghost" className="w-full justify-start gap-2 text-sm" onClick={openFilePicker}>
+      <Paperclip className="h-4 w-4" /> Dodaj plik
+    </Button>
+  );
 
-                <div className="relative flex-1">
-                    <Input
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        placeholder={placeholder}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSend();
-                            }
-                        }}
-                        className="pl-4 pr-12 py-6 h-auto rounded-xl border-transparent bg-slate-50 shadow-sm focus:bg-white focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-400"
-                        autoComplete="off"
-                        disabled={isUploading}
-                    />
-                    <Button
-                        onClick={handleSend}
-                        size="icon"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200/50 transition-all hover:scale-105 active:scale-95 z-10"
-                        disabled={isUploading || (!message.trim() && !attachment)}
-                    >
-                        <Send className="w-5 h-5 ml-0.5" />
-                    </Button>
-                </div>
-            </div>
-
-            {/* Rate Dialog */}
-            <Dialog open={rateOpen} onOpenChange={setRateOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Zaproponuj stawkę</DialogTitle>
-                    </DialogHeader>
-                    <div className="py-4">
-                        <Label>Kwota (PLN)</Label>
-                        <Input
-                            type="number"
-                            value={rateValue}
-                            onChange={(e) => setRateValue(e.target.value)}
-                            placeholder="np. 1500"
-                        />
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setRateOpen(false)} className="rounded-xl border-slate-200">Anuluj</Button>
-                        <Button onClick={submitRate} className="rounded-xl gradient-primary shadow-primary hover:opacity-90 transition-opacity">Wyślij propozycję</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            {/* Deadline Dialog */}
-            <Dialog open={deadlineOpen} onOpenChange={setDeadlineOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Zaproponuj termin</DialogTitle>
-                    </DialogHeader>
-                    <div className="py-4">
-                        <Label>Termin (YYYY-MM-DD)</Label>
-                        <Input
-                            type="date"
-                            value={deadlineValue}
-                            onChange={(e) => setDeadlineValue(e.target.value)}
-                        />
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setDeadlineOpen(false)} className="rounded-xl border-slate-200">Anuluj</Button>
-                        <Button onClick={submitDeadline} className="rounded-xl gradient-primary shadow-primary hover:opacity-90 transition-opacity">Wyślij propozycję</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+  return (
+    <div className="relative flex w-full flex-col gap-2 px-0 sm:px-4">
+      {locked ? (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          {lockedMessage}
         </div>
-    );
+      ) : null}
+
+      {attachment ? (
+        <div className="flex w-full max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 p-2 text-xs sm:w-fit">
+          <div className="flex h-8 w-8 items-center justify-center rounded bg-lime-100 text-[#10245f]">
+            <Paperclip className="h-4 w-4" />
+          </div>
+
+          <span className="max-w-[220px] truncate sm:max-w-[150px]">{attachment.name}</span>
+          <button
+            type="button"
+            onClick={() => setAttachment(null)}
+            aria-label="Usuń załącznik"
+            className="ml-2 text-slate-400 hover:text-red-500"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
+
+      <div className="relative flex items-end gap-2">
+        <Input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+
+        <Popover open={actionsOpen} onOpenChange={setActionsOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Dodaj plik"
+              className="hidden h-10 w-10 shrink-0 rounded-full border-slate-200 text-slate-500 sm:inline-flex"
+              disabled={locked}
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-1" align="start" side="top" sideOffset={10}>
+            {fileActionButton}
+          </PopoverContent>
+        </Popover>
+
+        <Sheet open={actionSheetOpen} onOpenChange={setActionSheetOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Dodaj plik"
+              className="inline-flex h-10 w-10 shrink-0 rounded-full border-slate-200 bg-white text-slate-600 shadow-sm sm:hidden"
+              disabled={locked}
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="rounded-t-[2rem] border-none bg-white p-0">
+            <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-slate-200" />
+            <div className="p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+              <SheetHeader className="mb-4 text-left">
+                <SheetTitle>Akcje rozmowy</SheetTitle>
+              </SheetHeader>
+              <div className="grid gap-2">{fileActionButton}</div>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        <div className="relative flex-1">
+          <Input
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            placeholder={locked ? lockedMessage : placeholder}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void handleSend();
+              }
+            }}
+            className="h-auto rounded-xl border-transparent bg-slate-50 py-4 pl-4 pr-12 shadow-sm transition-all placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-lime-200/60 sm:py-6"
+            autoComplete="off"
+            disabled={locked || isUploading}
+            readOnly={locked}
+          />
+          <Button
+            onClick={() => void handleSend()}
+            size="icon"
+            aria-label="Wyślij wiadomość"
+            className="absolute right-2 top-1/2 z-10 h-10 w-10 -translate-y-1/2 rounded-xl bg-lime-300 text-[#0b1b47] shadow-lg shadow-lime-200/60 transition-all hover:scale-105 hover:bg-lime-200 active:scale-95"
+            disabled={locked || isUploading || (!message.trim() && !attachment)}
+          >
+            <Send className="ml-0.5 h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }

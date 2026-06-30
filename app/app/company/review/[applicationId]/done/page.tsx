@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Stars } from "@/components/ReviewCard";
+import { ReviewBreakdown } from "@/components/reviews/ReviewBreakdown";
+import { parseDetailedReviewComment } from "@/lib/reviews";
 import { openChatForApplication } from "../../../../chat/_actions";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +41,7 @@ export default async function CompanyReviewDonePage({
     .eq("id", applicationId)
     .maybeSingle();
 
-  if (!appRow) redirect("/app/company/applications");
+  if (!appRow) redirect("/app/company/offers");
 
   const { data: offer } = await supabase
     .from("offers")
@@ -47,7 +49,7 @@ export default async function CompanyReviewDonePage({
     .eq("id", appRow.offer_id)
     .maybeSingle();
 
-  if (!offer || offer.company_id !== user.id) redirect("/app/company/applications");
+  if (!offer || offer.company_id !== user.id) redirect("/app/company/offers");
 
   const { data: review } = await supabase
     .from("reviews")
@@ -57,22 +59,20 @@ export default async function CompanyReviewDonePage({
     .maybeSingle();
 
   if (!review) redirect(`/app/company/review/${applicationId}`);
+  const parsedReview = parseDetailedReviewComment(review.comment);
 
   // student name (fallback)
   const { data: studentProfile } = await supabase
-    .from("profiles")
-    .select("name")
+    .from("student_profiles")
+    .select("public_name")
     .eq("user_id", appRow.student_id)
     .maybeSingle();
 
   const studentLabel =
-    (studentProfile as any)?.name ||
-    (studentProfile as any)?.email ||
+    studentProfile?.public_name ||
     "student";
 
   // ✅ akcja otwierająca czat (historia)
-  const chatAction = openChatForApplication.bind(null, applicationId);
-
   return (
     <main className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -85,7 +85,7 @@ export default async function CompanyReviewDonePage({
 
         <div className="flex gap-2">
           <Button asChild variant="outline">
-            <Link href="/app/company/applications">Wróć do aplikacji</Link>
+            <Link href={`/app/company/offers/${offer.id}`}>Wroc do ogloszenia</Link>
           </Button>
         </div>
       </div>
@@ -120,10 +120,11 @@ export default async function CompanyReviewDonePage({
 
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">Komentarz</div>
-            {review.comment ? (
-              <div className="text-sm whitespace-pre-wrap">{review.comment}</div>
+            <ReviewBreakdown ratings={parsedReview.categories} />
+            {parsedReview.displayComment ? (
+              <div className="text-sm whitespace-pre-wrap">{parsedReview.displayComment}</div>
             ) : (
-              <div className="text-sm text-muted-foreground">Bez komentarza.</div>
+              <div className="text-sm text-muted-foreground">Bez dodatkowego komentarza.</div>
             )}
           </div>
 

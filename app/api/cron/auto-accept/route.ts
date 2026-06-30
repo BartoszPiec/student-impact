@@ -1,19 +1,46 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { NextRequest, NextResponse } from "next/server";
+import { jsonError, noStoreJson } from "@/lib/security/api-response";
+import { transferPayoutViaStripe } from "@/lib/stripe/payouts";
+import { logCriticalError } from "@/lib/observability/error-log";
+import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
+
+type AutoAcceptResult = {
+  payout_ids?: unknown;
+};
+
+type PayoutTransferSummary = {
+  payoutId: string;
+  status: string;
+};
+
+function extractPayoutIds(value: unknown): string[] {
+  if (!value || typeof value !== "object" || !("payout_ids" in value)) {
+    return [];
+  }
+
+  const payoutIds = (value as AutoAcceptResult).payout_ids;
+  if (!Array.isArray(payoutIds)) {
+    return [];
+  }
+
+  return payoutIds.filter((id): id is string => typeof id === "string" && id.length > 0);
+}
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error("CRON_SECRET environment variable is not set");
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+    await logCriticalError({
+      source: "cron.auto_accept.missing_secret",
+      message: "CRON_SECRET is not configured.",
+    });
+    return jsonError("Konfiguracja zadania cyklicznego jest niekompletna.", 500);
   }
 
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${cronSecret}`) {
-    console.warn("Unauthorized cron attempt from:", req.headers.get("x-forwarded-for") || "unknown");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonError("Brak autoryzacji zadania cyklicznego.", 401);
   }
 
   try {
@@ -25,83 +52,68 @@ export async function GET(req: NextRequest) {
     });
 
     if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      await logCriticalError({
+        source: "cron.auto_accept.rpc_failed",
+        error,
+        errorCode: error.code,
+        message: "auto_accept_due_milestones_v2 failed.",
+      });
+      return noStoreJson({ ok: false, error: "Nie udało się wykonać zadania cyklicznego." }, { status: 500 });
     }
 
-    // 2. Sync: completed contracts → completed applications
-    //    (fallback for any contracts that completed but applications.status wasn't updated)
-    const { data: staleApps } = await supabase
-      .from("contracts")
-      .select("application_id")
-      .eq("status", "completed")
-      .not("application_id", "is", null);
+    const payoutTransfers: PayoutTransferSummary[] = [];
+    if (process.env.STRIPE_PAYOUTS_ENABLED === "true") {
+      const payoutIds = extractPayoutIds(data);
+      const concurrency = 5;
 
-    if (staleApps && staleApps.length > 0) {
-      const appIds = staleApps.map((c: any) => c.application_id);
-      await supabase
-        .from("applications")
-        .update({ status: "completed", realization_status: "completed" })
-        .in("id", appIds)
-        .in("status", ["accepted", "in_progress"]);
-    }
-
-    // 3. Sync: active contracts → in_progress applications
-    const { data: activeContracts } = await supabase
-      .from("contracts")
-      .select("application_id")
-      .eq("status", "active")
-      .not("application_id", "is", null);
-
-    if (activeContracts && activeContracts.length > 0) {
-      const activeAppIds = activeContracts.map((c: any) => c.application_id);
-      await supabase
-        .from("applications")
-        .update({ status: "in_progress" })
-        .in("id", activeAppIds)
-        .in("status", ["accepted"]);
-    }
-
-    // 4. Sync: accepted/in_progress applications → in_progress offers
-    //    (fallback for offers that should be in_progress but aren't)
-    const { data: acceptedApps } = await supabase
-      .from("applications")
-      .select("offer_id")
-      .in("status", ["accepted", "in_progress"]);
-
-    if (acceptedApps && acceptedApps.length > 0) {
-      const offerIds = [...new Set(acceptedApps.map((a: any) => a.offer_id))];
-      await supabase
-        .from("offers")
-        .update({ status: "in_progress" })
-        .in("id", offerIds)
-        .eq("status", "published");
-    }
-
-    // 5. Sync: completed contracts → closed offers
-    const { data: completedContracts } = await supabase
-      .from("contracts")
-      .select("application_id, applications(offer_id)")
-      .eq("status", "completed");
-
-    if (completedContracts && completedContracts.length > 0) {
-      const completedOfferIds = completedContracts
-        .map((c: any) => (c.applications as any)?.offer_id)
-        .filter(Boolean);
-      if (completedOfferIds.length > 0) {
-        await supabase
-          .from("offers")
-          .update({ status: "closed" })
-          .in("id", completedOfferIds)
-          .neq("status", "closed");
+      for (let index = 0; index < payoutIds.length; index += concurrency) {
+        const batch = payoutIds.slice(index, index + concurrency);
+        const batchResults = await Promise.all(batch.map(async (payoutId) => {
+          try {
+            const transferResult = await transferPayoutViaStripe(payoutId);
+            return { payoutId, status: transferResult.status };
+          } catch (transferError) {
+            await logCriticalError({
+              source: "cron.auto_accept.payout_transfer_failed",
+              error: transferError,
+              message: "Stripe payout transfer failed during auto-accept cron.",
+              context: {
+                payoutId,
+              },
+            });
+            return { payoutId, status: "failed" };
+          }
+        }));
+        payoutTransfers.push(...batchResults);
       }
     }
 
-    return NextResponse.json({
+    const { data: reconciliation, error: reconciliationError } = await supabase.rpc(
+      "reconcile_contract_statuses_v1",
+    );
+
+    if (reconciliationError) {
+      await logCriticalError({
+        source: "cron.auto_accept.reconciliation_failed",
+        error: reconciliationError,
+        errorCode: reconciliationError.code,
+        message: "reconcile_contract_statuses_v1 failed after auto-accept.",
+      });
+      return noStoreJson({ ok: false, error: "Nie udało się uzgodnić statusów zleceń." }, { status: 500 });
+    }
+
+    return noStoreJson({
       ok: true,
       autoAccept: data,
+      payoutTransfers,
+      reconciliation,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    await logCriticalError({
+      source: "cron.auto_accept.unexpected",
+      error: err,
+      message: "Unexpected auto-accept cron failure.",
+    });
+    return noStoreJson({ ok: false, error: "Nie udało się wykonać zadania cyklicznego." }, { status: 500 });
   }
 }

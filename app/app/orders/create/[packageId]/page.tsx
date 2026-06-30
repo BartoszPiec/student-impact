@@ -1,16 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Coins,
     Clock,
     Sparkles,
-    User,
-    Briefcase,
     Star,
     ArrowLeft,
-    CheckCircle2,
     ShieldCheck,
     Clapperboard,
     Palette,
@@ -18,20 +14,73 @@ import {
     PenTool,
     Megaphone,
     BarChart3,
+    Briefcase,
+    Globe,
     Languages,
     Scale,
     TrendingUp,
-    Cpu,
-    Zap
+    Cpu
 } from "lucide-react";
 import OrderForm from "./order-form";
-import { createOrder } from "./_actions";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { resolveJobCategorySlug } from "@/lib/constants";
 
-// Configuration for category-specific styles
 const categoryConfig: Record<string, { icon: React.ReactNode; gradient: string; lightBg: string; darkText: string }> = {
+    "marketing-i-social-media": {
+        icon: <Megaphone className="w-8 h-8" />,
+        gradient: "from-blue-500 to-indigo-600",
+        lightBg: "bg-blue-50",
+        darkText: "text-blue-600"
+    },
+    "e-commerce-i-marketplace": {
+        icon: <TrendingUp className="w-8 h-8" />,
+        gradient: "from-yellow-500 to-amber-600",
+        lightBg: "bg-yellow-50",
+        darkText: "text-yellow-600"
+    },
+    "strony-internetowe-i-cms": {
+        icon: <Globe className="w-8 h-8" />,
+        gradient: "from-teal-500 to-cyan-600",
+        lightBg: "bg-teal-50",
+        darkText: "text-teal-600"
+    },
+    "seo-i-tresci": {
+        icon: <PenTool className="w-8 h-8" />,
+        gradient: "from-emerald-500 to-teal-600",
+        lightBg: "bg-emerald-50",
+        darkText: "text-emerald-600"
+    },
+    "grafika-i-materialy-sprzedazowe": {
+        icon: <Palette className="w-8 h-8" />,
+        gradient: "from-violet-500 to-purple-600",
+        lightBg: "bg-violet-50",
+        darkText: "text-violet-600"
+    },
+    "wideo-i-ugc": {
+        icon: <Clapperboard className="w-8 h-8" />,
+        gradient: "from-rose-500 to-orange-500",
+        lightBg: "bg-rose-50",
+        darkText: "text-rose-600"
+    },
+    "dane-research-analizy": {
+        icon: <BarChart3 className="w-8 h-8" />,
+        gradient: "from-amber-500 to-orange-600",
+        lightBg: "bg-amber-50",
+        darkText: "text-amber-600"
+    },
+    "automatyzacje-ai-narzedzia": {
+        icon: <Cpu className="w-8 h-8" />,
+        gradient: "from-purple-600 to-pink-600",
+        lightBg: "bg-purple-50",
+        darkText: "text-purple-600"
+    },
+    "administracja-i-operacje": {
+        icon: <Briefcase className="w-8 h-8" />,
+        gradient: "from-stone-500 to-stone-700",
+        lightBg: "bg-stone-50",
+        darkText: "text-stone-600"
+    },
     "video": {
         icon: <Clapperboard className="w-8 h-8" />,
         gradient: "from-rose-500 to-orange-500",
@@ -102,7 +151,7 @@ const categoryConfig: Record<string, { icon: React.ReactNode; gradient: string; 
 
 function getCategoryConfig(category: string | null) {
     if (!category) return categoryConfig.default;
-    const key = category.toLowerCase();
+    const key = resolveJobCategorySlug(category) ?? category.toLowerCase();
     return categoryConfig[key] || categoryConfig.default;
 }
 
@@ -114,60 +163,51 @@ export default async function CreateOrderPage({
     const { packageId } = await params;
     const supabase = await createClient();
 
-    // Sprawdź usera
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect("/auth");
 
-    // Sprawdź czy to firma i pobierz profil
     const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
     if (profile?.role !== "company") redirect("/app");
 
-    // Pobierz dane firmy do pre-fillowania (z company_profiles / auth meta)
-    const { data: companyProfile } = await supabase
-        .from("company_profiles")
-        .select("website, osoba_kontaktowa")
-        .eq("user_id", user.id)
-        .single();
-
-    // Pobierz pakiet
-    const { data: pkg } = await supabase
-        .from("service_packages")
-        .select("*, price_max")
-        .eq("id", packageId)
-        .single();
+    const [companyProfileResult, packageResult] = await Promise.all([
+        supabase
+            .from("company_profiles")
+            .select("website")
+            .eq("user_id", user.id)
+            .single(),
+        supabase
+            .from("service_packages")
+            .select("id, title, description, category, price, price_max, delivery_time_days, form_schema, student_id")
+            .eq("id", packageId)
+            .single(),
+    ]);
+    const companyProfile = companyProfileResult.data;
+    const pkg = packageResult.data;
 
     if (!pkg) return <div>Pakiet nie znaleziony.</div>;
 
     const config = getCategoryConfig(pkg.category);
 
-    // Pobierz dane studenta i statystyki
     let studentName = "Student";
-    let studentAvatar: string | null = null;
     let orderCount = 0;
     let avgRating = 0;
     let reviewCount = 0;
 
     if (pkg.student_id) {
-        // Próbujemy pobrać z student_profiles
-        const { data: sp } = await supabase.from("student_profiles").select("public_name").eq("user_id", pkg.student_id).single();
+        const [studentResult, ordersResult, reviewsResult] = await Promise.all([
+            supabase.from("student_profiles").select("public_name").eq("user_id", pkg.student_id).single(),
+            supabase.from("service_orders").select("id", { count: "exact", head: true }).eq("student_id", pkg.student_id),
+            supabase.from("reviews").select("rating").eq("reviewee_id", pkg.student_id),
+        ]);
+
+        const sp = studentResult.data;
         if (sp?.public_name) {
             studentName = sp.public_name;
         }
 
-        // Fallback do profiles dla imienia/nazwiska i avatara
-        const { data: sProfile } = await supabase.from("profiles").select("public_name, imie, nazwisko, avatar_url").eq("user_id", pkg.student_id).single();
-        if (sProfile) {
-            // Jeśli student_profiles nie dało public_name, użyj profiles
-            if (studentName === "Student") {
-                studentName = sProfile.public_name || `${sProfile.imie} ${sProfile.nazwisko} `.trim() || "Student";
-            }
-            studentAvatar = sProfile.avatar_url;
-        }
+        orderCount = ordersResult.count ?? 0;
 
-        const { count } = await supabase.from("service_orders").select("*", { count: 'exact', head: true }).eq("student_id", pkg.student_id);
-        orderCount = count || 0;
-
-        const { data: revs } = await supabase.from("reviews").select("rating").eq("reviewee_id", pkg.student_id);
+        const revs = reviewsResult.data;
         if (revs && revs.length > 0) {
             const sum = revs.reduce((a, b) => a + b.rating, 0);
             avgRating = parseFloat((sum / revs.length).toFixed(1));
@@ -177,20 +217,16 @@ export default async function CreateOrderPage({
 
     return (
         <main className="min-h-screen bg-slate-50/50 pb-20">
-            {/* Dynamic Hero Section */}
             <div className={`relative overflow-hidden bg-gradient-to-br ${config.gradient} pb-32 pt-12`}>
-                {/* Animated Background Elements */}
                 <div className="absolute inset-0 overflow-hidden">
                     <div className="absolute -top-40 -right-40 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
                     <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
 
-                    {/* Floating shapes */}
                     <div className="absolute top-20 left-20 w-4 h-4 bg-white/20 rounded-full animate-bounce" style={{ animationDuration: '3s' }}></div>
                     <div className="absolute top-40 right-1/4 w-6 h-6 bg-white/10 rounded-lg rotate-45 animate-pulse"></div>
                 </div>
 
                 <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    {/* Back Link */}
                     <Link href="/app/company/packages?tab=student" className="inline-flex items-center text-sm font-medium text-white/80 hover:text-white mb-8 transition-colors bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Anuluj i wróć
@@ -222,7 +258,6 @@ export default async function CreateOrderPage({
 
             <div className="w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-20">
                 <div className="grid gap-8 lg:grid-cols-3">
-                    {/* Formularz */}
                     <div className="lg:col-span-2 space-y-8">
                         <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-slate-100 shadow-xl shadow-slate-200/50">
                             <h2 className="text-2xl font-bold text-slate-900 mb-8 flex items-center gap-3">
@@ -233,7 +268,6 @@ export default async function CreateOrderPage({
                             </h2>
                             <OrderForm
                                 packageId={pkg.id}
-                                price={pkg.price}
                                 title={pkg.title}
                                 description={pkg.description}
                                 formSchema={pkg.form_schema}
@@ -243,18 +277,14 @@ export default async function CreateOrderPage({
                         </div>
                     </div>
 
-                    {/* Prawa kolumna - Sidebar */}
                     <div className="space-y-6 lg:col-span-1">
 
-                        {/* Summary Card */}
                         <div className="sticky top-6">
-                            {/* Karta Wykonawcy */}
                             {pkg.student_id && (
                                 <div className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-lg mb-6">
                                     <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Wykonawca</div>
                                     <div className="flex items-center gap-4">
                                         <Avatar className="h-16 w-16 border-2 border-slate-100 shadow-sm">
-                                            <AvatarImage src={studentAvatar || undefined} />
                                             <AvatarFallback className={`text-xl font-bold bg-gradient-to-br ${config.gradient} text-white`}>
                                                 {studentName.charAt(0)}
                                             </AvatarFallback>

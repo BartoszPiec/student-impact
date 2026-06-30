@@ -36,14 +36,12 @@ export default function TaxDataSection({ initialData }: TaxDataSectionProps) {
       try {
         await saveStudentTaxData(formData);
         toast.success("Dane podatkowe zapisane pomyślnie!");
-      } catch (err: any) {
+      } catch (caught: unknown) {
+        const err = caught instanceof Error ? caught : new Error("Nieznany błąd");
         toast.error("Błąd: " + (err?.message || "Nieznany błąd"));
       }
     });
   };
-
-  // Mask PESEL for display (show only last 4 digits)
-  const maskedPesel = pesel ? "•••••••" + pesel.slice(-4) : "";
 
   return (
     <Card className="rounded-[2rem] border-none shadow-xl shadow-slate-200/40 bg-white overflow-hidden">

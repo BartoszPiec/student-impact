@@ -3,8 +3,19 @@ import { redirect, notFound } from "next/navigation";
 import CustomizePackageForm from "@/app/app/company/packages/[id]/customize/customize-form";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import {
+  isSystemServicePackage,
+  normalizePackageFormSchema,
+  normalizePackageVariants,
+  parsePackageBriefDescription,
+  resolveSelectedPackageVariant,
+} from "@/lib/services/package-customization";
 
 export const dynamic = "force-dynamic";
+
+type OfferWithPackage = {
+  service_packages: unknown | unknown[] | null;
+};
 
 export default async function EditOfferPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -36,7 +47,7 @@ export default async function EditOfferPage(props: { params: Promise<{ id: strin
     .from("applications")
     .select("id")
     .eq("offer_id", offer.id)
-    .eq("status", "accepted")
+    .in("status", ["accepted", "in_progress", "completed"])
     .limit(1)
     .maybeSingle();
 
@@ -51,6 +62,16 @@ export default async function EditOfferPage(props: { params: Promise<{ id: strin
     const match = offer.opis.match(regex);
     return match ? match[1].trim() : "";
   }
+
+  const servicePackageNode = (offer as unknown as OfferWithPackage).service_packages;
+  const servicePackage = Array.isArray(servicePackageNode)
+    ? servicePackageNode[0]
+    : servicePackageNode;
+  const parsedBrief = parsePackageBriefDescription(offer.opis);
+  const isSystemPackage = isSystemServicePackage(servicePackage);
+  const formSchema = isSystemPackage ? normalizePackageFormSchema(servicePackage?.form_schema) : [];
+  const variants = normalizePackageVariants(servicePackage?.variants);
+  const selectedVariant = resolveSelectedPackageVariant(variants, parsedBrief.variantName);
 
   // Parse existing description to populate form
   const initialData: Record<string, string> = {
@@ -81,6 +102,18 @@ export default async function EditOfferPage(props: { params: Promise<{ id: strin
     processDesc: extract("⚙️ Obecny proces"),
     expectedEffect: extract("✨ Oczekiwany efekt"),
   };
+
+  formSchema.forEach((field) => {
+    initialData[field.id] = parsedBrief.answersByLabel[field.label] || "";
+  });
+
+  if (parsedBrief.notes) {
+    initialData.notes = parsedBrief.notes;
+  }
+
+  if (parsedBrief.deadline) {
+    initialData.deadline = parsedBrief.deadline;
+  }
 
   // Extracting multi-line notes or materials if possible
   // Materials Link extraction
@@ -127,6 +160,8 @@ export default async function EditOfferPage(props: { params: Promise<{ id: strin
           packageCategory={pkgCategory}
           initialData={initialData}
           offerId={offer.id}
+          formSchema={formSchema}
+          selectedVariant={selectedVariant}
         />
       </div>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2, CheckCircle2 } from "lucide-react";
@@ -9,8 +9,16 @@ import { DraftHeader, MilestoneItem, Props } from "./types";
 import { DraftEditor } from "./DraftEditor";
 import { DraftViewer } from "./DraftViewer";
 
+type MilestoneSnapshotRow = {
+    milestone_client_id: string;
+    title: string;
+    amount_minor: number;
+    criteria: unknown;
+    position: number;
+};
+
 export function MilestoneNegotiationOrchestrator({ applicationId, contractId, totalAmount, isStudent, isCompany }: Props) {
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
     const router = useRouter();
 
     const [loading, setLoading] = useState(true);
@@ -33,49 +41,7 @@ export function MilestoneNegotiationOrchestrator({ applicationId, contractId, to
         setLoading(false);
     };
 
-    // Initial Load & Bootstrap
-    useEffect(() => {
-        const init = async () => {
-            try {
-                setLoading(true);
-
-                // 1. Try to fetch existing draft
-                const { data: existing, error } = await supabase
-                    .from('milestone_drafts')
-                    .select('*')
-                    .eq('contract_id', contractId)
-                    .maybeSingle();
-
-                if (error) throw error;
-
-                if (existing) {
-                    setDraft(existing);
-                    await fetchVersionData(existing);
-                } else {
-                    // 2. Initialize if missing
-                    const totalMinor = Math.round(totalAmount * 100);
-                    const { data: newId, error: initErr } = await supabase.rpc('draft_initialize', {
-                        p_contract_id: contractId,
-                        p_total_amount_minor: totalMinor
-                    });
-
-                    if (initErr) throw initErr;
-
-                    const { data: created } = await supabase.from('milestone_drafts').select('*').eq('id', newId).single();
-                    setDraft(created);
-                }
-            } catch (e: any) {
-                console.error("Orchestrator Init Error:", e);
-                toast.error("Błąd ładowania negocjacji");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        if (contractId) init();
-    }, [contractId]);
-
-    const fetchSnapshot = async (versionId: string): Promise<MilestoneItem[]> => {
+    const fetchSnapshot = useCallback(async (versionId: string): Promise<MilestoneItem[]> => {
         if (!versionId) return [];
         const { data, error } = await supabase
             .from('milestone_snapshots')
@@ -84,16 +50,16 @@ export function MilestoneNegotiationOrchestrator({ applicationId, contractId, to
             .order('position');
 
         if (error) throw error;
-        return data.map((d: any) => ({
-            client_id: d.milestone_client_id,
-            title: d.title,
-            amount: d.amount_minor / 100.0,
-            criteria: typeof d.criteria === 'string' ? d.criteria : JSON.stringify(d.criteria),
-            position: d.position
+        return (data as MilestoneSnapshotRow[]).map((snapshot) => ({
+            client_id: snapshot.milestone_client_id,
+            title: snapshot.title,
+            amount: snapshot.amount_minor / 100.0,
+            criteria: typeof snapshot.criteria === 'string' ? snapshot.criteria : JSON.stringify(snapshot.criteria),
+            position: snapshot.position
         }));
-    };
+    }, [supabase]);
 
-    const fetchVersionData = async (header: DraftHeader) => {
+    const fetchVersionData = useCallback(async (header: DraftHeader) => {
         let targetVersionId = header.current_version_id;
         let baseVersionId: string | null = null;
 
@@ -118,7 +84,44 @@ export function MilestoneNegotiationOrchestrator({ applicationId, contractId, to
         } else {
             setDiffBase(null);
         }
-    };
+    }, [fetchSnapshot, isStudent]);
+
+    useEffect(() => {
+        const init = async () => {
+            try {
+                setLoading(true);
+                const { data: existing, error } = await supabase
+                    .from('milestone_drafts')
+                    .select('*')
+                    .eq('contract_id', contractId)
+                    .maybeSingle();
+
+                if (error) throw error;
+
+                if (existing) {
+                    setDraft(existing);
+                    await fetchVersionData(existing);
+                } else {
+                    const totalMinor = Math.round(totalAmount * 100);
+                    const { data: newId, error: initError } = await supabase.rpc('draft_initialize', {
+                        p_contract_id: contractId,
+                        p_total_amount_minor: totalMinor
+                    });
+
+                    if (initError) throw initError;
+                    const { data: created } = await supabase.from('milestone_drafts').select('*').eq('id', newId).single();
+                    setDraft(created);
+                }
+            } catch (error: unknown) {
+                console.error("Orchestrator Init Error:", error);
+                toast.error("Błąd ładowania negocjacji");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (contractId) void init();
+    }, [contractId, fetchVersionData, supabase, totalAmount]);
 
     if (loading) {
         return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-slate-400" /></div>;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,11 +10,44 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { applyToOffer } from "./_actions";
-import { Loader2, CheckCircle2, AlertCircle, Banknote, UploadCloud, FileText, X, Zap, ArrowLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/browser";
+import { Loader2, CheckCircle2, AlertCircle, Banknote, UploadCloud, FileText, X, Zap, ArrowLeft, ShieldCheck } from "lucide-react";
+import { uploadPrivateFile } from "@/lib/security/client-upload";
 import { ApplySheet } from "@/app/app/jobs/apply-sheet";
 import { JobOffer } from "@/app/app/jobs/job-card";
 import { cn } from "@/lib/utils";
+
+type CompanyMilestoneTemplate = {
+  title: string;
+  acceptance_criteria: string;
+};
+
+type ApplySheetOfferInput = {
+  offerId: string;
+  offerTitle?: string;
+  offerTyp?: string;
+  obligations?: string;
+  offerDescription?: string;
+};
+
+function normalizeOfferType(value: string | undefined) {
+  return (value ?? "")
+    .toLocaleLowerCase("pl-PL")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function toApplySheetOffer(input: ApplySheetOfferInput): JobOffer {
+  return {
+    id: input.offerId,
+    tytul: input.offerTitle || "Zlecenie",
+    typ: input.offerTyp || "Mikrozlecenie",
+    company_id: "",
+    created_at: new Date().toISOString(),
+    obligations: input.obligations,
+    opis: input.offerDescription,
+    is_platform_service: true,
+  };
+}
 
 export default function ApplyCard({
   offerId,
@@ -25,66 +58,94 @@ export default function ApplyCard({
   isPlatformService,
   offerTitle,
   obligations,
-  offerDescription
+  offerDescription,
+  realizationMode,
+  companyMilestones,
 }: {
   offerId: string;
   offerStawka?: number | null;
   offerTyp?: string;
   formattedSalary?: string;
-  className?: string; // Added className
+  className?: string;
   isPlatformService?: boolean;
   offerTitle?: string;
   obligations?: string;
   offerDescription?: string;
+  realizationMode?: "student_defined" | "company_defined" | null;
+  companyMilestones?: CompanyMilestoneTemplate[];
 }) {
-  const [message, setMessage] = useState("");
-  const [negotiating, setNegotiating] = useState(false);
-  const [cvFile, setCvFile] = useState<File | null>(null);
-
-  // Logic: Disable negotiation if it's a standard Job or Internship
-  const isJobOrInternship = offerTyp && (offerTyp.toLowerCase().includes("job") || offerTyp.toLowerCase().includes("praca") || offerTyp.toLowerCase().includes("staż"));
+  const normalizedOfferType = normalizeOfferType(offerTyp);
+  const isChallenge =
+    normalizedOfferType.includes("challenge") || normalizedOfferType.includes("wyzwan");
+  const isJobOrInternship =
+    normalizedOfferType.includes("job")
+    || normalizedOfferType.includes("praca")
+    || normalizedOfferType.includes("staz");
   const canNegotiate = !isJobOrInternship && !isPlatformService;
 
-  // Platform Service Logic
-  const [agreed, setAgreed] = useState(false);
+  const [message, setMessage] = useState("");
+  const [negotiating, setNegotiating] = useState(isChallenge);
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [rate, setRate] = useState(() => (offerStawka != null ? String(offerStawka) : ""));
+  const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const hasCompanyDefinedMilestones =
+    realizationMode === "company_defined" && (companyMilestones?.length ?? 0) > 0;
 
   if (isPlatformService) {
-    // Mock JobOffer object for ApplySheet
-    const mockOffer: JobOffer = {
-      id: offerId,
-      tytul: offerTitle || "Zlecenie",
-      typ: offerTyp || "Mikrozlecenie",
-      company_id: "", // Not needed for sheet
-      created_at: new Date().toISOString(),
-      obligations: obligations,
-      opis: offerDescription,
-      is_platform_service: true
-    };
+    const applySheetOffer = toApplySheetOffer({
+      offerId,
+      offerTitle,
+      offerTyp,
+      obligations,
+      offerDescription,
+    });
 
     return (
-      <Card className={`border-amber-200 shadow-md ${className || ""}`}>
-        <CardHeader className="bg-amber-50/50 pb-4 border-b border-amber-100">
-          <CardTitle className="text-xl text-amber-900 flex items-center gap-2">
-            <Zap className="h-5 w-5 text-amber-500" />
+      <Card className={cn(
+        "border-none rounded-[2.5rem] overflow-hidden bg-white shadow-2xl shadow-amber-900/10 ring-1 ring-amber-100",
+        className
+      )}>
+        <CardHeader className="relative overflow-hidden border-b border-amber-100 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-8">
+          <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-amber-300/20 blur-3xl" />
+          <CardTitle className="relative z-10 text-2xl font-black text-slate-950 flex items-center gap-3">
+            <span className="rounded-2xl bg-amber-500 p-3 text-white shadow-lg shadow-amber-500/20">
+              <Zap className="h-6 w-6" />
+            </span>
             Przyjmij to zlecenie
           </CardTitle>
-          <CardDescription className="text-amber-800/80">
+          <CardDescription className="relative z-10 max-w-sm text-sm font-semibold leading-6 text-slate-600">
             To jest zlecenie systemowe. Stawka jest stała i nienegocjowalna.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6 pt-6">
-          <div className="bg-white p-4 rounded-lg border border-amber-100 space-y-2">
-            <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gwarantowane Wynagrodzenie</Label>
-            <div className="text-2xl font-bold text-slate-900">
+        <CardContent className="space-y-5 p-8">
+          <div className="rounded-3xl border border-amber-100 bg-amber-50/40 p-6">
+            <Label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <Banknote className="h-4 w-4 text-amber-600" />
+              Gwarantowane Wynagrodzenie
+            </Label>
+            <div className="text-3xl font-black text-slate-950">
               {formattedSalary ? formattedSalary : (offerStawka != null ? `${offerStawka} PLN` : "Stawka niepodana")}
             </div>
             <p className="text-xs text-slate-500">Stawka netto za wykonanie całości zlecenia.</p>
           </div>
+          <div className="grid gap-3 text-sm font-semibold text-slate-700">
+            <div className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+              <span>Po przyjęciu zlecenia przejdziesz do panelu realizacji i komunikacji z firmą.</span>
+            </div>
+            <div className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <span>Przed potwierdzeniem jeszcze raz zobaczysz zakres prac.</span>
+            </div>
+          </div>
         </CardContent>
-        <CardFooter className="bg-amber-50/50 py-4 border-t border-amber-100 flex justify-end">
-          <ApplySheet offer={mockOffer}>
+        <CardFooter className="border-t border-slate-100 bg-slate-50/60 p-8">
+          <ApplySheet offer={applySheetOffer}>
             <Button
-              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm"
+              className="h-14 w-full rounded-2xl bg-amber-600 text-base font-black text-white shadow-xl shadow-amber-600/20 transition-all hover:bg-amber-700 hover:scale-[1.01]"
             >
               Przyjmij to zlecenie
             </Button>
@@ -96,50 +157,19 @@ export default function ApplyCard({
 
   // --- STANADARD JOB APPLICATION LOGIC BELOW ---
 
-  // gdy user kliknie "Negocjuj", startujemy od stawki z oferty (jeśli jest)
-  const initialRate = useMemo(
-    () => (offerStawka != null ? String(offerStawka) : ""),
-    [offerStawka]
-  );
-
-  const [rate, setRate] = useState(initialRate);
-
-  const [err, setErr] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  function parseRate(v: string): number | null {
+  function parseRate(v: string, minValue = 0): number | null {
     const s = v.trim();
     if (!s) return null;
     const n = Number(s);
-    if (!Number.isFinite(n) || n < 0) return null;
+    if (!Number.isFinite(n) || n < minValue) return null;
     return n;
   }
 
   // File Upload Helper
   const uploadCv = async (file: File): Promise<string> => {
-    const supabase = createClient();
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `${fileName}`;
-
-    const { error: uploadError, data } = await supabase.storage
-      .from('cvs')
-      .upload(filePath, file);
-
-    if (uploadError) {
-      throw new Error(`Błąd przesyłania CV: ${uploadError.message}`);
-    }
-
-    // Get Public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('cvs')
-      .getPublicUrl(filePath);
-
-    return publicUrl;
+    const uploaded = await uploadPrivateFile({ file, purpose: "cv" });
+    return uploaded.ref;
   };
-
-  const router = useRouter();
 
   const handleSubmit = () => {
     startTransition(async () => {
@@ -150,10 +180,21 @@ export default function ApplyCard({
         let proposed: number | null = null;
         let cvUrl: string | null = null;
 
-        // 1. Validate Negotiation
-        if (negotiating) {
-          proposed = parseRate(rate);
+        const trimmedMessage = message.trim();
+
+        if (isChallenge && trimmedMessage.length < 20) {
+          setErr("Napisz krotki pitch: pomysl, zakres i uzasadnienie wyceny.");
+          return;
+        }
+
+        // 1. Validate Negotiation / Challenge pitch
+        if (isChallenge || negotiating) {
+          proposed = parseRate(rate, isChallenge ? 1 : 0);
           if (proposed == null) {
+            if (isChallenge) {
+              setErr("Podaj proponowana wycene w PLN.");
+              return;
+            }
             setErr("Podaj poprawną proponowaną stawkę (liczba ≥ 0).");
             return;
           }
@@ -165,14 +206,14 @@ export default function ApplyCard({
         if (cvFile) {
           try {
             cvUrl = await uploadCv(cvFile);
-          } catch (uploadErr: any) {
-            setErr(uploadErr.message);
+          } catch (uploadErr: unknown) {
+            setErr(uploadErr instanceof Error ? uploadErr.message : "Błąd przesyłania CV.");
             return;
           }
         }
 
         // 3. Submit Application
-        const result = await applyToOffer(offerId, message.trim(), proposed, cvUrl);
+        const result = await applyToOffer(offerId, trimmedMessage, proposed, cvUrl);
 
         if (result?.error) throw new Error(result.error);
         if (result?.redirectUrl) {
@@ -180,11 +221,11 @@ export default function ApplyCard({
           return;
         }
 
-        setOk("Twoja aplikacja została wysłana! 🚀");
+        setOk("Twoja aplikacja została wysłana.");
         setMessage("");
         setCvFile(null);
-      } catch (e: any) {
-        setErr(e?.message ?? "Wystąpił błąd podczas wysyłania aplikacji.");
+      } catch (e: unknown) {
+        setErr(e instanceof Error ? e.message : "Wystąpił błąd podczas wysyłania aplikacji.");
       }
     });
   };
@@ -200,8 +241,12 @@ export default function ApplyCard({
             <h3 className="font-semibold text-green-900 text-lg">Aplikacja wysłana!</h3>
             <p className="text-green-700">Firma otrzymała Twoje zgłoszenie. Powodzenia!</p>
           </div>
-          <Button variant="outline" className="border-green-200 text-green-700 hover:bg-green-100" onClick={() => setOk(null)}>
-            Wyślij kolejne zgłoszenie (test)
+          <Button
+            variant="outline"
+            className="border-green-200 text-green-700 hover:bg-green-100"
+            onClick={() => router.push("/app/applications")}
+          >
+            Zobacz moje zgłoszenia
           </Button>
         </CardContent>
       </Card>
@@ -218,9 +263,17 @@ export default function ApplyCard({
           <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Szybki proces</span>
         </div>
-        <CardTitle className="text-2xl font-black text-slate-900 leading-none">Aplikuj teraz</CardTitle>
+        <CardTitle className="text-2xl font-black text-slate-900 leading-none">
+          {isChallenge ? "Zloz pitch" : "Aplikuj teraz"}
+        </CardTitle>
         <CardDescription className="text-slate-500 font-medium">
+          {isChallenge ? (
+            "Odpowiedz kontroferta: zakres, cena, termin i szybki pomysl na rozwiazanie."
+          ) : (
+            <>
           Prześlij zgłoszenie bezpośrednio do rekrutera.
+            </>
+          )}
         </CardDescription>
       </CardHeader>
 
@@ -230,7 +283,9 @@ export default function ApplyCard({
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl -mr-16 -mt-16 group-hover:bg-indigo-500/10 transition-colors" />
 
           <div className="flex flex-col gap-1 relative z-10">
-            <Label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Wynagrodzenie</Label>
+            <Label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">
+              {isChallenge ? "Budzet orientacyjny" : "Wynagrodzenie"}
+            </Label>
             <div className="text-4xl font-black text-slate-900 tabular-nums">
               {formattedSalary ? formattedSalary : (offerStawka != null ? `${offerStawka} PLN` : "Stawka niepodana")}
             </div>
@@ -239,9 +294,14 @@ export default function ApplyCard({
                 {canNegotiate ? "Możliwość negocjacji" : "Stawka sztywna"}
               </p>
             )}
+            {isChallenge && (
+              <p className="mt-2 text-xs font-bold uppercase tracking-widest text-amber-600">
+                Wycena studenta jest wymagana
+              </p>
+            )}
           </div>
 
-          {canNegotiate && (
+          {canNegotiate && !isChallenge && (
             <div className="flex items-center space-x-3 pt-4 border-t border-slate-200 mt-2 relative z-10">
               <Checkbox
                 id="negotiate"
@@ -262,13 +322,15 @@ export default function ApplyCard({
 
           {negotiating && canNegotiate && (
             <div className="animate-in fade-in zoom-in-95 duration-300 pt-4 space-y-3 relative z-10">
-              <Label htmlFor="rate" className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Twoja oferta (PLN)</Label>
+              <Label htmlFor="rate" className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {isChallenge ? "Twoja wycena (PLN)" : "Twoja oferta (PLN)"}
+              </Label>
               <div className="relative">
                 <Input
                   id="rate"
                   value={rate}
                   onChange={(e) => setRate(e.target.value)}
-                  placeholder="np. 4500"
+                  placeholder={isChallenge ? "np. 1200" : "np. 4500"}
                   inputMode="numeric"
                   className="pl-4 font-black text-2xl h-16 bg-white border-2 border-indigo-100 rounded-2xl focus-visible:ring-indigo-500 focus-visible:border-indigo-500 shadow-inner"
                 />
@@ -277,6 +339,38 @@ export default function ApplyCard({
             </div>
           )}
         </div>
+
+        {hasCompanyDefinedMilestones && (
+          <div className="rounded-[2rem] border border-indigo-200 bg-indigo-50/70 p-6">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl bg-white p-3 text-indigo-600 shadow-sm">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-900">Firma ustalila plan realizacji z gory</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  Te etapy wejda do kontraktu od razu po akceptacji. Czesciowe kroki sluza jako plan pracy, a
+                  rozliczenie calej kwoty nastapi po odbiorze finalnego etapu.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {(companyMilestones ?? []).map((milestone, index) => (
+                <div key={`${milestone.title}-${index}`} className="rounded-[1.5rem] border border-indigo-100 bg-white p-4">
+                  <p className="text-sm font-bold text-slate-900">
+                    {index + 1}. {milestone.title}
+                  </p>
+                  {milestone.acceptance_criteria ? (
+                    <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">
+                      {milestone.acceptance_criteria}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* CV UPLOAD */}
         {isJobOrInternship && (
@@ -325,6 +419,11 @@ export default function ApplyCard({
         {!isPlatformService && (
           <div className="space-y-4">
             <Label htmlFor="message" className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Wiadomość (opcjonalnie)</Label>
+            {isChallenge && (
+              <p className="text-sm font-semibold leading-6 text-amber-700">
+                Przy wyzwaniu wpisz pitch: diagnoze, proponowany zakres, termin i uzasadnienie wyceny.
+              </p>
+            )}
             <Textarea
               id="message"
               value={message}

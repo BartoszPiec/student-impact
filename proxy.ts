@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import * as Sentry from "@sentry/nextjs";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
+import { buildRateLimitKey, enforceRateLimit, getRequestIp } from "@/lib/rate-limit";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -14,11 +15,99 @@ const SUPABASE_PROJECT_REF = (() => {
 })();
 const SUPABASE_ISSUER = `${SUPABASE_URL}/auth/v1`;
 const JWKS = createRemoteJWKSet(new URL(`${SUPABASE_ISSUER}/.well-known/jwks.json`));
+const OFFICIAL_VERCEL_HOST = "student-impact.vercel.app";
+const VERCEL_PROJECT_HOST_PREFIX = "student-impact";
+
+function shouldRedirectToOfficialHost(host: string) {
+  const normalizedHost = host.split(":")[0]?.toLowerCase() ?? "";
+
+  return (
+    normalizedHost !== OFFICIAL_VERCEL_HOST &&
+    normalizedHost.endsWith(".vercel.app") &&
+    normalizedHost.startsWith(VERCEL_PROJECT_HOST_PREFIX)
+  );
+}
+
+function getSupabaseOrigin() {
+  try {
+    return new URL(SUPABASE_URL).origin;
+  } catch {
+    return "https://klxsxtumrkxfdrkessrg.supabase.co";
+  }
+}
+
+function getSupabaseHost() {
+  try {
+    return new URL(getSupabaseOrigin()).host;
+  } catch {
+    return "klxsxtumrkxfdrkessrg.supabase.co";
+  }
+}
+
+function buildContentSecurityPolicy() {
+  const isDev = process.env.NODE_ENV === "development";
+  const supabaseOrigin = getSupabaseOrigin();
+  const supabaseHost = getSupabaseHost();
+  const scriptSrc = isDev
+    ? "'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://browser.sentry-cdn.com https://challenges.cloudflare.com"
+    : "'self' 'unsafe-inline' https://js.stripe.com https://browser.sentry-cdn.com https://challenges.cloudflare.com";
+
+  return [
+    "default-src 'self'",
+    `script-src ${scriptSrc}`,
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob: ${supabaseOrigin} https://*.stripe.com`,
+    `connect-src 'self' ${supabaseOrigin} wss://${supabaseHost} https://api.stripe.com https://*.ingest.sentry.io https://challenges.cloudflare.com`,
+    "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    ...(!isDev ? ["upgrade-insecure-requests"] : []),
+  ].join("; ");
+}
+
+function buildContentSecurityPolicyReportOnly() {
+  const isDev = process.env.NODE_ENV === "development";
+  if (isDev) return null;
+
+  const supabaseOrigin = getSupabaseOrigin();
+  const supabaseHost = getSupabaseHost();
+
+  return [
+    "default-src 'self'",
+    "script-src 'self' https://js.stripe.com https://browser.sentry-cdn.com https://challenges.cloudflare.com",
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob: ${supabaseOrigin} https://*.stripe.com`,
+    `connect-src 'self' ${supabaseOrigin} wss://${supabaseHost} https://api.stripe.com https://*.ingest.sentry.io https://challenges.cloudflare.com`,
+    "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "report-uri /api/security/csp-report",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
 
 type AuthState = {
   isAuthed: boolean;
   userId: string | null;
 };
+
+function redirectWithResponseCookies(url: string, request: NextRequest, sourceResponse: NextResponse): NextResponse {
+  const redirectResponse = NextResponse.redirect(new URL(url, request.url));
+  sourceResponse.cookies.getAll().forEach((cookie) => {
+    redirectResponse.cookies.set(cookie);
+  });
+  const csp = sourceResponse.headers.get("Content-Security-Policy");
+  if (csp) {
+    redirectResponse.headers.set("Content-Security-Policy", csp);
+  }
+  return redirectResponse;
+}
 
 function isJwtLike(value: string): boolean {
   return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
@@ -176,12 +265,56 @@ async function verifyJwtLocal(token: string): Promise<AuthState> {
 }
 
 export async function proxy(request: NextRequest) {
-  const response = NextResponse.next();
+  const host = request.headers.get("host") ?? "";
+  if (shouldRedirectToOfficialHost(host)) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.protocol = "https:";
+    redirectUrl.host = OFFICIAL_VERCEL_HOST;
+    return NextResponse.redirect(redirectUrl, 308);
+  }
+
   const path = request.nextUrl.pathname;
   const isApp = path.startsWith("/app");
   const isAuth = path.startsWith("/auth");
   const isAdminRoute = path.startsWith("/app/admin");
   const isOnboardingRoute = path.startsWith("/app/onboarding") || path.startsWith("/app/profile");
+  const ip = getRequestIp(request);
+
+  if (isAuth) {
+    const authLimit = await enforceRateLimit("auth", buildRateLimitKey(["auth", ip]));
+    if (!authLimit.success) {
+      return new NextResponse("Too Many Requests", {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.max(Math.ceil((authLimit.reset - Date.now()) / 1000), 1)),
+        },
+      });
+    }
+  }
+
+  if (isApp) {
+    const appLimit = await enforceRateLimit("api", buildRateLimitKey(["app", ip]));
+    if (!appLimit.success) {
+      return new NextResponse("Too Many Requests", {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.max(Math.ceil((appLimit.reset - Date.now()) / 1000), 1)),
+        },
+      });
+    }
+  }
+
+  const requestHeaders = new Headers(request.headers);
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+  response.headers.set("Content-Security-Policy", buildContentSecurityPolicy());
+  const reportOnlyCsp = buildContentSecurityPolicyReportOnly();
+  if (reportOnlyCsp) {
+    response.headers.set("Content-Security-Policy-Report-Only", reportOnlyCsp);
+  }
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
@@ -201,16 +334,11 @@ export async function proxy(request: NextRequest) {
     authState = await verifyJwtLocal(token);
   }
 
-  const shouldFallbackAuthCheck =
-    isAdminRoute ||
-    (isApp && !authState.isAuthed) ||
-    (isAuth && Boolean(token) && !authState.isAuthed);
+  const shouldFallbackAuthCheck = isApp || isAdminRoute;
 
-  // Fallback network auth check only when needed:
-  // - protected app routes with missing/invalid token
-  // - admin routes (stronger check)
-  // - auth routes only when token exists but local JWT verify failed
-  if (shouldFallbackAuthCheck) {
+  // Zweryfikowany lokalnie JWT nie wymaga kolejnego requestu do Supabase przy
+  // każdej nawigacji. Fallback odświeża wygasłą lub starszą sesję z cookies.
+  if (shouldFallbackAuthCheck && !authState.isAuthed) {
     const { data } = await supabase.auth.getUser();
     if (data.user) {
       authState = { isAuthed: true, userId: data.user.id };
@@ -222,14 +350,15 @@ export async function proxy(request: NextRequest) {
   Sentry.setUser(authState.isAuthed && authState.userId ? { id: authState.userId } : null);
 
   if (isApp && !authState.isAuthed) {
-    return NextResponse.redirect(new URL("/auth", request.url));
+    return redirectWithResponseCookies("/auth", request, response);
   }
 
-  if (isAuth && authState.isAuthed) {
-    return NextResponse.redirect(new URL("/app", request.url));
-  }
+  const onboardingCookie = request.cookies.get("onboarding_complete")?.value;
+  const onboardingAlreadyChecked = authState.userId
+    ? onboardingCookie === `${authState.userId}:1`
+    : false;
 
-  if (isApp && authState.isAuthed && authState.userId && !isOnboardingRoute) {
+  if (isApp && authState.isAuthed && authState.userId && !isOnboardingRoute && !onboardingAlreadyChecked) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
@@ -260,8 +389,8 @@ export async function proxy(request: NextRequest) {
     const needsOnboarding = role !== "admin" && !hasDetails;
 
     if (needsOnboarding) {
-      const redirectResponse = NextResponse.redirect(new URL("/app/onboarding", request.url));
-      redirectResponse.cookies.set("onboarding_complete", "0", {
+      const redirectResponse = redirectWithResponseCookies("/app/onboarding", request, response);
+      redirectResponse.cookies.set("onboarding_complete", `${authState.userId}:0`, {
         path: "/",
         httpOnly: true,
         sameSite: "lax",
@@ -270,7 +399,7 @@ export async function proxy(request: NextRequest) {
       return redirectResponse;
     }
 
-    response.cookies.set("onboarding_complete", "1", {
+    response.cookies.set("onboarding_complete", `${authState.userId}:1`, {
       path: "/",
       httpOnly: true,
       sameSite: "lax",
@@ -282,5 +411,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/auth"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)"],
 };

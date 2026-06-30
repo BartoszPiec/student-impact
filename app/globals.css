@@ -46,6 +46,11 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
+@utility content-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+}
+
 :root {
   --radius: 0.75rem;
   --background: 0 0% 100%;
@@ -120,12 +125,88 @@
 }
 
 @layer base {
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    text-size-adjust: 100%;
+    overscroll-behavior-x: none;
+  }
+
   * {
     @apply border-border outline-ring/50;
+    min-width: 0;
   }
 
   body {
     @apply bg-background text-foreground;
+    min-width: 0;
+    -webkit-user-select: none;
+    user-select: none;
+    caret-color: transparent;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.28);
+    color: inherit;
+  }
+
+  body :where(button, a, label, summary, [role="button"], [role="tab"], [role="checkbox"], [role="menuitem"], [role="option"], .cursor-pointer, .select-none) {
+    -webkit-user-select: none;
+    user-select: none;
+    caret-color: transparent;
+  }
+
+  body :where(input, textarea, [contenteditable="true"], [contenteditable=""], [role="textbox"], .select-text, [data-selectable="true"]) {
+    -webkit-user-select: text;
+    user-select: text;
+    caret-color: auto;
+  }
+
+  body :where(input, textarea, [contenteditable="true"], [contenteditable=""], [role="textbox"])::selection {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
+  main,
+  section,
+  article,
+  aside,
+  header,
+  footer,
+  nav {
+    min-width: 0;
+  }
+
+  img,
+  svg,
+  video,
+  canvas,
+  iframe {
+    max-width: 100%;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    max-width: 100%;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  a,
+  span,
+  li,
+  dt,
+  dd {
+    overflow-wrap: anywhere;
   }
 }
 
@@ -148,6 +229,83 @@
 
   .shadow-primary-lg {
     box-shadow: 0 6px 25px rgba(102, 126, 234, 0.5);
+  }
+
+  .mobile-sticky-actions {
+    position: static;
+  }
+
+  .tracking-\[-0\.04em\],
+  .tracking-\[-0\.03em\],
+  .tracking-\[-0\.02em\] {
+    letter-spacing: 0;
+  }
+
+  @media (max-width: 640px) {
+    [data-slot="button"] {
+      max-width: 100%;
+      white-space: normal;
+    }
+
+    .mobile-sticky-actions {
+      position: static;
+      margin-left: 0;
+      margin-right: 0;
+      padding: 0.75rem 1.25rem;
+      border-top: 1px solid rgb(226 232 240 / 0.9);
+      background: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+
+    .mobile-sticky-actions [data-slot="button"] {
+      width: 100%;
+    }
+
+    .rounded-\[1\.5rem\],
+    .rounded-\[1\.75rem\],
+    .rounded-\[2rem\],
+    .rounded-\[2\.5rem\],
+    .rounded-\[3rem\] {
+      border-radius: 1.25rem;
+    }
+
+    .p-8,
+    .p-10,
+    .p-12 {
+      padding: 1.25rem;
+    }
+
+    .px-8,
+    .px-10,
+    .px-12,
+    .px-16 {
+      padding-left: 1.25rem;
+      padding-right: 1.25rem;
+    }
+
+    .py-20,
+    .py-24,
+    .py-32 {
+      padding-top: 4rem;
+      padding-bottom: 4rem;
+    }
+
+    .gap-12,
+    .gap-16 {
+      gap: 2rem;
+    }
+
+    .text-5xl {
+      font-size: 2rem;
+      line-height: 1.12;
+    }
+
+    .text-6xl,
+    .text-7xl {
+      font-size: 2.25rem;
+      line-height: 1.08;
+    }
   }
 }
 
@@ -213,6 +371,66 @@
   }
 }
 
+@keyframes landingEnterUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landingEnterRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes floatingPhone {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes subtlePulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.95;
+    transform: scale(1.03);
+  }
+}
+
+@keyframes studentMarquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
@@ -235,6 +453,102 @@
 
 .animate-star-bounce {
   animation: starBounce 0.5s ease infinite;
+}
+
+.landing-enter-up {
+  animation: landingEnterUp 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-enter-right {
+  animation: landingEnterRight 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-float-slow {
+  animation: floatingPhone 4.8s ease-in-out infinite;
+}
+
+.landing-subtle-pulse {
+  animation: subtlePulse 3.8s ease-in-out infinite;
+}
+
+.student-marquee-track {
+  animation: studentMarquee 22s linear infinite;
+}
+
+.student-marquee:hover .student-marquee-track {
+  animation-play-state: paused;
+}
+
+.student-marquee-mask {
+  mask-image: linear-gradient(90deg, transparent 0%, black 12%, black 88%, transparent 100%);
+}
+
+.landing-hover-lift {
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease, background-color 220ms ease;
+}
+
+.landing-hover-lift:hover {
+  transform: translateY(-4px);
+}
+
+.landing-nav {
+  transition: background-color 250ms ease, box-shadow 250ms ease, backdrop-filter 250ms ease;
+}
+
+@media (max-width: 640px) {
+
+  .landing-page .landing-enter-up,
+  .landing-page .landing-enter-right,
+  .landing-page .landing-float-slow,
+  .landing-page .landing-subtle-pulse,
+  .landing-page .student-marquee-track {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .landing-page .landing-hover-lift {
+    transition: none !important;
+  }
+
+  .landing-page .landing-hover-lift:hover {
+    transform: none !important;
+  }
+
+  .landing-page .landing-nav {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .landing-page .student-marquee-mask {
+    mask-image: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .landing-enter-up,
+  .landing-enter-right,
+  .landing-float-slow,
+  .landing-subtle-pulse,
+  .student-marquee-track,
+  .animate-float,
+  .animate-float-reverse,
+  .animate-rotate-slow,
+  .animate-rotate-slow-reverse,
+  .animate-form-fill,
+  .animate-star-bounce {
+    animation: none !important;
+  }
+
+  .student-marquee-track {
+    transform: none !important;
+  }
+
+  .landing-hover-lift,
+  * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Scrollbar hide utility for horizontal pill navigation */

@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { ChatList } from "@/app/app/chat/[id]/ChatList";
 import { ChatInput } from "@/app/app/chat/[id]/ChatInput";
-import { sendMessage } from "@/app/app/chat/_actions";
-import { redirect } from "next/navigation";
 
 export async function ChatTab({ conversationId }: { conversationId?: string }) {
     if (!conversationId) {
@@ -13,13 +11,24 @@ export async function ChatTab({ conversationId }: { conversationId?: string }) {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return null;
 
+    const { data: conversation } = await supabase
+        .from("conversations")
+        .select("company_id, student_id")
+        .eq("id", conversationId)
+        .maybeSingle();
+
+    if (
+        !conversation ||
+        (conversation.company_id !== userData.user.id && conversation.student_id !== userData.user.id)
+    ) {
+        return <div className="p-8 text-center text-muted-foreground">Brak dostepu do tej konwersacji.</div>;
+    }
+
     const { data: msgs } = await supabase
         .from("messages")
-        .select("id, sender_id, content, created_at, attachment_url, attachment_type")
+        .select("id, sender_id, content, created_at, read_at, attachment_url, attachment_type, event, payload")
         .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true });
-
-    const sendAction = sendMessage.bind(null, conversationId);
 
     return (
         <div className="flex flex-col h-[600px] border border-slate-100 rounded-2xl overflow-hidden bg-white shadow-sm">

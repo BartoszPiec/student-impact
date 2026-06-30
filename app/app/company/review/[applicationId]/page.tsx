@@ -30,7 +30,7 @@ export default async function CompanyReviewPage({
     .eq("id", applicationId)
     .maybeSingle();
 
-  if (!appRow) redirect("/app/company/applications");
+  if (!appRow) redirect("/app/company/offers");
 
   const { data: offer } = await supabase
     .from("offers")
@@ -38,15 +38,23 @@ export default async function CompanyReviewPage({
     .eq("id", appRow.offer_id)
     .maybeSingle();
 
-  if (!offer || offer.company_id !== userData.user.id) redirect("/app/company/applications");
+  if (!offer || offer.company_id !== userData.user.id) redirect("/app/company/offers");
 
-  const { data: deliverable } = await supabase
-    .from("deliverables")
-    .select("status")
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("status, milestones(status)")
     .eq("application_id", applicationId)
     .maybeSingle();
 
-  if (!deliverable || deliverable.status !== "approved") {
+  const milestones = Array.isArray(contract?.milestones) ? contract.milestones : [];
+  const allMilestonesReleased =
+    milestones.length > 0 &&
+    milestones.every((milestone: { status?: string | null }) =>
+      ["released", "accepted", "completed", "refunded"].includes(String(milestone.status)),
+    );
+  const canReview = appRow.status === "completed" || contract?.status === "completed" || allMilestonesReleased;
+
+  if (!canReview) {
     redirect(`/app/deliverables/${applicationId}`);
   }
 

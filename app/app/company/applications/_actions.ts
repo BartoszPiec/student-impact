@@ -3,14 +3,37 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { trySendNotification } from "@/lib/notifications/server";
+import { ensureConversationIdForApplication } from "@/lib/services/service-order-conversations";
+import { closeRejectedApplicationConversation } from "@/lib/services/application-chat-closure";
+import { logCriticalError } from "@/lib/observability/error-log";
+import { uuidSchema } from "@/lib/security/validation";
 
 interface OfferRow {
   id: string;
   company_id: string;
-  stawka: number | null;
+  stawka?: number | null;
   tytul: string | null;
   is_platform_service?: boolean | null;
   typ?: string | null;
+}
+
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+type ApplicationWithOffer = {
+  id: string;
+  status: string;
+  student_id: string;
+  offer_id: string;
+  proposed_stawka?: number | null;
+  agreed_stawka?: number | null;
+  agreed_stawka_minor?: number | null;
+  counter_stawka?: number | null;
+  offers: OfferRow | OfferRow[] | null;
+};
+
+function unwrapRelation<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
 }
 
 function toMinorUnits(value: number | null | undefined): number | null {
@@ -31,30 +54,74 @@ function toNumber(v: FormDataEntryValue | null): number | null {
 }
 
 function isMultiInstanceOffer(offer: OfferRow): boolean {
-  if (offer.is_platform_service === true) return true;
-  const offerType = offer.typ?.toLowerCase() ?? "";
-  return offerType.includes("micro") || offerType.includes("mikro");
+  return offer.is_platform_service === true;
+}
+
+function parseApplicationId(applicationId: string) {
+  const parsed = uuidSchema.safeParse(applicationId);
+  if (!parsed.success) {
+    throw new Error("Nieprawidlowy identyfikator zgloszenia.");
+  }
+
+  return parsed.data;
+}
+
+async function logCompanyApplicationActionError(input: {
+  source: string;
+  error: unknown;
+  userId?: string | null;
+  applicationId?: string | null;
+  offerId?: string | null;
+  conversationId?: string | null;
+}) {
+  await logCriticalError({
+    source: input.source,
+    error: input.error,
+    userId: input.userId ?? null,
+    context: {
+      applicationId: input.applicationId ?? null,
+      offerId: input.offerId ?? null,
+      conversationId: input.conversationId ?? null,
+    },
+  });
+}
+
+async function hasAnotherLockedApplication(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  offerId: string,
+  applicationId: string,
+  userId?: string,
+) {
+  const { count, error } = await supabase
+    .from("applications")
+    .select("id", { count: "exact", head: true })
+    .eq("offer_id", offerId)
+    .neq("id", applicationId)
+    .in("status", ["accepted", "in_progress", "completed"]);
+
+  if (error) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.locked_application_lookup",
+      error,
+      userId,
+      applicationId,
+      offerId,
+    });
+    throw new Error("Nie udalo sie sprawdzic statusu innych zgloszen.");
+  }
+  return (count ?? 0) > 0;
 }
 
 async function notifyUser(
-  supabase: any,
   userId: string,
   typ: string,
-  payload: Record<string, any> = {}
+  payload: Record<string, unknown> = {}
 ) {
-  try {
-    await supabase.rpc("create_notification", {
-      p_user_id: userId,
-      p_typ: typ,
-      p_payload: payload,
-    });
-  } catch (err) {
-    console.error("notifyUser error:", err);
-  }
+  await trySendNotification(userId, typ, payload);
 }
 
 async function ensureConversationForApplication(
-  supabase: any,
+  supabase: SupabaseClient,
   args: {
     application_id: string;
     offer_id: string;
@@ -62,37 +129,21 @@ async function ensureConversationForApplication(
     student_id: string;
   }
 ) {
-  const { data: existing } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("application_id", args.application_id)
-    .maybeSingle();
-
-  if (existing?.id) return existing.id as string;
-
-  const { data: created, error } = await supabase
-    .from("conversations")
-    .insert({
-      application_id: args.application_id,
-      company_id: args.company_id,
-      student_id: args.student_id,
-      offer_id: args.offer_id,
-      type: 'application',
-    })
-    .select("id")
-    .single();
-
-  if (error || !created?.id) throw new Error(error?.message ?? "Nie udało się utworzyć rozmowy");
-  return created.id as string;
+  return ensureConversationIdForApplication(supabase, {
+    applicationId: args.application_id,
+    offerId: args.offer_id,
+    companyId: args.company_id,
+    studentId: args.student_id,
+  });
 }
 
 async function insertChatMessage(
-  supabase: any,
+  supabase: SupabaseClient,
   conversationId: string,
   senderId: string,
   content: string,
   event: string | null = null,
-  payload: Record<string, any> | null = null
+  payload: Record<string, unknown> | null = null
 ) {
   const b = (content ?? "").trim();
   if (!b) return;
@@ -105,7 +156,15 @@ async function insertChatMessage(
     payload: payload
   });
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.chat_message_insert",
+      error,
+      userId: senderId,
+      conversationId,
+    });
+    throw new Error("Nie udalo sie zapisac wiadomosci na czacie.");
+  }
 }
 
 export async function acceptApplication(applicationId: string) {
@@ -114,38 +173,47 @@ export async function acceptApplication(applicationId: string) {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  const safeApplicationId = parseApplicationId(applicationId);
 
   const { data: appRow, error: appErr } = await supabase
     .from("applications")
     .select(
       "id, status, student_id, offer_id, proposed_stawka, agreed_stawka, agreed_stawka_minor, counter_stawka, offers!inner(id, tytul, stawka, company_id, is_platform_service, typ)"
     )
-    .eq("id", applicationId)
+    .eq("id", safeApplicationId)
     .single();
 
-  if (appErr || !appRow) redirect("/app");
+  if (appErr) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.accept.lookup",
+      error: appErr,
+      userId: user.id,
+      applicationId: safeApplicationId,
+    });
+    redirect("/app");
+  }
+  if (!appRow) redirect("/app");
 
-  const offer: OfferRow = Array.isArray((appRow as any).offers)
-    ? (appRow as any).offers[0]
-    : (appRow as any).offers;
+  const application = appRow as ApplicationWithOffer;
+  const offer = unwrapRelation(application.offers);
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
-  if (appRow.status !== "sent" && appRow.status !== "countered") {
+  if (appRow.status !== "sent") {
     revalidatePath("/app/company/applications");
     return;
   }
 
+  if (!isMultiInstanceOffer(offer) && (await hasAnotherLockedApplication(supabase, offer.id, safeApplicationId, user.id))) {
+    throw new Error("To zlecenie ma już zaakceptowanego wykonawce.");
+  }
+
   const now = new Date().toISOString();
-  // If countered: company accepts their own counter-offer rate
-  // If sent: use agreed > proposed > offer default
-  const agreed = appRow.status === "countered"
-    ? (appRow as any).counter_stawka ?? (appRow as any).proposed_stawka ?? offer.stawka ?? null
-    : (appRow as any).agreed_stawka
-      ?? fromMinorUnits((appRow as any).agreed_stawka_minor)
-      ?? (appRow as any).proposed_stawka
-      ?? offer.stawka
-      ?? null;
+  const agreed = application.agreed_stawka
+    ?? fromMinorUnits(application.agreed_stawka_minor)
+    ?? application.proposed_stawka
+    ?? offer.stawka
+    ?? null;
 
   // ✅ zaakceptuj
   const { error: updErr } = await supabase
@@ -156,40 +224,91 @@ export async function acceptApplication(applicationId: string) {
       agreed_stawka_minor: toMinorUnits(agreed),
       decided_at: now,
     })
-    .eq("id", applicationId);
+    .eq("id", safeApplicationId);
 
-  if (updErr) throw new Error(updErr.message);
+  if (updErr) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.accept.update",
+      error: updErr,
+      userId: user.id,
+      applicationId: safeApplicationId,
+      offerId: offer.id,
+    });
+    throw new Error("Nie udalo sie zaakceptowac zgloszenia. Odswiez strone i sprobuj ponownie.");
+  }
 
   // ✅ [Realization Guard] Utwórz Kontrakt (Contract + Milestone)
-  await supabase.rpc("ensure_contract_for_application", {
-    p_application_id: applicationId,
+  const { error: contractError } = await supabase.rpc("ensure_contract_for_application", {
+    p_application_id: safeApplicationId,
   });
+
+  if (contractError) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.accept.contract_rpc",
+      error: contractError,
+      userId: user.id,
+      applicationId: safeApplicationId,
+      offerId: offer.id,
+    });
+    throw new Error("Zgloszenie zostalo zaakceptowane, ale nie udalo sie przygotowac kontraktu.");
+  }
 
   // ✅ odrzuć inne aplikacje do tej samej oferty (sent/countered)
   if (!isMultiInstanceOffer(offer)) {
-  const { data: others } = await supabase
+  const { data: others, error: othersError } = await supabase
     .from("applications")
     .select("id, student_id")
     .eq("offer_id", offer.id)
-    .neq("id", applicationId)
+    .neq("id", safeApplicationId)
     .in("status", ["sent", "countered"]);
 
+  if (othersError) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.accept.competing_lookup",
+      error: othersError,
+      userId: user.id,
+      applicationId: safeApplicationId,
+      offerId: offer.id,
+    });
+    throw new Error("Nie udalo sie sprawdzic pozostalych zgloszen.");
+  }
+
   if ((others ?? []).length > 0) {
-    await supabase
+    const { error: rejectOthersError } = await supabase
       .from("applications")
       .update({ status: "rejected", decided_at: now })
       .eq("offer_id", offer.id)
-      .neq("id", applicationId)
+      .neq("id", safeApplicationId)
       .in("status", ["sent", "countered"]);
+
+    if (rejectOthersError) {
+      await logCompanyApplicationActionError({
+        source: "company.applications.accept.competing_update",
+        error: rejectOthersError,
+        userId: user.id,
+        applicationId: safeApplicationId,
+        offerId: offer.id,
+      });
+      throw new Error("Nie udalo sie odrzucic pozostalych zgloszen.");
+    }
 
     // powiadom pozostałych
     for (const o of others ?? []) {
       if (!o?.student_id) continue;
-      await notifyUser(supabase as any, o.student_id, "offer_closed", {
+      await notifyUser(o.student_id, "offer_closed", {
         offer_id: offer.id,
         offer_title: offer.tytul ?? null,
         reason: "accepted_other",
       });
+      const rejectedConversationId = await closeRejectedApplicationConversation(supabase, {
+        applicationId: o.id,
+        offerId: offer.id,
+        companyId: offer.company_id,
+        studentId: o.student_id,
+        senderId: user.id,
+        content: "Niestety tym razem firma wybrała kogoś innego.",
+      });
+      revalidatePath(`/app/chat/${rejectedConversationId}`);
     }
   }
 
@@ -199,20 +318,29 @@ export async function acceptApplication(applicationId: string) {
     .update({ status: "in_progress" })
     .eq("id", offer.id);
 
-  if (offerErr) throw new Error(offerErr.message);
+  if (offerErr) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.accept.offer_update",
+      error: offerErr,
+      userId: user.id,
+      applicationId: safeApplicationId,
+      offerId: offer.id,
+    });
+    throw new Error("Nie udalo sie zaktualizowac statusu oferty.");
+  }
   }
 
   // ✅ wiadomość systemowa na czacie
   try {
-    const conversationId = await ensureConversationForApplication(supabase as any, {
-      application_id: applicationId,
+    const conversationId = await ensureConversationForApplication(supabase, {
+      application_id: safeApplicationId,
       offer_id: offer.id,
       company_id: offer.company_id,
       student_id: appRow.student_id,
     });
 
     await insertChatMessage(
-      supabase as any,
+      supabase,
       conversationId,
       user.id,
       `Stawka ${agreed ?? offer.stawka ?? "-"} zł zaakceptowana.`,
@@ -227,8 +355,8 @@ export async function acceptApplication(applicationId: string) {
   }
 
   // ✅ powiadom zaakceptowanego studenta
-  await notifyUser(supabase as any, appRow.student_id, "application_accepted", {
-    application_id: applicationId,
+  await notifyUser(appRow.student_id, "application_accepted", {
+    application_id: safeApplicationId,
     offer_id: offer.id,
     offer_title: offer.tytul ?? null,
     agreed_stawka: agreed,
@@ -236,7 +364,20 @@ export async function acceptApplication(applicationId: string) {
   });
 
   // Revalidate chat page if conversation exists
-  const { data: conv } = await supabase.from('conversations').select('id').eq('application_id', applicationId).single();
+  const { data: conv, error: conversationLookupError } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("application_id", safeApplicationId)
+    .maybeSingle();
+  if (conversationLookupError) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.accept.conversation_revalidate_lookup",
+      error: conversationLookupError,
+      userId: user.id,
+      applicationId: safeApplicationId,
+      offerId: offer.id,
+    });
+  }
   if (conv) {
     revalidatePath(`/app/chat/${conv.id}`);
   }
@@ -248,7 +389,7 @@ export async function acceptApplication(applicationId: string) {
   revalidatePath("/app/notifications");
 
 
-  redirect("/app/company/applications");
+  redirect("/app/company/offers");
 }
 
 export async function rejectApplication(applicationId: string) {
@@ -257,22 +398,31 @@ export async function rejectApplication(applicationId: string) {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  const safeApplicationId = parseApplicationId(applicationId);
 
   const { data: appRow, error: appErr } = await supabase
     .from("applications")
     .select("id, status, student_id, offer_id, offers!inner(id, tytul, company_id)")
-    .eq("id", applicationId)
+    .eq("id", safeApplicationId)
     .single();
 
-  if (appErr || !appRow) redirect("/app");
+  if (appErr) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.reject.lookup",
+      error: appErr,
+      userId: user.id,
+      applicationId: safeApplicationId,
+    });
+    redirect("/app");
+  }
+  if (!appRow) redirect("/app");
 
-  const offer: any = Array.isArray((appRow as any).offers)
-    ? (appRow as any).offers[0]
-    : (appRow as any).offers;
+  const application = appRow as ApplicationWithOffer;
+  const offer = unwrapRelation(application.offers);
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
-  if (appRow.status !== "sent" && appRow.status !== "countered") {
+  if (appRow.status !== "sent") {
     revalidatePath("/app/company/applications");
     return;
   }
@@ -280,26 +430,35 @@ export async function rejectApplication(applicationId: string) {
   const { error: updErr } = await supabase
     .from("applications")
     .update({ status: "rejected", decided_at: new Date().toISOString() })
-    .eq("id", applicationId);
+    .eq("id", safeApplicationId);
 
-  if (updErr) throw new Error(updErr.message);
+  if (updErr) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.reject.update",
+      error: updErr,
+      userId: user.id,
+      applicationId: safeApplicationId,
+      offerId: offer.id,
+    });
+    throw new Error("Nie udalo sie odrzucic zgloszenia. Odswiez strone i sprobuj ponownie.");
+  }
 
-  await notifyUser(supabase as any, appRow.student_id, "application_rejected", {
-    application_id: applicationId,
+  await notifyUser(appRow.student_id, "application_rejected", {
+    application_id: safeApplicationId,
     offer_id: offer.id,
     offer_title: offer.tytul ?? null,
   });
 
   // ✅ message systemowy "Odrzucono" (opcjonalnie, ale w Vinted stylu warto)
   try {
-    const conversationId = await ensureConversationForApplication(supabase as any, {
-      application_id: applicationId,
+    const conversationId = await ensureConversationForApplication(supabase, {
+      application_id: safeApplicationId,
       offer_id: offer.id,
       company_id: offer.company_id,
       student_id: appRow.student_id,
     });
     await insertChatMessage(
-      supabase as any,
+      supabase,
       conversationId,
       user.id,
       "Aplikacja została odrzucona.",
@@ -319,6 +478,7 @@ export async function counterOffer(applicationId: string, formData: FormData) {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
   if (!user) redirect("/auth");
+  const safeApplicationId = parseApplicationId(applicationId);
 
   const counter = toNumber(formData.get("counter_stawka"));
   if (counter == null || counter <= 0 || counter > 500000) {
@@ -329,20 +489,32 @@ export async function counterOffer(applicationId: string, formData: FormData) {
   const { data: appRow, error: appErr } = await supabase
     .from("applications")
     .select("id, status, student_id, offer_id, offers!inner(id, tytul, company_id)")
-    .eq("id", applicationId)
+    .eq("id", safeApplicationId)
     .single();
 
-  if (appErr || !appRow) redirect("/app");
+  if (appErr) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.counter.lookup",
+      error: appErr,
+      userId: user.id,
+      applicationId: safeApplicationId,
+    });
+    redirect("/app");
+  }
+  if (!appRow) redirect("/app");
 
-  const offer: any = Array.isArray((appRow as any).offers)
-    ? (appRow as any).offers[0]
-    : (appRow as any).offers;
+  const application = appRow as ApplicationWithOffer;
+  const offer = unwrapRelation(application.offers);
 
   if (!offer || offer.company_id !== user.id) redirect("/app");
 
-  if (appRow.status !== "sent" && appRow.status !== "countered") {
+  if (appRow.status !== "sent") {
     revalidatePath("/app/company/applications");
     return;
+  }
+
+  if (!isMultiInstanceOffer(offer as OfferRow) && (await hasAnotherLockedApplication(supabase, offer.id, safeApplicationId, user.id))) {
+    throw new Error("To zlecenie ma już zaakceptowanego wykonawce.");
   }
 
   const { error: updErr } = await supabase
@@ -354,21 +526,30 @@ export async function counterOffer(applicationId: string, formData: FormData) {
       agreed_stawka: null,
       agreed_stawka_minor: null,
     })
-    .eq("id", applicationId);
+    .eq("id", safeApplicationId);
 
-  if (updErr) throw new Error(updErr.message);
+  if (updErr) {
+    await logCompanyApplicationActionError({
+      source: "company.applications.counter.update",
+      error: updErr,
+      userId: user.id,
+      applicationId: safeApplicationId,
+      offerId: offer.id,
+    });
+    throw new Error("Nie udalo sie zapisac kontroferty. Odswiez strone i sprobuj ponownie.");
+  }
 
   // ✅ dopisz do czatu
   try {
-    const conversationId = await ensureConversationForApplication(supabase as any, {
-      application_id: applicationId,
+    const conversationId = await ensureConversationForApplication(supabase, {
+      application_id: safeApplicationId,
       offer_id: offer.id,
       company_id: offer.company_id,
       student_id: appRow.student_id,
     });
 
     await insertChatMessage(
-      supabase as any,
+      supabase,
       conversationId,
       user.id,
       `Kontrpropozycja firmy: ${counter} zł.`,
@@ -379,8 +560,8 @@ export async function counterOffer(applicationId: string, formData: FormData) {
     // nie blokujemy
   }
 
-  await notifyUser(supabase as any, appRow.student_id, "application_countered", {
-    application_id: applicationId,
+  await notifyUser(appRow.student_id, "application_countered", {
+    application_id: safeApplicationId,
     offer_id: offer.id,
     offer_title: offer.tytul ?? null,
     counter_stawka: counter,

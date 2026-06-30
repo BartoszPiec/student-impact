@@ -3,8 +3,7 @@
 import { MilestoneNegotiationOrchestrator } from "./negotiation/MilestoneNegotiationOrchestrator";
 
 interface Props {
-    contract: any;
-    milestones: any[];
+    contract: { id: string } | null;
     isCompany: boolean;
     isStudent: boolean;
     totalAmount: number;

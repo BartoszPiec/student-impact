@@ -25,7 +25,7 @@ export function DeleteServiceButton({ serviceId, serviceTitle }: { serviceId: st
             try {
                 await deleteSystemService(serviceId);
                 toast.success("Usługa została usunięta");
-            } catch (error) {
+            } catch {
                 toast.error("Wystąpił błąd podczas usuwania usługi");
             }
         });
@@ -48,7 +48,7 @@ export function DeleteServiceButton({ serviceId, serviceTitle }: { serviceId: st
                 <AlertDialogHeader>
                     <AlertDialogTitle>Czy na pewno chcesz usunąć tę usługę?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Tej operacji nie można cofnąć. Usługa "{serviceTitle}" zostanie trwale usunięta z systemu.
+                        Tej operacji nie można cofnąć. Usługa &quot;{serviceTitle}&quot; zostanie trwale usunięta z systemu.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

@@ -4,12 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Save, Send, AlertTriangle, Lock, GripVertical, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { DraftViewer } from "./DraftViewer";
-import { MilestoneItem, DraftRole, DraftHeader } from "./types";
+import { MilestoneItem, DraftRole } from "./types";
 
 // Simple UUID generator
 const uuidv4 = () => {
@@ -18,6 +17,15 @@ const uuidv4 = () => {
         (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16)
     );
 };
+
+function getErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === "object" && error && "message" in error) {
+        const message = (error as { message?: unknown }).message;
+        if (typeof message === "string" && message.length > 0) return message;
+    }
+    return fallback;
+}
 
 interface Props {
     draftId: string;
@@ -37,7 +45,6 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [allocationMode, setAllocationMode] = useState<'MANUAL' | 'REST_TO_LAST'>('MANUAL');
     const [acceptedDiffs, setAcceptedDiffs] = useState<Set<string>>(new Set());
-    const [lastDebugError, setLastDebugError] = useState<any>(null);
 
     // Sync initial checks
     useEffect(() => {
@@ -45,7 +52,6 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
         setHasUnsavedChanges(false);
         setAllocationMode('MANUAL');
         setAcceptedDiffs(new Set());
-        setLastDebugError(null);
     }, [initialMilestones]);
 
     // Budget Calcs
@@ -119,7 +125,7 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
     };
 
     // Actions
-    const handleUpdate = (client_id: string, field: keyof MilestoneItem, value: any) => {
+    const handleUpdate = <K extends keyof MilestoneItem>(client_id: string, field: K, value: MilestoneItem[K]) => {
         let newItems = items.map(item =>
             item.client_id === client_id ? { ...item, [field]: value } : item
         );
@@ -223,7 +229,7 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
                 position: idx
             }));
 
-            const { data, error } = await supabase.rpc('draft_save_version', {
+            const { error } = await supabase.rpc('draft_save_version', {
                 p_contract_id: contractId,
                 p_base_version_id: null,
                 p_items: payload
@@ -235,10 +241,9 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
             setHasUnsavedChanges(false);
             onRefresh();
             return true;
-        } catch (e: any) {
-            console.error("Save Error Details:", JSON.stringify(e, null, 2));
-            console.error("Original Error:", e);
-            toast.error("Błąd zapisu: " + (e?.message || JSON.stringify(e)));
+        } catch (e: unknown) {
+            console.error("Save Error:", e);
+            toast.error("Nie udało sie zapisać wersji roboczej. Spróbuj ponownie.");
             return false;
         } finally {
             setLoading(false);
@@ -246,8 +251,6 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
     };
 
     const handleSubmit = async () => {
-        setLastDebugError(null); // Clear previous
-
         if (!isBudgetValid) {
             toast.error("Budżet musi się zgadzać co do grosza!");
             return;
@@ -273,30 +276,27 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
 
             // Check Application-Level Validation (JSON)
             if (data && data.status && data.status !== 'OK') {
-                setLastDebugError(data);
                 if (data.status === 'UNDER') {
                     toast.error(`Błąd: Budżet niepełny. Brakuje ${(data.delta / 100).toFixed(2)} PLN`);
                 } else if (data.status === 'OVER') {
                     toast.error(`Błąd: Przekroczono budżet o ${(data.delta / 100).toFixed(2)} PLN`);
                 } else {
-                    toast.error(`Błąd walidacji: ${data.status} ${data.reason || ''}`);
+                    toast.error("Nie udało sie zatwierdzic harmonogramu. Sprawdz kwoty i spróbuj ponownie.");
                 }
                 return;
             }
 
             toast.success(role === 'STUDENT' ? "Wysłano do akceptacji" : "Wysłano propozycję zmian");
             onRefresh();
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error("Submit Exception:", e);
-            setLastDebugError(e); // Log exception
-            // Explicitly extract properties
-            const msg = e?.message || "Unknown error";
+            const msg = getErrorMessage(e, "Nie udało sie wysłać propozycji.");
 
             // Handle P0001 from legacy RPC if it exists
             if (msg.includes("Budget validation failed")) {
-                toast.error("Błąd budżetu (Backend): Upewnij się, że suma wynosi dokładnie " + totalBudget.toFixed(2));
+                toast.error("Suma etapów musi wynosic dokladnie " + totalBudget.toFixed(2) + " PLN.");
             } else {
-                toast.error(`Błąd wysyłania: ${msg}`);
+                toast.error("Nie udało sie wysłać propozycji. Spróbuj ponownie.");
             }
         } finally {
             setLoading(false);
@@ -348,7 +348,7 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
         toast.success("Cofnięto zmiany (przywrócono wersję oryginalną).");
     };
 
-    const handleConfirmDelete = (item: MilestoneItem) => {
+    const handleConfirmDelete = () => {
         toast.info("Zatwierdzono usunięcie etapu (widoczne w podglądzie).");
     };
 
@@ -387,34 +387,34 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
             )}
 
             {/* Budget Bar */}
-            <div className={`p-5 rounded-2xl border flex flex-col gap-4 shadow-sm transition-all duration-300 ${statusColor}`}>
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+            <div className={`rounded-[1.5rem] border p-4 shadow-sm transition-all duration-300 sm:p-5 ${statusColor}`}>
+                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
                     <div className="flex flex-col gap-1">
-                        <div className="flex gap-4 text-sm font-medium text-slate-600/80 uppercase tracking-wide">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-black uppercase tracking-normal text-slate-600/80 sm:text-sm">
                             <span>Ustalona kwota: <b className="text-slate-800">{totalBudget.toFixed(2)}</b></span>
                             <span>Suma etapów: <b className="text-slate-800">{currentSum.toFixed(2)}</b></span>
                         </div>
-                        <div className="text-lg">
+                        <div className="text-base sm:text-lg">
                             {statusText}
                         </div>
                     </div>
 
                     {/* Distribution Tools */}
-                    <div className="flex items-center gap-1 bg-white/80 p-1.5 rounded-xl border border-slate-200/50 backdrop-blur-sm shadow-sm">
+                    <div className="flex w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200/60 bg-white/85 p-1.5 shadow-sm backdrop-blur-sm lg:w-auto">
                         <Button
                             variant={allocationMode === 'MANUAL' ? "secondary" : "ghost"}
                             size="sm"
                             onClick={() => distributeBudget('manual')}
-                            className={`text-xs h-8 rounded-lg font-medium transition-all ${allocationMode === 'MANUAL' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`h-8 flex-1 rounded-xl px-3 text-xs font-black transition-all lg:flex-none ${allocationMode === 'MANUAL' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             Ręcznie
                         </Button>
-                        <div className="w-px h-4 bg-slate-300 mx-1" />
+                        <div className="hidden h-4 w-px bg-slate-300 sm:block" />
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => distributeBudget('equal')}
-                            className="text-xs h-8 rounded-lg font-medium text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                            className="h-8 flex-1 rounded-xl px-3 text-xs font-black text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 lg:flex-none"
                         >
                             Po równo
                         </Button>
@@ -422,7 +422,7 @@ export function DraftEditor({ draftId, contractId, initialMilestones, totalBudge
                             variant={allocationMode === 'REST_TO_LAST' ? "secondary" : "ghost"}
                             size="sm"
                             onClick={() => distributeBudget('end')}
-                            className={`text-xs h-8 rounded-lg font-medium transition-all ${allocationMode === 'REST_TO_LAST' ? 'bg-white shadow-sm text-orange-600 ring-1 ring-orange-100' : 'text-slate-500 hover:text-orange-600 hover:bg-orange-50'}`}
+                            className={`h-8 flex-[1.35] rounded-xl px-3 text-xs font-black transition-all lg:flex-none ${allocationMode === 'REST_TO_LAST' ? 'bg-white shadow-sm text-orange-600 ring-1 ring-orange-100' : 'text-slate-500 hover:bg-orange-50 hover:text-orange-600'}`}
                         >
                             {allocationMode === 'REST_TO_LAST' && <Lock className="w-3 h-3 mr-1" />}
                             Reszta na ostatni

@@ -1,21 +1,18 @@
 "use client";
 
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export function UnreadChatBadge({ userId, initialCount = 0 }: { userId: string, initialCount?: number }) {
     const [count, setCount] = useState(initialCount);
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
 
     const fetchCount = useEffectEvent(async () => {
-        const { count, error } = await supabase
-            .from("messages")
-            .select("id", { count: "exact", head: true })
-            .neq("sender_id", userId)
-            .is("read_at", null);
+        const { data, error } = await supabase.rpc("get_my_unread_chat_count");
 
-        if (!error && count !== null) {
-            setCount(count);
+        if (!error && data !== null) {
+            const unreadCount = Number(data);
+            setCount(Number.isFinite(unreadCount) ? unreadCount : 0);
         }
     });
 

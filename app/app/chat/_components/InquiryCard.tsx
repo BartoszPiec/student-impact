@@ -1,6 +1,6 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Globe, Info, User } from "lucide-react";
+import { Info } from "lucide-react";
 
 export function InquiryCard({ content }: { content: string }) {
     // Parse the legacy format: 
